@@ -1,0 +1,12 @@
+# Generated images (test outputs)
+images/
+test-output/
+
+# Python
+__pycache__/
+*.pyc
+
+# macOS
+.DS_Store
+images/
+test-output/

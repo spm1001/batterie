@@ -1,0 +1,83 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "batterie",
+  "description": "Kitchen tools for knowledge work — plugins for GTD tracking, session lifecycle, Google Workspace, browser automation, and more",
+  "owner": {
+    "name": "Sameer Modha",
+    "email": "sameer@modha.dev"
+  },
+  "plugins": [
+    {
+      "name": "batterie",
+      "source": "./",
+      "description": "Suite-level utilities — cross-plugin updates and maintenance.",
+      "category": "productivity",
+      "homepage": "https://github.com/spm1001/batterie",
+      "keywords": ["update", "maintenance", "utilities"]
+    },
+    {
+      "name": "bon",
+      "source": "./plugins/bon",
+      "description": "GTD-native work tracker — outcomes, actions, tactical steps. Includes session lifecycle (/open, /close).",
+      "category": "productivity",
+      "homepage": "https://github.com/spm1001/bon",
+      "keywords": ["gtd", "tracking"]
+    },
+    {
+      "name": "trousse",
+      "source": "./plugins/trousse",
+      "description": "Utility skills — code review, diagrams, screenshots, filing, architecture review, and more.",
+      "category": "workflow",
+      "homepage": "https://github.com/spm1001/trousse",
+      "keywords": ["session", "hooks", "review"]
+    },
+    {
+      "name": "mise",
+      "source": "./plugins/mise",
+      "description": "Google Workspace MCP — search Drive, fetch Gmail, act on documents. Requires Google OAuth.",
+      "category": "integration",
+      "homepage": "https://github.com/spm1001/mise-en-space",
+      "keywords": ["google", "workspace", "mcp"]
+    },
+    {
+      "name": "passe",
+      "source": "./plugins/passe",
+      "description": "Fast browser automation via Chrome DevTools Protocol.",
+      "category": "automation",
+      "homepage": "https://github.com/spm1001/passe",
+      "keywords": ["browser", "cdp", "chrome"]
+    },
+    {
+      "name": "garde-manger",
+      "source": "./plugins/garde-manger",
+      "description": "Persistent searchable memory across Claude sessions.",
+      "category": "memory",
+      "homepage": "https://github.com/spm1001/garde-manger",
+      "keywords": ["memory", "search"]
+    },
+    {
+      "name": "consomme",
+      "source": "./plugins/consomme",
+      "description": "BigQuery data analysis methodology and workflow.",
+      "category": "data",
+      "homepage": "https://github.com/spm1001/consomme",
+      "keywords": ["bigquery", "analysis"]
+    },
+    {
+      "name": "todoist-gtd",
+      "source": "./plugins/todoist-gtd",
+      "description": "Todoist with GTD coaching — outcomes, weekly review, pattern detection.",
+      "category": "productivity",
+      "homepage": "https://github.com/spm1001/todoist-gtd",
+      "keywords": ["todoist", "gtd"]
+    },
+    {
+      "name": "gueridon",
+      "source": "./plugins/gueridon",
+      "description": "Mobile web UI for Claude Code — setup and management.",
+      "category": "infrastructure",
+      "homepage": "https://github.com/spm1001/gueridon",
+      "keywords": ["mobile", "pwa"]
+    }
+  ]
+}

@@ -25,6 +25,8 @@ elif command -v security &>/dev/null && security find-generic-password -s "todoi
     HAS_TOKEN=true
 elif [ -f "$HOME/.todoist-token" ]; then
     HAS_TOKEN=true
+elif [ -f "$HOME/.claude/plugins/data/todoist-gtd-batterie-de-savoir/token" ]; then
+    HAS_TOKEN=true
 fi
 if [ "$HAS_TOKEN" = false ]; then
     ISSUES="${ISSUES}• No Todoist API token found. Run: todoist auth\n"

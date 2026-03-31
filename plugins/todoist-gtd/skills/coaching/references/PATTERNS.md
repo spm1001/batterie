@@ -59,7 +59,7 @@ When processing @Claude or any inbox project:
 
 ```
 1. Get all items (comments included inline)
-   scripts/todoist.py tasks --project "@Claude"
+   todoist tasks --project "@Claude"
 
 2. For EACH item, check .comments[] then decide:
    - arc: Create issue, complete task

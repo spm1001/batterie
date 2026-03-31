@@ -17,7 +17,6 @@ passe:passe
 garde-manger:garde-manger
 consomme:consomme
 todoist-gtd:todoist-gtd
-gueridon:gueridon
 "
 
 echo "Assembling plugins from $SOURCE_DIR"

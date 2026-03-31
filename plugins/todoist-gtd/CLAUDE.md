@@ -15,7 +15,7 @@ todoist doctor          # Check setup
 todoist auth --status   # Check auth
 todoist projects        # List projects
 todoist version         # Show version
-./scripts/verify.sh    # Run acceptance tests
+todoist doctor          # Check setup + deps + auth + network
 ```
 
 ## Code Conventions
@@ -32,7 +32,7 @@ todoist version         # Show version
 src/todoist_gtd/
 ├── cli.py          # Main CLI entry point (todoist command)
 ├── common.py       # Shared utilities (API client, pagination, resolution)
-├── auth.py         # OAuth authentication flow
+├── auth.py         # Token-based authentication
 ├── token_store.py  # Portable secrets management (env, keychain, file)
 └── flatten.py      # Subtask flattening tool (todoist-flatten command)
 ```

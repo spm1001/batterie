@@ -1,6 +1,6 @@
 {
   "name": "trousse",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Session lifecycle, code review, and behavioral skills for Claude Code. Best with: bon, garde-manger",
   "author": {
     "name": "Sameer Modha",
@@ -14,5 +14,18 @@
     "hooks",
     "review",
     "skills"
-  ]
+  ],
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/session-start.sh"
+          }
+        ]
+      }
+    ]
+  }
 }

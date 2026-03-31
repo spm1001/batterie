@@ -12,33 +12,19 @@ todoist <command>
 
 ### Authentication
 
-**Recommended: OAuth flow** (one-time setup)
 ```bash
-todoist auth
-# Browser opens → click "Authorize" → done
+todoist auth              # Print setup instructions
+todoist auth --token T    # Store API token (get from Todoist settings)
+todoist auth --status     # Check authentication status
 ```
 
-For SSH or remote sessions, use manual mode:
-```bash
-todoist auth --manual
-# Copy URL → paste redirect URL back
-```
+**Setup:** Run `todoist auth` for instructions — it prints the URL to get your API token from Todoist's developer settings. Then run `todoist auth --token YOUR_TOKEN` to store it.
 
-Check authentication status:
-```bash
-todoist auth --status
-```
+Token is stored in macOS Keychain (if available) or in `~/.claude/plugins/data/todoist-gtd-batterie-de-savoir/token` on Linux.
 
-**Fallback: Manual token** (if OAuth unavailable)
-```bash
-# 1. Get token from: https://todoist.com/prefs/integrations
-# 2. Store in Keychain:
-security add-generic-password -a "$USER" -s "todoist-api-key" -w "YOUR_TOKEN"
-```
+If auth fails, prompt user to run `todoist auth` or re-run `todoist auth --token` with a fresh token.
 
-If auth fails, prompt user to run `todoist auth` or check their Keychain entry.
-
-**Key design choice:** CLI shows ALL tasks by default. Unlike the MCP which defaults to hiding tasks assigned to others (`responsibleUserFiltering: "unassignedOrMe"`), this CLI shows everything. This prevents the duplicate-task bug where Claude couldn't see teammates' work.
+**Key design choice:** On workspace (team) projects, the CLI auto-filters to show only your tasks by default. Use `--team` for all tasks, `--unassigned` for triage. On personal projects, all tasks are shown regardless of collaborators.
 
 ### Error Handling
 
@@ -90,7 +76,7 @@ todoist sections --project-id "<desired-outcomes-q4-id>"
 todoist tasks --section-id "<outcome-section-id>"
 ```
 
-**No filtering gotcha:** CLI shows ALL tasks by default, including teammates' work.
+**Workspace filtering:** On team projects, shows only your tasks by default. Use `--team` for all, `--unassigned` for untriaged items.
 
 ### Check Claude Inbox
 ```bash

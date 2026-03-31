@@ -7,23 +7,42 @@
 
 set -euo pipefail
 
-# Find scripts dir: sibling to hooks/ in the same repo/plugin
+# Symlink instruction shard into rules/ (survives plugin version changes)
 HOOK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PLUGIN_SCRIPTS="$(dirname "$HOOK_DIR")/scripts"
-
-if [ -x "$PLUGIN_SCRIPTS/open-context.sh" ]; then
-    SCRIPTS_DIR="$PLUGIN_SCRIPTS"
-else
-    exit 0  # No scripts available — silent
+PLUGIN_ROOT="$(dirname "$HOOK_DIR")"
+if [ -f "$PLUGIN_ROOT/instructions.md" ]; then
+    mkdir -p "$HOME/.claude/rules"
+    ln -sf "$PLUGIN_ROOT/instructions.md" "$HOME/.claude/rules/bon.md"
 fi
 
-# === CONTEXT OUTPUT (stdout → Claude) ===
-"$SCRIPTS_DIR/open-context.sh" 2>/dev/null || true
+# Read hook stdin (JSON with session metadata)
+INPUT=$(cat)
+SOURCE=$(echo "$INPUT" | python3 -c "import sys,json; print(json.load(sys.stdin).get('source',''))" 2>/dev/null || echo "")
 
-# === BACKGROUND UPDATES (no stdout — runs silently) ===
-if [ -x "$SCRIPTS_DIR/update-all.sh" ]; then
-    mkdir -p "$HOME/.claude/logs"
-    nohup "$SCRIPTS_DIR/update-all.sh" >> "$HOME/.claude/logs/update.log" 2>&1 &
+# On resume, skip the full briefing — it's already in context
+# Also delete any auto-handoff for this session (session isn't over, just reloading)
+if [ "$SOURCE" = "resume" ]; then
+    SESSION_ID=$(echo "$INPUT" | python3 -c "import sys,json; print(json.load(sys.stdin).get('session_id',''))" 2>/dev/null || echo "")
+    if [ -n "$SESSION_ID" ]; then
+        SHORT_ID="${SESSION_ID:0:8}"
+        # Walk up to find .bon/
+        SEARCH=$(pwd -P)
+        while [ "$SEARCH" != "/" ]; do
+            if [ -d "$SEARCH/.bon/handoffs" ]; then
+                rm -f "$SEARCH/.bon/handoffs/${SHORT_ID}.md" 2>/dev/null
+                break
+            fi
+            SEARCH=$(dirname "$SEARCH")
+        done
+    fi
+fi
+
+if [ "$SOURCE" != "resume" ]; then
+    PLUGIN_SCRIPTS="$PLUGIN_ROOT/scripts"
+
+    if [ -x "$PLUGIN_SCRIPTS/open-context.sh" ]; then
+        "$PLUGIN_SCRIPTS/open-context.sh" 2>/dev/null || true
+    fi
 fi
 
 # Check for incomplete /close from previous session

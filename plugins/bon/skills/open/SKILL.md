@@ -1,269 +1,249 @@
 ---
 name: open
-description: "Re-orient to session context on demand. Loads companion skills (bon, todoist-gtd) based on what's present. Use when you missed the startup context, want a fresh look at what's available, or after cd'ing to a different project. Triggers on /open, 'what were we working on', 'where did we leave off'. Pairs with /ground and /close."
-allowed-tools: Bash, Read, Glob, Grep, Skill
+description: "Activate at session start when .bon/ exists AND before any bon CLI command. Handles session orientation (process contributions, present hierarchy, pick direction) and enforces draw-down workflow (bon show → bon work → bon step). Triggers on: session start with .bon/, /open, /bon, 'bon init', 'bon new', 'bon list', 'bon done', 'what can I work on', 'next action', 'desired outcome', 'file this for later', 'track this work', or when .bon/ directory exists."
+allowed-tools: "Bash(bon:*)", Read, Glob, Edit, Write
 ---
 
-# /open
+# Bon
 
-Interpret context and load companion skills.
+Bon tracks work as **Outcomes** (desired results) and **Actions** (concrete next steps). No sprints, no story points, no priority levels — just ordering and a clear answer to "what can I work on now?"
 
-## When to Use
+---
 
-**Session start context is now automatic.** The hook outputs a compact briefing (outcomes, last-worked zoom, handoff summary) that Claude should act on in the first response — no /open needed.
+## The Brief
 
-Use `/open` for:
-- **Re-orientation** — "Show me the context again" (mid-session)
-- **Skill loading** — Ensures bon/todoist-gtd patterns are available
-- **After directory change** — Context is project-specific; if you cd'd, context may differ
-- **Deeper dig** — When you need full handoff content or complete bon hierarchy beyond the briefing
+Every bon item answers four questions. Three are required, one optional:
 
-## When NOT to Use
+| Flag | Question | Required |
+|------|----------|----------|
+| `--why` | Why are we doing this? | Yes |
+| `--how` | How will we approach it? | No |
+| `--what` | What will we produce? | Yes |
+| `--done` | How do we know it's complete? | Yes |
 
-- Session just started and you can see the briefing (orient from it directly)
-- Quick question that doesn't need full context
-- When you already have clear direction from user
+`--how` captures approach, strategy, constraints, and sequencing — things that don't belong in `--what` (deliverables) or `--why` (motivation). For simple work, skip it. For anything with technology choices, ordering dependencies, or coordination needs, include it.
 
-## Prerequisites
+**For outcomes:** `--how` is the overall strategy. "Use Redis distributed locks, not file locks. Coordinate with API gateway. Don't modify auth middleware."
 
-**Before running /open, verify infrastructure is healthy.** Silent failures here cause downstream confusion.
+**For actions:** `--how` is the specific approach. "Parse the JSONL with streaming reads, not load-all. Test with the 10k-item fixture."
 
-### Finding scripts
+**`bon work` surfaces `--how` as "Approach:" above the step list**, so the executing Claude has strategy context before touching code.
 
-Scripts live in **the bon plugin cache**. The session-start hook finds them automatically via relative paths. For manual invocation:
+---
+
+## Plans Become Bons
+
+When you'd normally enter plan mode, create bon items instead. A bon hierarchy **replaces** a plan file — it's persistent, trackable, and the next Claude can pick it up.
+
+| Plan mode | Bon |
+|-----------|-----|
+| Goal/context | `--why` |
+| Approach, strategy, constraints | `--how` |
+| Steps (ordered) | `--what` (numbered → tactical steps) |
+| Success criteria | `--done` |
+
+**The transmutation:**
+1. Think through the work as you normally would
+2. Create an outcome with `--why` (motivation) and `--how` (strategy)
+3. Break into actions with `--how` (approach per step) and `--what` (numbered deliverables)
+4. The plan IS the bon hierarchy — no separate document to maintain
+
+**The test:** After creating the bons, could you delete the plan file with no information loss?
+
+---
+
+## Session Start Ritual
+
+The session-start hook provides orientation automatically (understanding, handoff, outcomes, suggested items). Your job is the LLM-mediated work the hook can't do.
+
+### 1. Process Contributions
+
+If `.bon/contributions/` contains files:
+
+1. Read `.bon/understanding.md`
+2. Read each contribution file
+3. **Rewrite** understanding.md — integrate new knowledge, make salience judgments. Don't append.
+4. Delete processed contribution files
+
+### 2. Present Hierarchy
+
+Show the full picture — outcomes with progress and their actions — **as text in your response** (not via Bash, which collapses behind Ctrl+O).
+
+Run `bon list`, capture to a temp file, Read and output:
+```bash
+bon list > /tmp/bon-hierarchy.txt
+```
+
+### 3. Pick Direction
+
+Assess which ready items align with what's already in context — files read, handoff content, understanding document. State your reasoning briefly. When context is thin, just present the list.
+
+User picks direction. Then **draw-down** before touching code.
+
+---
+
+## The Draw-Down Pattern
+
+**Pre-flight checklist** (before touching code):
+
+1. **`bon show <id>`** — verify the item exists, check its type and brief
+   - If the ID came from a handoff or memory, it may have been archived. Verify first.
+   - If `Type: outcome`, pick one of its actions instead.
+2. **`bon work <id>`** — initialize tactical steps from `--what`
+   - Shows "Approach:" context from `--how` when present
+   - If `--what` has no numbered steps, provide explicit ones: `bon work <id> "Step 1" "Step 2"`
+3. **Work through with checkpoints:** `bon step` after each
+4. **Final step auto-completes** the action
+
+**Constraints:**
+- **Actions only** — `bon work` on an outcome will error
+- One active tactical per session (CWD) — different worktrees can run in parallel
+- Two CWDs cannot claim the same action
+- Context-switch: `bon wait <id> "reason"` (clears tactical — re-plan on return)
+
+### UserPromptSubmit Hook
+
+A hook injects the current tactical step into every prompt. When you see a `<user-prompt-submit-hook>` mentioning bon tactical, work on the current step and run `bon step` when complete.
+
+---
+
+## The Draw-Up Pattern
+
+**When filing work for a future Claude:**
+
+1. **All three required flags** — `--why`/`--what`/`--done` must stand alone
+2. **Add `--how` for complex work** — approach, constraints, things to avoid
+3. **Include concrete details** — file paths, API endpoints, error messages
+4. **Number steps in `--what`** — these become extractable tactical steps
+5. **Define `--done` clearly** — verifiable criteria, not vague "it works"
+
+**The test:** Could a Claude with zero context execute this from the brief alone?
+
+### When to Track vs Just Do
+
+| Track in Bon | Just do it |
+|-------------|------------|
+| Multi-session work | Quick single-step action |
+| Work needing handoff to future Claude | Research / exploration |
+| Complex outcomes with multiple actions | Trivial fix (typo, config tweak) |
+| Anything with approach worth preserving | Side quest done in minutes |
+
+---
+
+## Mid-Session Transitions
+
+Between actions:
+1. Complete current action: `bon done <id>`
+2. Run `bon list --ready`, capture to file, Read and output
+3. Draw-down the next action before starting
+
+---
+
+## Session Close
+
+Use `/close` at session end. It handles the full GODAR framework.
+
+---
+
+## Outcome Language Coaching
+
+Outcomes describe what will be true, not work to be done. The CLI warns on activity-verb titles automatically.
+
+| Activity (bad) | Achievement (good) |
+|----------------|-------------------|
+| Implement OAuth | Users can authenticate with GitHub |
+| Build rate limiter | API stays responsive under peak load |
+| Add test coverage | Claudes don't hit surprising edges |
+
+**Don't coach on actions.** Actions *should* be activity language.
+
+---
+
+## Core Commands
 
 ```bash
-# Find open-context.sh in the plugin cache
-SCRIPT=$(find ~/.claude/plugins/cache -name "open-context.sh" -path "*/bon/*/scripts/*" 2>/dev/null | head -1)
-[ -x "$SCRIPT" ] && echo "OK: $SCRIPT" || echo "BROKEN: open-context.sh not found"
+bon init --prefix myproj     # Initialize .bon/ with prefix
+bon list                     # Hierarchical view
+bon list --ready             # Actions with no blocker
+bon show ID                  # Full details including brief
+bon show --current           # Active tactical steps
+bon new "title" --why W --what X --done D           # Create outcome
+bon new "title" --outcome P --why W --what X --done D  # Create action
+bon new "title" --why W --how H --what X --done D   # With approach
+bon done ID                  # Complete (unblocks waiters)
+bon done ID --note "reason"  # Complete with context
+bon wait ID REASON           # Mark waiting (clears tactical!)
+bon unwait ID                # Clear waiting
+bon work ID                  # Init tactical from --what
+bon work ID "step1" "step2"  # Init with explicit steps
+bon work --status            # Current tactical state
+bon work --clear             # Clear without completing
+bon step                     # Advance to next step
+bon step --skip "reason"     # Skip current step
+bon step --no-complete       # Final step: don't auto-complete
+bon edit ID --title/--why/--how/--what/--done/--order  # Edit fields
+bon edit ID --how ""         # Clear how field
+bon convert ID               # Action → outcome
+bon convert ID --outcome P   # Outcome → action under P
+bon status                   # Overview counts
 ```
 
-| Check | How | If Broken |
-|-------|-----|-----------|
-| open-context.sh exists | Script finder above | Reinstall bon plugin or run bon's install.sh |
-| bon available | `command -v bon` | `uv tool install "${CLAUDE_PLUGIN_ROOT}"` or `uv tool install ~/Repos/bon` |
+All commands support `--json`. `bon new` supports `-q` (quiet, prints ID only).
 
 ---
 
-## Structure
+## JSON Field Reference
 
+**`bon show ACTION --json`** returns:
+```json
+{
+  "id": "bon-muvuri", "type": "action", "title": "...",
+  "brief": { "why": "...", "how": "...", "what": "...", "done": "..." },
+  "status": "open", "parent": "bon-zovili",
+  "waiting_for": null, "tactical": { "steps": [...], "current": 0, "session": "..." }
+}
 ```
-Prerequisites → Verify infrastructure
-Gate          → Load required companion skills
-Gather        → Script output (already present from hook, or re-run if needed)
-Orient        → Synthesize what matters
-Decide        → User picks direction
-Act           → Draw-down from Bon
-```
+
+`how` is `null` in JSON output when not set. Absent from stored data when not provided.
+
+**Field-name traps:**
+
+| Wrong | Right |
+|---|---|
+| `item["why"]` | `item["brief"]["why"]` |
+| `item["how"]` | `item["brief"]["how"]` |
+| `item["done"]` | `item["brief"]["done"]` (not `item["done_at"]`) |
+| `item["parent_id"]` | `item["parent"]` |
+
+**JSON shape contract:**
+- `bon list --json` → `{"outcomes": [...], "standalone": [...]}`
+- `bon show ID --json` → single object (use `.field` not `.[0].field`)
 
 ---
 
-## 1. Gate: Load Companion Skills
+## Common Mistakes
 
-**Before synthesizing, load skills based on what's present.** Do not proceed until loaded.
+| What you typed | Use instead | Why |
+|---|---|---|
+| `bon add "title"` | `bon new "title"` | `add` isn't a command |
+| `bon work OUTCOME_ID` | Pick an action | `work` is for actions only |
+| `bon step` (at session start) | `bon show --current` first | Check for active tactical |
+| `bon done ID --resolution "text"` | `bon done ID --note "text"` | `--resolution` doesn't exist |
 
-| Condition | Action | Why |
-|-----------|--------|-----|
-| `.bon/` exists | `Skill(bon)` | Default tracker — outcomes and actions, GTD vocabulary |
-| Neither `.bon/` nor tracker exists | Skip tracker loading | No work tracker in this project |
-| @Claude items in context OR Todoist in handoff | Offer `Skill(todoist-gtd)` | GTD framing, inbox check |
-| User seems disoriented about past work | Offer `Skill(garde)` | Ancestral lookup |
+### Shell Escaping
 
-**Work tracker is mandatory when present.** The draw-down pattern (item → `bon work` → `bon step`) is where drift gets caught. Tactical steps persist in `items.jsonl`, enforce serial execution, and survive session crashes.
+When piping `bon --json` through inline python, use a heredoc:
 
-- **Bon** is the default — outcomes and actions, simpler CLI, GTD vocabulary built-in
-
-**Todoist-gtd is conditional.** Offer it when relevant, don't load by default.
-
-> **Skill loading bias (Jan 2026 learning):** Loading todoist-gtd primes Claude to think about "where work belongs" (Todoist vs bon). This caused misinterpretation in past sessions. When a tracker skill is loaded, stay anchored to the user's explicit tool references ("in bon", "the outcomes").
-
-**Memory is optional.** Offer when user seems confused about history, not by default.
-
----
-
-## 2. Gather
-
-**Pattern: Compact briefing to stdout, detail on disk.**
-
-The session-start hook outputs a synthesized briefing:
-- Outcomes we're working towards (from bon)
-- Last-worked zoom (current action and its tactical steps)
-- Last session summary (Done, Next, Gotchas from latest handoff)
-
-**Context files are per-project.** The `<encoded-cwd>` is the working directory with all non-alphanumeric characters replaced by `-` (e.g., `-Users-modha-Repos-trousse`).
-
-**For deeper context, read the source files:**
-
-| What | File |
-|------|------|
-| Project understanding | `.bon/understanding.md` (if exists — read first, orients faster than anything else) |
-| Latest handoff | `~/.claude/handoffs/<encoded-cwd>/` (most recent `.md` by mtime) |
-| Bon context | `~/.claude/.session-context/<encoded-cwd>/bon.txt` |
-| News | `~/.claude/.update-news` |
-
-**To compute the path:** `echo "$(pwd -P)" | sed 's/[^a-zA-Z0-9-]/-/g'` → use as subdirectory name.
-
-### Missing or Stale Context
-
-**If context files don't exist for current directory**, regenerate by finding and running open-context.sh:
 ```bash
-SCRIPT=$(find ~/.claude/plugins/cache -name "open-context.sh" -path "*/bon/*/scripts/*" 2>/dev/null | head -1)
-[ -x "$SCRIPT" ] && "$SCRIPT"
+bon list --json | python3 << 'PYEOF'
+import json, sys
+data = json.load(sys.stdin)
+for o in data["outcomes"]:
+    if o["status"] != "done":
+        print(o["id"])
+PYEOF
 ```
 
-This happens when:
-- Session started in a different directory (hook ran there, not here)
-- First time in this project
-- After cd'ing to a different project mid-session
+### Creating Multiple Items
 
-**Check first:** `[ -d ~/.claude/.session-context/$(pwd -P | sed 's/[^a-zA-Z0-9-]/-/g') ]`
-
-### Script Failure Handling
-
-**If the script fails (exit code 127 = file not found, or any other error):**
-
-1. **STOP.** Do not continue with partial context.
-2. **Tell the user:** "The open-context.sh script wasn't found. Check that the bon plugin is installed."
-3. **Diagnose:** Run `find ~/.claude/plugins/cache -name "open-context.sh" 2>/dev/null` to locate it.
-
----
-
-## 3. Orient
-
-**Read files based on what notifications indicate, then synthesize.**
-
-### Reading Pattern
-
-Compute the encoded path, then read source files:
-```bash
-ENCODED=$(pwd -P | sed 's/[^a-zA-Z0-9-]/-/g')
-```
-
-Then:
-1. **Read latest handoff** — `ls -t ~/.claude/handoffs/$ENCODED/*.md 2>/dev/null | head -1` (if empty, no prior sessions here)
-2. **Check tracker context** — read `~/.claude/.session-context/$ENCODED/bon.txt` if it exists
-3. **News if relevant** — read `~/.claude/.update-news` if user asks or it's actionable
-
-### Synthesize Understanding (if contributions exist)
-
-If `.bon/contributions/` contains files, synthesize them into `.bon/understanding.md` before proceeding. Read the existing understanding document, read all contribution files, then rewrite the understanding document — not append, rewrite. Make salience judgments: what still matters, what's been superseded, what's new. Delete the contribution files after synthesis. This keeps the understanding document current without unbounded growth.
-
-If no understanding document exists yet but the project has substantial history (handoffs, mature codebase), consider writing one from scratch. This is expensive but only happens once.
-
-### Synthesize What Matters
-
-- **Handoff** — Done, Next, Gotchas from previous session
-- **Tracker hierarchy** — from bon.txt, show directly to user
-- **Ready work** — what's unblocked (bon ready)
-- **Commands** — if handoff has a Commands section, offer to run them
-- **Scope mismatches** — if handoff "Next" doesn't match ready items, flag it
-
-> **CRITICAL: Output as text, not Bash.** When presenting tracker hierarchy or ready work, output it as text in your response. DO NOT run `bon list` via Bash — Claude Code collapses tool output >10 lines behind Ctrl+O, making it invisible to the user. The bon.txt file already contains formatted hierarchies; read it and output directly.
-
-### Orphaned Local Handoffs
-
-When stdout shows orphaned `.handoff*` files:
-
-1. **Tell the user:** "Found local .handoff* files — these are invisible to /open"
-2. **Offer to rescue:** "Want me to move them to the central location?"
-3. **If yes:** `mv .handoff* ~/.claude/handoffs/<encoded-path>/`
-
-### Handoff
-
-The startup briefing already shows the latest handoff summary (Done, Next, Gotchas). For deeper detail, read the full handoff file.
-
-Present concisely: "Previous session did X. Next suggested: Y. Z bon items ready."
-
----
-
-## 4. Decide
-
-**Before the user picks, rank ready items by context proximity.** Look at what's already loaded — files read, handoff content, understanding document, recent work — and assess which bon items align most closely. State your reasoning: "bon-xyz is closest to what I have loaded because..." This saves the user from mentally cross-referencing the list against their session state.
-
-When context is thin (fresh session, no files read beyond startup), skip the ranking — just present the list honestly.
-
-User picks direction. Options typically:
-- Continue with handoff "Next"
-- Pick from ready work (bon items, ranked by context proximity)
-- @Claude inbox items
-- Something else
-
----
-
-## 5. Act: Draw-Down
-
-**Draw-down triggers on ALL substantial work, not just explicit tracker item claims.**
-
-### Explicit item selection
-
-When user picks a work item:
-
-| Tracker | Read item | Mark in progress |
-|---------|-----------|------------------|
-| **Bon** | `bon show <id>` | (bon doesn't track in_progress) |
-
-Then:
-1. Read the item's criteria (bon: brief.why/what/done)
-2. Break down into steps from those criteria
-3. Show user: "Breaking this down into: [list]. Sound right?"
-4. Work through steps with explicit pauses for direction checks
-
-### Continuation phrases
-
-When user says "continue X", "keep going", "pick up where we left off":
-
-1. **Clarify scope:** "Which item? Outcome (broad goal) or action (specific task)?"
-2. Read the item's criteria
-3. Break into steps — this catches scope gaps before work begins
-4. Proceed with explicit pause points
-
-**Failure mode (Jan 2026):** User said "continue backfill" → Claude continued existing code without checking epic scope → discovered an hour later that "complete pass" meant more than file attachments.
-
-### External briefs
-
-When user provides a spec, brief, or requirements from elsewhere:
-
-1. Extract acceptance criteria from the brief
-2. Break into steps from those criteria
-3. Show user: "I'm reading this as: [list]. Right?"
-4. Proceed with explicit pause points
-
-**Failure mode:** User provided brief from another Claude → work completed → "fix" didn't work → second debugging phase had no clear checkpoints → drift.
-
-### Ambiguous references
-
-When user says "the email thing", "that feature", or similar:
-
-1. **Don't guess.** Ask: "Do you mean item X (description) or Y (description)?"
-2. Once clarified, do full draw-down
-
-### The test
-
-> If the work will take >10 minutes, it needs explicit breakdown and pause points.
-
-**No checkpoints = Drift compounds.**
-
-**Full draw-down patterns live in the tracker skill (bon)** — that's why gate-loading matters.
-
----
-
-## Anti-Patterns
-
-| Pattern | Problem | Fix |
-|---------|---------|-----|
-| Run `bon list` or `bd ready` via Bash | Output collapsed, user can't see it | Read context file, output as text |
-| Skip draw-down on "continue X" | Scope ambiguity | Always read item, break into steps |
-| Skip tracker skill loading | Missing workflow patterns | Gate-load bon first |
-| Ignore script failures | Partial context, drift | STOP and diagnose if script fails |
-| Guess at ambiguous references | Wrong work picked up | Ask user which item they mean |
-
-## Mirrors (GODAR)
-
-| Phase | /open | /close |
-|-------|-------|--------|
-| **G**ate | Load bon, offer todoist | — |
-| **G**ather | Notifications (stdout) → Read files | Todos, bon, git, drift |
-| **O**rient | "Where we left off" | Reflect (AskUserQuestion) |
-| **D**ecide | User picks direction | Crystallize actions (STOP) |
-| **A**ct | Draw-down from Bon | Execute, handoff, commit |
-| **R**emember | — | Captured in handoff |
+Create sequentially, not in parallel tool calls. If one fails, Claude Code cancels all sibling calls.

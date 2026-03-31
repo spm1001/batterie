@@ -82,11 +82,23 @@ Common upgrades from activity language to outcome language:
 
 ## Coaching Questions
 
+### Outcome Clarification (One Question at a Time)
+
+When helping someone define a desired outcome, ask **one question at a time**. Don't rush. The goal is a binary, believable outcome — something you could answer "done" or "not done" to.
+
+Sequence:
+1. "What's bothering you about this?" (let them vent/describe)
+2. "If this went well, what would you be able to see or say?" (shift to vision)
+3. "Can we phrase that as something you'd know had happened?" (make it binary)
+4. "Would you know if that happened? Would that feel like success?" (test it)
+
+**The "done" test:** Robert Peake's phrase — "Put the desire in Desired Outcomes." The project list should be attractive to look at. If reading it feels like a burden, the outcomes need rewriting.
+
 ### Initial Assessment
 
 - "What would success look like if this went perfectly?"
 - "How will you know when you're done?"
-- "Which Team Priority does this contribute to?"
+- "Which area of focus does this serve?"
 - "What will you be able to do after that you can't do now?" (growth lens)
 
 ### During Refinement

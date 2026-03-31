@@ -117,7 +117,7 @@ GTD concept: Ongoing areas of responsibility with no completion date.
 
 ## Quick Disambiguation
 
-When the user mentions... he probably means:
+When the user mentions... they probably mean:
 
 | Phrase | Likely Meaning |
 |--------|----------------|

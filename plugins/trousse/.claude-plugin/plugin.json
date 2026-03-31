@@ -1,7 +1,7 @@
 {
   "name": "trousse",
-  "version": "0.4.1",
-  "description": "Session lifecycle, code review, and behavioral skills for Claude Code. Best with: bon, garde-manger",
+  "version": "0.5.0",
+  "description": "Session lifecycle, code review, data analysis, and behavioral skills for Claude Code. Best with: bon, garde-manger",
   "author": {
     "name": "Sameer Modha",
     "url": "https://github.com/spm1001"
@@ -13,7 +13,9 @@
     "lifecycle",
     "hooks",
     "review",
-    "skills"
+    "skills",
+    "bigquery",
+    "analysis"
   ],
   "hooks": {
     "SessionStart": [

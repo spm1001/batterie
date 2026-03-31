@@ -15,7 +15,6 @@ trousse:trousse
 mise:mise-en-space
 passe:passe
 garde-manger:garde-manger
-consomme:consomme
 todoist-gtd:todoist-gtd
 "
 

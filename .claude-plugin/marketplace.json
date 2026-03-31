@@ -26,7 +26,7 @@
     {
       "name": "trousse",
       "source": "./plugins/trousse",
-      "description": "Utility skills — code review, diagrams, screenshots, filing, architecture review, and more.",
+      "description": "Utility skills — code review, diagrams, screenshots, data analysis, architecture review, and more.",
       "category": "workflow",
       "homepage": "https://github.com/spm1001/trousse",
       "keywords": ["session", "hooks", "review"]
@@ -54,14 +54,6 @@
       "category": "memory",
       "homepage": "https://github.com/spm1001/garde-manger",
       "keywords": ["memory", "search"]
-    },
-    {
-      "name": "consomme",
-      "source": "./plugins/consomme",
-      "description": "BigQuery data analysis methodology and workflow.",
-      "category": "data",
-      "homepage": "https://github.com/spm1001/consomme",
-      "keywords": ["bigquery", "analysis"]
     },
     {
       "name": "todoist-gtd",

@@ -24,7 +24,7 @@ The precision slicer. Takes irregular raw data and produces uniform, self-docume
 ## When NOT to Use
 
 - Data already has rich column descriptions and metadata
-- Quick exploratory queries on known-good tables (use consomme instead)
+- Quick exploratory queries on known-good tables (use /consomme instead)
 - One-off ad hoc analysis that doesn't need a persistent clean table
 - Streaming/real-time data (mandoline is for snapshot tables)
 

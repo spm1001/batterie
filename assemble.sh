@@ -16,6 +16,7 @@ mise:mise-en-space
 passe:passe
 garde-manger:garde-manger
 todoist-gtd:todoist-gtd
+tafelmusik:tafelmusik
 "
 
 echo "Assembling plugins from $SOURCE_DIR"
@@ -37,7 +38,7 @@ for entry in $PLUGINS; do
   rsync -a --delete "$src/.claude-plugin/" "$dest/.claude-plugin/"
 
   # Copy plugin-level files that skills/agents/hooks might reference
-  for item in commands skills agents hooks .mcp.json CLAUDE.md; do
+  for item in commands skills agents hooks .mcp.json CLAUDE.md instructions.md; do
     if [ -e "$src/$item" ]; then
       if [ -d "$src/$item" ]; then
         rsync -a --delete "$src/$item/" "$dest/$item/"

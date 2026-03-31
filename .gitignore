@@ -1,0 +1,3 @@
+# Override global gitignore patterns that would exclude plugin content
+!plugins/mise/
+!plugins/mise/**

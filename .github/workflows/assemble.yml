@@ -1,0 +1,74 @@
+name: Assemble plugins
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  assemble:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout batterie
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          path: batterie
+
+      - name: Checkout source repos
+        run: |
+          for repo in bon trousse mise-en-space passe garde-manger consomme todoist-gtd; do
+            git clone --depth=1 --quiet "https://github.com/spm1001/$repo.git"
+            echo "  OK $repo"
+          done
+
+      - name: Checkout batterie-de-savoir (lint script)
+        run: |
+          git clone --depth=1 --quiet https://github.com/spm1001/batterie-de-savoir.git
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@d0d8abe699bfb85fec6de9f7adb5ae17292296ff # v6
+        with:
+          version: "latest"
+
+      - name: Run assemble.sh
+        run: |
+          cd batterie
+          chmod +x assemble.sh
+          ./assemble.sh
+
+      - name: Run batterie-lint
+        run: |
+          cd batterie-de-savoir
+          uv run --script scripts/batterie-lint.py --local
+
+      - name: Check for changes
+        id: changes
+        run: |
+          cd batterie
+          if git diff --quiet; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "No changes detected"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "Changes detected:"
+            git diff --stat
+          fi
+
+      - name: Create PR
+        if: steps.changes.outputs.changed == 'true'
+        run: |
+          cd batterie
+          BRANCH="reassemble-$(date +%Y%m%d-%H%M)"
+          git checkout -b "$BRANCH"
+          git add -A
+          git -c user.name="github-actions[bot]" \
+              -c user.email="github-actions[bot]@users.noreply.github.com" \
+              commit -m "Reassemble — $(date +%Y-%m-%d)"
+          git push -u origin "$BRANCH"
+          gh pr create \
+            --title "Reassemble — $(date +%Y-%m-%d)" \
+            --body "Automated assembly from source repos. Review the diff before merging."
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

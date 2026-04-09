@@ -1,6 +1,6 @@
 ---
 name: amp-close
-description: Amp end-of-session ritual. Invoke FIRST when session is ending — 4-phase GODAR loop (gather context, orient via reflection, decide now-vs-next, act with handoff and garde extraction) that prevents silent work-dropping, writes cross-harness handoffs CC can discover, and persists searchable memory. MANDATORY before closing any substantial Amp thread. Triggers on 'wrap up', 'let's finish', 'close out', 'end of session'. (user)
+description: Amp end-of-session ritual. Invoke first when session is ending — 4-phase GODAR loop (gather context, orient via reflection, decide now-vs-next, act with handoff and garde extraction) that prevents silent work-dropping, writes cross-harness handoffs CC can discover, and persists searchable memory. Load before closing any substantial Amp thread. Triggers on 'wrap up', 'let's finish', 'close out', 'end of session'. (user)
 ---
 
 # amp-close

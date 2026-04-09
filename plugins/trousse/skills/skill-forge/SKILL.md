@@ -1,6 +1,6 @@
 ---
 name: skill-forge
-description: Orchestrates ALL skill development — MANDATORY gate BEFORE writing or editing any SKILL.md file. Invoke FIRST when building, validating, improving, or refactoring skills. Supersedes skill-creator. Unified 6-step workflow with automated validation, CSO scoring, and subagent testing. Triggers on 'create skill', 'new skill', 'validate skill', 'check skill quality', 'improve skill discovery', 'check this skill', 'write SKILL.md', 'edit SKILL.md', 'update skill description', 'can I share this', 'scan for sharing'. (user)
+description: Orchestrates all skill development — required before writing or editing any SKILL.md file. Unified 6-step workflow with automated validation, CSO scoring, register checks, and subagent testing. Triggers on 'create skill', 'new skill', 'validate skill', 'check skill quality', 'improve skill discovery', 'check this skill', 'write SKILL.md', 'edit SKILL.md', 'update skill description', 'can I share this', 'scan for sharing'. (user)
 allowed-tools: [Read, Write, Edit, Glob, Grep, Bash, Agent, AskUserQuestion]
 ---
 
@@ -12,25 +12,25 @@ Unified skill development toolkit. Supersedes `skill-creator` — combines its c
 
 ## When to Use
 
-- **BEFORE** writing any SKILL.md file
+- Before writing or editing any SKILL.md file
 - When creating a new skill from scratch
 - When improving an existing skill's discovery rate
 - When validating skill quality before deployment
 - When scanning a skill/repo before sharing publicly
 
-## When NOT to Use
+## Boundaries
 
-- One-off instructions (put in CLAUDE.md instead)
+- One-off instructions belong in CLAUDE.md, not a skill
 - Simple tool usage Claude already knows
 - Tasks that don't repeat across sessions
 
-## Rationalizations to Block
+## Why This Skill Exists
 
-Claude frequently skips this skill by reasoning:
-- **"I already know how to create skills"** — You know the generic pattern. This skill adds CSO scoring, lint, and project-specific conventions you don't have in training.
-- **"skill-creator covers this"** — skill-forge supersedes skill-creator. Use forge, not creator.
-- **"I'll validate later"** — Validation after writing is expensive rework. Forge-first, always.
-- **"This is just a small edit to an existing skill"** — Small edits to descriptions are exactly where CSO scoring matters most.
+Even when the task seems simple, forge adds value you can't get from training alone:
+- **CSO scoring** catches description patterns that look fine but won't trigger discovery
+- **Register checks** ensure skills create a calm, productive emotional baseline
+- **Lint validation** catches structural issues (naming, frontmatter, section depth) before they cause silent failures
+- **Small description edits** are exactly where CSO scoring matters most — a word change can shift discovery rates
 
 ## Quick Start
 
@@ -123,49 +123,49 @@ description: [See CSO Patterns below]
 | `test-driven-development` | `pdf-helper` | "helper" is meaningless |
 | `desired-outcomes` | `my-skill` | Doesn't describe purpose |
 
-#### CSO Patterns (Critical)
+#### CSO Patterns
 
-**The description determines discovery.** Pattern: `[ACTION TYPE] + [SPECIFIC TRIGGER] + [METHOD/VALUE PREVIEW]`
+**The description determines discovery.** Pattern: `[ACTION VERB] + [LIFECYCLE CONTEXT] + [METHOD/VALUE PREVIEW]`
 
-**Best: MANDATORY gate with BEFORE condition**
+**Best: Clear lifecycle positioning with specific context**
 ```yaml
-description: MANDATORY gate before writing any SKILL.md file. Invoke FIRST when building new skills - provides structure, naming, and quality checklist that MUST be validated before deployment.
+description: Orchestrates skill development — required before writing or editing any SKILL.md file. Unified 6-step workflow with automated validation, CSO scoring, and subagent testing.
 ```
-Why: "MANDATORY gate" not optional, "before writing" timing, "FIRST" positioning, "MUST" imperative.
+Why: third-person verb, "required before" positioning, specific context ("any SKILL.md file"), method preview.
 
 **Good: Specific trigger with method preview**
 ```yaml
-description: Use when encountering any bug, test failure, or unexpected behavior, before proposing fixes - four-phase framework (root cause, pattern analysis, hypothesis testing, implementation) ensures understanding before solutions.
+description: Guides systematic debugging before proposing fixes. 4-phase framework (root cause, pattern analysis, hypothesis testing, implementation) ensures understanding before solutions. Triggers on 'test failing', 'unexpected behavior', 'debug this'.
 ```
-Why: specific trigger + timing gate + method preview + value statement.
+Why: specific trigger + lifecycle positioning + method preview + value statement.
 
 **Good: Natural phrase triggers**
 ```yaml
-description: Coach on outcome quality. Triggers on 'check my outcomes', 'is this a good outcome', 'review my Todoist' when discussing strategic work.
+description: Coaches on outcome quality. Triggers on 'check my outcomes', 'is this a good outcome', 'review my Todoist' when discussing strategic work.
 ```
 Why: explicit phrases in quotes, context qualifier.
 
-**Good: Negative triggers to prevent over-triggering**
+**Good: Scope boundaries to prevent over-triggering**
 ```yaml
-description: Advanced data analysis for CSV files — statistical modelling, regression, clustering. Do NOT use for simple data exploration (use data-viz skill instead).
+description: Advanced data analysis for CSV files — statistical modelling, regression, clustering. For simple data exploration, use data-viz skill instead.
 ```
-Why: "Do NOT use for..." in the description itself steers Claude away at trigger-decision time, before the body loads. Anti-patterns in the body come too late — by then, the skill is already loaded and consuming tokens.
+Why: clear scope boundary in description steers Claude before body loads.
 
-**When to add negative triggers:**
+**When to add scope boundaries:**
 - Skill overlaps with another skill's domain
 - Skill triggers on common words that appear in unrelated requests
 - Users report the skill loading when it shouldn't
 
-**Bad patterns to avoid:**
+**Patterns to improve:**
 
-| Pattern | Problem | Fix |
-|---------|---------|-----|
+| Pattern | Problem | Better |
+|---------|---------|--------|
 | "Helps with..." | Vague, no trigger | Specific phrases in quotes |
-| "Use when creating..." | Too generic | "MANDATORY gate before..." |
-| No timing condition | Optional invocation | Add BEFORE/FIRST/MANDATORY |
+| "Use when creating..." | Too generic | "Required before..." or "Orchestrates..." |
+| No timing condition | Claude treats invocation as optional | Add lifecycle positioning: "before", "first" |
 | Generic actions | Claude "knows" without loading | Domain-specific phrases |
-| Command doesn't name skill | Not discoverable | "**Invoke the `name` skill**" |
-| Over-triggers on related topics | Loads when it shouldn't | Add "Do NOT use for..." in description |
+| Command doesn't name skill | Skill not discoverable | "**Invoke the `name` skill**" |
+| Over-triggers on related topics | Loads when it shouldn't | Add scope boundary in description |
 
 Run `scripts/score_description.py` to validate. See `references/cso-guide.md` for full guidance.
 
@@ -182,7 +182,7 @@ scripts/score_description.py <skill-path>
 scripts/test_skill.py <skill-path>
 ```
 
-**All checks must pass before Step 6.**
+All checks should pass before Step 6.
 
 ### Step 6: Package (Optional)
 
@@ -221,12 +221,18 @@ Creates `.skill` file (zip format) for distribution.
 - [ ] Quick reference for common operations
 
 ### Discovery
-- [ ] BEFORE/MANDATORY/FIRST patterns used appropriately
+- [ ] Lifecycle positioning (before/first/required) used appropriately
 - [ ] Trigger phrases are natural language in quotes
 - [ ] Context qualifiers included (when appropriate)
 - [ ] Method preview gives Claude enough to decide relevance
 - [ ] If paired with command, command names the skill explicitly
-- [ ] Negative triggers ("Do NOT use for...") added if skill overlaps with others
+- [ ] Scope boundaries added if skill overlaps with others
+
+### Register
+- [ ] Opens with what good work looks like, not what to avoid
+- [ ] ALL CAPS used sparingly (abbreviations fine, emphatic caps minimal)
+- [ ] Prohibitions balanced with positive specifications
+- [ ] Constraints framed as craft standards, not threats
 
 ## Skill Patterns
 
@@ -234,11 +240,11 @@ See `references/skill-patterns.md` for full taxonomy. Summary:
 
 | Type | Key Feature | Description Pattern |
 |------|-------------|-------------------|
-| **Process** | Phases with gates | BEFORE condition |
+| **Process** | Phases with gates | Lifecycle positioning (before/first) |
 | **Fluency** | Tool best practices | Specific trigger phrases |
 | **Coaching** | Quality criteria | Natural language triggers |
-| **Gate** | Checklist validation | MANDATORY language |
-| **Skill+CLI** | Orchestrates CLI tool | BEFORE any `cli` command |
+| **Gate** | Checklist validation | Required before... |
+| **Skill+CLI** | Orchestrates CLI tool | Required before any `cli` command |
 
 ### Skill+CLI Pattern (Most Powerful)
 
@@ -255,45 +261,47 @@ Orchestrates {domain} using `{cli}` command.
 
 ### What High-Invocation Skills Share
 
-1. **BEFORE conditions** in description
+1. **Clear lifecycle positioning** — "before", "first", "required"
 2. **Specific trigger phrases** in quotes
 3. **Method preview** that's actionable
-4. **Clear anti-patterns** that catch mistakes
+4. **Clear pitfall documentation** that catches mistakes
 5. **Integration points** that compose with other skills
+6. **Calm, craft-oriented register** — constraints as quality standards
 
 ### What Low-Invocation Skills Suffer From
 
 1. Generic "Use when..." descriptions
 2. Vague propositions ("helps with", "guides", "assists")
-3. Missing timing gates
+3. Missing lifecycle positioning
 4. Documenting what Claude already knows
 
-## Anti-Patterns
+## Common Mistakes
 
-### Discovery Failures
+### Discovery
 
-| Anti-Pattern | Symptom | Fix |
-|--------------|---------|-----|
-| "Use when creating..." | Claude bypasses skill | "MANDATORY gate before..." |
-| "Helps with..." | Never invoked | Specific trigger phrases |
-| No timing gate | Optional invocation | Add BEFORE/FIRST |
+| Mistake | Symptom | Better |
+|---------|---------|--------|
+| "Use when creating..." | Claude bypasses skill | "Required before..." |
+| "Helps with..." | Skill never invoked | Specific trigger phrases |
+| No lifecycle positioning | Claude treats invocation as optional | Add "before", "first", "required" |
 | Generic actions | Claude "knows" without loading | Domain-specific phrases |
 
-### Structure Failures
+### Structure
 
-| Anti-Pattern | Symptom | Fix |
-|--------------|---------|-----|
+| Mistake | Symptom | Better |
+|---------|---------|--------|
 | SKILL.md > 500 lines | Token bloat | Split into references/ |
 | Name doesn't match dir | Skill not found | Keep synchronized |
 | Deeply nested refs | Discovery fails | One level deep max |
 
-### Content Failures
+### Content
 
-| Anti-Pattern | Symptom | Fix |
-|--------------|---------|-----|
+| Mistake | Symptom | Better |
+|---------|---------|--------|
 | Explaining known things | Wastes tokens | Domain-specific only |
 | Magic constants | Unclear reasoning | Justify all values |
 | Many options, no default | Analysis paralysis | Recommend one path |
+| Heavy threat/urgency language | Corner-cutting, concealment | Frame constraints as craft standards |
 
 ## Quick Reference
 
@@ -302,24 +310,24 @@ Orchestrates {domain} using `{cli}` command.
 ```markdown
 ---
 name: kebab-case-name
-description: [TIMING] + [TRIGGER] + [METHOD/VALUE]. Triggers on 'phrase1', 'phrase2'. (user)
+description: [ACTION VERB] + [LIFECYCLE CONTEXT] + [METHOD/VALUE]. Triggers on 'phrase1', 'phrase2'. (user)
 ---
 
 # Skill Title
 
-[Core principle]
+[What good work looks like — the core principle]
 
 ## When to Use
 [Specific triggers with examples]
 
-## When NOT to Use
-[Clear boundaries]
+## Boundaries
+[What this skill is not for]
 
 ## Workflow
 [Steps with success criteria]
 
-## Anti-Patterns
-[What to avoid with fixes]
+## Common Mistakes
+[Pitfalls and better alternatives]
 ```
 
 ### Files to Include
@@ -361,6 +369,7 @@ See `references/sharing-scan.md` for triage guidelines.
 - `references/cso-guide.md` — Claude Search Optimization principles
 - `references/skill-cli-pattern.md` — Skill+CLI template
 - `references/skill-patterns.md` — Pattern taxonomy with examples
-- `references/rationalization-table.md` — Common excuses to block
+- `references/rationalization-table.md` — Why this skill exists even when the task seems simple
+- `references/register-principles.md` — Emotional register guidelines for instructional text
 - `references/sharing-scan.md` — Sharing triage guidelines
 - `references/dot-graphs.md` — DOT graph syntax for workflow diagrams

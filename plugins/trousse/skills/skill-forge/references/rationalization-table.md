@@ -1,181 +1,136 @@
-# Rationalization Table
+# Why Skills Exist (Even When They Seem Unnecessary)
 
-Common excuses Claude makes to bypass skills, and how to block them.
-
-## Purpose
-
-Claude is smart and efficient. Sometimes too efficient — it will rationalize skipping your skill because it "already knows" the pattern. This table documents common rationalizations and how skill descriptions can preempt them.
+Claude is efficient — sometimes too efficient. It can reason itself out of loading a skill because it "already knows" the pattern. This document explains why skills add value even when the task seems straightforward, and how descriptions can communicate that value clearly.
 
 ## The Pattern
 
 ```
-User request → Claude evaluates skills → Rationalization → Skip skill → Apply generic solution
+User request → Claude evaluates skills → "I can handle this" → Skip skill → Apply generic solution
 ```
 
-**Goal:** Break the chain at "Rationalization" by making the skill description explicitly address the excuse.
+**Better:** The description communicates enough value that Claude *wants* to load the skill, because it recognises the skill adds something it doesn't have from training alone.
 
-## Common Rationalizations
+## Why Skills Add Value
 
-### 1. "I Already Know This"
+### 1. Domain-Specific Context
 
-**Excuse:** "I'm familiar with debugging patterns, I don't need to load a debugging skill."
+**The temptation:** "I'm familiar with debugging patterns, I don't need a debugging skill."
 
-**Why it fails:** Generic knowledge misses domain-specific patterns, project context, and learned anti-patterns.
+**The reality:** Generic knowledge misses domain-specific patterns, project context, and learned anti-patterns. The skill encodes institutional knowledge.
 
-**Block with:**
+**Description approach:**
 ```yaml
-description: MANDATORY gate before proposing fixes - prevents the 'I already know' trap that leads to incomplete root cause analysis...
+description: Guides systematic debugging before proposing fixes — encodes project-specific patterns and known failure modes that training doesn't cover...
 ```
 
-### 2. "This Is Simple Enough"
+### 2. Hidden Complexity
 
-**Excuse:** "This is a straightforward request, I can handle it directly."
+**The temptation:** "This is straightforward, I can handle it directly."
 
-**Why it fails:** Simple-seeming requests often have hidden complexity. The skill exists because the pattern has proven tricky.
+**The reality:** Simple-seeming requests often have hidden complexity. The skill exists because the pattern has proven tricky.
 
-**Block with:**
+**Description approach:**
 ```yaml
-description: Invoke FIRST for ANY bug, even seemingly simple ones - systematic approach prevents the 'quick fix' temptation that leads to recurring issues...
+description: Guides systematic debugging before proposing any fix, including simple-looking ones — surface simplicity often masks deeper issues...
 ```
 
-### 3. "It Would Slow Things Down"
+### 3. Validation and Quality
 
-**Excuse:** "Loading the skill and following the process would take longer than just doing it."
+**The temptation:** "Loading the skill would slow things down."
 
-**Why it fails:** Time saved skipping the process is lost to rework, debugging, and missed edge cases.
+**The reality:** Time saved skipping the process is lost to rework. The skill's validation catches issues earlier.
 
-**Block with:**
+**Description approach:**
 ```yaml
-description: ...ensures understanding before solutions (prevents the 'faster to skip' rationalization that causes rework)...
+description: ...ensures understanding before solutions (saves rework later)...
 ```
 
-### 4. "The User Asked Specifically"
+### 4. Process Integrity
 
-**Excuse:** "The user asked me to 'just fix it quickly' so I should skip the process."
+**The temptation:** "The user asked to 'just fix it quickly' so I should skip the process."
 
-**Why it fails:** User requests don't override good practice. The skill exists to protect the user from bad outcomes.
+**The reality:** The skill protects quality even under time pressure. Quick and correct aren't mutually exclusive.
 
-**Block with:**
+**Description approach:**
 ```yaml
-description: MANDATORY even when user requests shortcuts - protects user from outcomes they'll regret...
+description: ...required even under time pressure — the workflow is quick and prevents rework...
 ```
 
-### 5. "This Is Different"
+### 5. Edge Case Coverage
 
-**Excuse:** "This particular situation doesn't quite fit the skill's trigger."
+**The temptation:** "This particular situation doesn't quite fit the skill's trigger."
 
-**Why it fails:** Edge case reasoning often rationalizes skipping. When in doubt, invoke.
+**The reality:** Edge cases are exactly where skills add the most value. When in doubt, load the skill.
 
-**Block with:**
+**Description approach:**
 ```yaml
-description: Triggers on ANY {situation}, including edge cases and unusual variations...
+description: Triggers on any {situation}, including edge cases and unusual variations...
 ```
 
-### 6. "I'll Do It Later"
+### 6. Sequencing
 
-**Excuse:** "I'll invoke the skill after I try this quick approach first."
+**The temptation:** "I'll try my approach first and load the skill if I get stuck."
 
-**Why it fails:** Once committed to an approach, switching is costly. Skills work best when invoked BEFORE action.
+**The reality:** Skills work best when loaded before action. Once committed to an approach, switching is costly.
 
-**Block with:**
+**Description approach:**
 ```yaml
-description: Invoke BEFORE any action - switching approaches mid-stream is expensive...
+description: Load before taking action — switching approaches mid-stream is expensive...
 ```
 
-### 7. "It's Just This Once"
+## Description Quality Levels
 
-**Excuse:** "I'll skip the checklist this one time since we're in a hurry."
-
-**Why it fails:** Exceptions become habits. The one time you skip is when problems occur.
-
-**Block with:**
-```yaml
-description: MUST be completed for every instance - no exceptions prevent exception-creep...
-```
-
-## Rationalization-Resistant Descriptions
-
-### Weak (Easily Rationalized)
+### Weak (Easy to Skip)
 
 ```yaml
 description: Use when debugging code problems
 ```
 
-Claude thinks: "I can debug without a skill. Skip."
+No value signal — Claude can reasonably conclude it doesn't need this.
 
-### Medium (Some Resistance)
-
-```yaml
-description: Use before proposing fixes for bugs
-```
-
-Claude thinks: "This bug is simple. Skip."
-
-### Strong (Rationalization-Resistant)
+### Better (Some Value Signal)
 
 ```yaml
-description: MANDATORY gate before proposing ANY fix, even for seemingly simple bugs. Invoke FIRST when encountering unexpected behavior - prevents 'I already know' and 'this is simple' rationalizations that lead to incomplete root cause analysis.
+description: Guides debugging before proposing fixes
 ```
 
-Claude thinks: "The skill explicitly addresses my rationalization. Better invoke."
+Lifecycle positioning, but no reason to prefer the skill over training.
+
+### Best (Clear Value)
+
+```yaml
+description: Guides systematic debugging before proposing fixes. 4-phase framework encodes project-specific failure modes and root cause patterns. Triggers on 'test failing', 'unexpected behavior', 'debug this'.
+```
+
+Clear value proposition (project-specific knowledge), method preview, and natural triggers.
 
 ## Pattern Library
 
 ### For Process Skills
 
 ```yaml
-description: MANDATORY before {action}. Invoke FIRST when {trigger} - prevents rushing that leads to {bad outcome}. Even for simple cases.
+description: [Verb] [domain] — required before {action}. [N]-step workflow ensures {quality outcome}. Triggers on 'phrase1', 'phrase2'.
 ```
 
 ### For Gate Skills
 
 ```yaml
-description: MUST be completed before {next step}. No exceptions - the one time you skip is when {failure mode}.
+description: Validates {thing} before {next step}. Catches {specific issues} that are easy to miss. Triggers on 'phrase1', 'phrase2'.
 ```
 
 ### For Coaching Skills
 
 ```yaml
-description: Invoke when {trigger}, even when you 'already know' - fresh perspective catches patterns you've internalized wrong.
-```
-
-## Testing Rationalizations
-
-Use `test_skill.py` with pressure scenarios:
-
-```json
-{
-  "name": "rationalization_test",
-  "user_prompt": "Just quickly fix this bug please",
-  "expected_behavior": "Claude invokes skill despite 'quickly' request",
-  "rationalizations_to_block": [
-    "The user asked for quick, so skip the process",
-    "This seems simple enough to handle directly"
-  ]
-}
-```
-
-## Anti-Pattern: Over-Blocking
-
-**Don't:** Make every skill MANDATORY for everything
-**Do:** Be specific about when MANDATORY applies
-
-```yaml
-# Too aggressive
-description: MANDATORY for all coding work...
-
-# Appropriately scoped
-description: MANDATORY before proposing fixes for bugs, test failures, or unexpected behavior...
+description: Coaches on {quality dimension}. Surfaces patterns and trade-offs that training data doesn't cover. Triggers on 'phrase1', 'phrase2'.
 ```
 
 ## Quick Reference
 
-| Rationalization | Blocking Language |
-|-----------------|-------------------|
-| "I already know" | "prevents 'already know' trap" |
-| "This is simple" | "even for simple cases" |
-| "Would slow down" | "prevents rework" |
-| "User asked to skip" | "even when user requests shortcuts" |
-| "This is different" | "ANY {trigger}, including edge cases" |
-| "I'll do it later" | "BEFORE any action" |
-| "Just this once" | "no exceptions" |
+| Temptation | What the Description Should Communicate |
+|------------|----------------------------------------|
+| "I already know" | What the skill adds beyond training: project context, institutional knowledge |
+| "This is simple" | Why even simple cases benefit: hidden complexity, edge cases |
+| "Would slow down" | How the skill saves time: prevents rework, catches issues early |
+| "User asked to skip" | Why quality and speed aren't opposed: the workflow is fast |
+| "This is different" | Why edge cases benefit most: that's where generic knowledge fails |
+| "I'll do it later" | Why sequencing matters: load before action, not after failure |

@@ -356,11 +356,11 @@ def check_structure(skill_dir: Path, content: str) -> list[Check]:
             message=f"SKILL.md has {len(lines)} lines"
         ))
 
-    # Check for key sections
+    # Check for key sections (accept both old and new naming conventions)
     section_patterns = {
         'when_to_use': r'^##\s+when\s+to\s+use',
-        'when_not_to_use': r'^##\s+when\s+not\s+to\s+use',
-        'anti_patterns': r'^##\s+anti[- ]?patterns?',
+        'when_not_to_use': r'^##\s+(?:when\s+not\s+to\s+use|boundar(?:y|ies)|scope)',
+        'anti_patterns': r'^##\s+(?:anti[- ]?patterns?|common\s+mistakes?|pitfalls?)',
     }
 
     # Anti-patterns are less important for methodology/reference skills
@@ -440,6 +440,139 @@ def check_resources(skill_dir: Path) -> list[Check]:
                     ))
             except:
                 pass
+
+    return checks
+
+
+def check_register(content: str) -> list[Check]:
+    """Check emotional register of skill content.
+
+    Skills with calmer, more positive framing produce better outputs.
+    Based on research showing that threat/urgency language in instructions
+    causally increases corner-cutting in model behaviour.
+    """
+    checks = []
+
+    # Strip code blocks and frontmatter before analysis
+    stripped = re.sub(r'```.*?```', '', content, flags=re.DOTALL)
+    stripped = re.sub(r'^---\n.*?\n---', '', stripped, flags=re.DOTALL)
+
+    # Count ALL CAPS words (3+ chars, outside headings)
+    lines_no_headings = [l for l in stripped.split('\n') if not l.startswith('#')]
+    body_text = '\n'.join(lines_no_headings)
+    caps_words = re.findall(r'\b[A-Z]{3,}\b', body_text)
+    # Filter out common abbreviations
+    abbreviations = {
+        # Protocols and standards
+        'API', 'CLI', 'SQL', 'URL', 'CSS', 'HTML', 'JSON', 'YAML', 'XML',
+        'SSH', 'HTTP', 'HTTPS', 'SVG', 'PNG', 'PDF', 'CSV', 'TSV', 'JSONL',
+        'GTD', 'MCP', 'CSO', 'CDP', 'EOF', 'PII', 'CRDT', 'DOT', 'PWA',
+        'WCAG', 'OWASP', 'TTY', 'UUID', 'SDK', 'IDE', 'GCP', 'AWS', 'CDN',
+        'DNS', 'TLS', 'RGB', 'HEX', 'HSL', 'ANSI', 'POSIX', 'NVM',
+        # Data types and formats
+        'SPSS', 'DOCX', 'XLSX', 'PPTX', 'LLM', 'BQ', 'BOOL', 'INT',
+        'STRING', 'FLOAT', 'DATE', 'TIMESTAMP', 'BYTES', 'STRUCT',
+        'NUMERIC', 'COLUMNS', 'NULL', 'TRUE', 'FALSE',
+        # SQL keywords (often appear in ALL CAPS by convention)
+        'SELECT', 'FROM', 'WHERE', 'JOIN', 'LEFT', 'RIGHT', 'INNER',
+        'GROUP', 'ORDER', 'LIMIT', 'INSERT', 'UPDATE', 'DELETE', 'CREATE',
+        'DROP', 'ALTER', 'INDEX', 'TABLE', 'VIEW', 'UNION', 'CASE', 'WHEN',
+        'THEN', 'ELSE', 'END', 'COUNT', 'SUM', 'AVG', 'MIN', 'MAX',
+        'DISTINCT', 'HAVING', 'PARTITION', 'OVER', 'CAST',
+        # SQL / BigQuery aggregation and analytic terms
+        'AGG', 'ARRAY', 'UNNEST', 'COALESCE', 'NULLIF', 'IFNULL', 'IIF',
+        'EXCEPT', 'INTERSECT', 'PIVOT', 'UNPIVOT', 'QUALIFY',
+        # Spreadsheet function names (Excel / Sheets)
+        'COUNTIF', 'COUNTIFS', 'SUMIF', 'SUMIFS', 'AVERAGEIF', 'AVERAGEIFS',
+        'VLOOKUP', 'HLOOKUP', 'XLOOKUP', 'INDEX', 'MATCH', 'LOOKUP',
+        'IFERROR', 'ISBLANK', 'ISNA', 'ISNUMBER', 'ISTEXT',
+        # Column / field abbreviations common in data analysis
+        'RLD', 'REC', 'AGE', 'SEX', 'DOB', 'DOD', 'REF', 'OBS', 'ADM',
+        # Environment / shell conventions
+        'HOME', 'PATH', 'LANG', 'USER',
+        # Platform / tool names
+        'CLAUDE', 'CLAUDECODE', 'TUI', 'SKILL',
+        # Security / package management
+        'SHA', 'CVE', 'PKG', 'GPG', 'PGP', 'HMAC',
+        # Common short words that appear in ALL CAPS in technical docs
+        'ONE', 'TWO', 'NOT', 'AND', 'FOR', 'THE', 'ALL',
+    }
+    emphatic_caps = [w for w in caps_words if w not in abbreviations]
+
+    if len(emphatic_caps) > 5:
+        checks.append(Check(
+            name="register_caps",
+            passed=False,
+            message=f"{len(emphatic_caps)} emphatic ALL CAPS words: {', '.join(emphatic_caps[:6])}",
+            severity="info",
+            suggestion="Use markdown emphasis (**bold**) or structure instead of ALL CAPS"
+        ))
+    elif emphatic_caps:
+        checks.append(Check(
+            name="register_caps",
+            passed=True,
+            message=f"{len(emphatic_caps)} ALL CAPS word(s) — within range"
+        ))
+
+    # Negation ratio: count prohibitions vs positive framings
+    negation_patterns = [
+        r"\bdon'?t\b", r"\bnever\b", r"\bavoid\b", r"\bdo not\b",
+        r"\bmust not\b", r"\bcannot\b", r"\bshould not\b", r"\bshouldn'?t\b",
+    ]
+    positive_patterns = [
+        r"\buse\b", r"\bprefer\b", r"\bensure\b", r"\bproduce\b",
+        r"\balways\b", r"\bconsider\b", r"\bverify\b", r"\bcheck\b",
+    ]
+
+    neg_count = sum(len(re.findall(p, body_text, re.IGNORECASE)) for p in negation_patterns)
+    pos_count = sum(len(re.findall(p, body_text, re.IGNORECASE)) for p in positive_patterns)
+    total = neg_count + pos_count
+
+    if total > 0:
+        neg_ratio = neg_count / total
+        if neg_ratio > 0.5:
+            checks.append(Check(
+                name="register_negation",
+                passed=False,
+                message=f"High negation ratio: {neg_count} prohibitions vs {pos_count} positive framings ({neg_ratio:.0%})",
+                severity="info",
+                suggestion="Reframe prohibitions as positive specifications where possible"
+            ))
+        else:
+            checks.append(Check(
+                name="register_negation",
+                passed=True,
+                message=f"Balanced framing: {neg_count} prohibitions, {pos_count} positive ({neg_ratio:.0%} negative)"
+            ))
+
+    # Opening register — first 3 non-blank, non-heading lines after frontmatter
+    body_lines = stripped.strip().split('\n')
+    opening_lines = []
+    for line in body_lines:
+        line = line.strip()
+        if not line or line.startswith('#'):
+            continue
+        opening_lines.append(line)
+        if len(opening_lines) >= 3:
+            break
+
+    opening_text = ' '.join(opening_lines).lower()
+    threat_openers = ['warning', 'critical', 'danger', 'never', 'do not', 'must not', 'failure']
+    found_threats = [t for t in threat_openers if t in opening_text]
+    if found_threats:
+        checks.append(Check(
+            name="register_opening",
+            passed=False,
+            message=f"Opening contains threat language: {', '.join(found_threats)}",
+            severity="info",
+            suggestion="Open with what good work looks like, not what to avoid"
+        ))
+    else:
+        checks.append(Check(
+            name="register_opening",
+            passed=True,
+            message="Opening register is neutral or positive"
+        ))
 
     return checks
 
@@ -610,6 +743,9 @@ def lint_skill(skill_path: Path, follow_aliases: bool = True, _alias_chain: list
     # Structure checks
     result.checks.extend(check_structure(skill_path, content))
     result.checks.extend(check_resources(skill_path))
+
+    # Register checks (emotional tone)
+    result.checks.extend(check_register(content))
 
     # Calculate results
     for check in result.checks:

@@ -114,6 +114,25 @@ gh run list --repo GH_USER/REPO --limit 5 --json status,conclusion,name \
   --jq '.[] | select(.conclusion == "failure") | "\(.name): \(.conclusion)"'
 ```
 
+**Check action version currency (Node.js deprecation):**
+
+Before updating action pins, get authoritative current versions from `simonw/actions-latest`:
+
+```bash
+curl -s https://raw.githubusercontent.com/simonw/actions-latest/main/versions.txt
+```
+
+Cross-reference against what's pinned locally, then resolve tag to SHA for pinning:
+
+```bash
+# Find all action pins across repos
+grep -rn "uses: actions/checkout@\|uses: astral-sh/setup-uv@\|uses: actions/setup-node@" \
+  ~/Repos --include="*.yml" 2>/dev/null | grep -v "node_modules"
+
+# Resolve a tag to its SHA
+git ls-remote https://github.com/actions/checkout "refs/tags/v6*" | sort -t/ -k3 -V | tail -1
+```
+
 ### Phase 2: Stale Forks Audit
 
 **List all forks:**
@@ -449,6 +468,8 @@ gh api repos/GH_USER/REPO/actions/secrets --jq '.secrets[].name' | grep -v SECRE
 | Compare fork | `gh api repos/.../compare/upstream:main...owner:main` |
 | List secrets | `gh api repos/.../actions/secrets --jq '.secrets[].name'` |
 | Check CodeQL | `gh api repos/.../code-scanning/default-setup` |
+| Latest action versions | `curl -s https://raw.githubusercontent.com/simonw/actions-latest/main/versions.txt` |
+| Resolve tag to SHA | `git ls-remote https://github.com/actions/checkout "refs/tags/v6*" \| tail -1` |
 | Delete repo | `gh repo delete GH_USER/REPO --yes` |
 | Delete secret | `gh api repos/.../actions/secrets/NAME -X DELETE` |
 
@@ -472,6 +493,7 @@ gh api repos/GH_USER/REPO/actions/secrets --jq '.secrets[].name' | grep -v SECRE
 | Checking `ahead_by` only | Fork might have upstream changes | Check both `ahead_by` AND `behind_by` |
 | Ghost CodeQL on private repos | Dynamic CodeQL on free-plan private repos can enter undead state — workflow shows "active" but API says "not enabled", UI shows no toggle | Can't fix via API or CLI. Manual: Settings → Code security. If no toggle visible, the entitlement was revoked — workflow is inert, ignore it |
 | Using `USERNAME` as variable name | macOS pre-sets `$USERNAME` to local account, shadowing your capture | Use `GH_USER` and verify against `gh auth status` |
+| Looking up action versions manually | `git ls-remote` output changes; easy to pick wrong SHA | Check `simonw/actions-latest` first — `curl -s https://raw.githubusercontent.com/simonw/actions-latest/main/versions.txt` |
 
 ## References
 

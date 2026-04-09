@@ -22,16 +22,17 @@ Like SEO but for Claude's internal skill discovery. Your description must:
 [TIMING GATE] + [SPECIFIC TRIGGER] + [METHOD PREVIEW] + [VALUE STATEMENT]
 ```
 
-### Timing Gates (Strongest Signal)
+### Lifecycle Positioning (Strongest Signal)
 
-| Gate | Strength | Example |
-|------|----------|---------|
-| MANDATORY | Highest | "MANDATORY gate before writing SKILL.md" |
-| MUST | High | "MUST be validated before deployment" |
-| FIRST | High | "Invoke FIRST when encountering bugs" |
-| BEFORE | High | "Use before proposing fixes" |
-| AFTER | Medium | "Run after completing substantial work" |
-| WHEN | Medium | "Triggers when discussing outcomes" |
+What matters is *clarity of when*, not *strength of command*. "Required before BigQuery ingestion" scores the same as "MANDATORY BEFORE loading data into BigQuery."
+
+| Pattern | Strength | Example |
+|---------|----------|---------|
+| before + specific context | Highest | "Required before writing SKILL.md" |
+| before / first | High | "Load before editing", "Invoke first when encountering bugs" |
+| required / always | Medium-High | "Required before deployment" |
+| after / when / during | Medium | "Run after completing substantial work" |
+| triggers on | Medium | "Triggers on 'weekly review'" |
 
 ### Trigger Phrases (Discovery Mechanism)
 
@@ -85,11 +86,11 @@ description: Helps with debugging code problems
 
 **After (CSO Score: 85):**
 ```yaml
-description: MANDATORY gate before proposing fixes. Invoke FIRST when encountering any bug, test failure, or unexpected behavior - 4-phase framework (root cause investigation, pattern analysis, hypothesis testing, implementation) ensures understanding before attempting solutions. Triggers on 'test failing', 'unexpected behavior', 'debug this'.
+description: Guides systematic debugging before proposing fixes. 4-phase framework (root cause investigation, pattern analysis, hypothesis testing, implementation) ensures understanding before attempting solutions. Triggers on 'test failing', 'unexpected behavior', 'debug this'.
 ```
 
 **What changed:**
-- Added timing gate (MANDATORY, FIRST, before)
+- Added lifecycle positioning (before proposing fixes)
 - Added trigger phrases in quotes
 - Added method preview (4-phase framework)
 - Added value statement (ensures understanding)
@@ -103,7 +104,7 @@ description: Use when creating skills
 
 **After (CSO Score: 90):**
 ```yaml
-description: MANDATORY gate for skill development. Invoke FIRST when building, validating, or improving skills. Unified workflow combining Anthropic's 6-step process with automated validation, CSO scoring, and subagent testing. Triggers on 'create skill', 'new skill', 'validate skill', 'check skill quality'.
+description: Orchestrates skill development — required before writing or editing any SKILL.md file. Unified 6-step workflow with automated validation, CSO scoring, and subagent testing. Triggers on 'create skill', 'new skill', 'validate skill', 'check skill quality'.
 ```
 
 ### Example 3: GTD Coaching
@@ -142,7 +143,7 @@ description: Invoke FIRST when encountering bugs, before proposing fixes...
 ### 2. Generic Action Language
 
 **Wrong:** "Use when X happens"
-**Right:** "Invoke FIRST when X happens" or "MANDATORY gate before X"
+**Right:** "Required before X" or "Guides X before Y"
 
 ### 3. Missing Trigger Phrases
 
@@ -158,7 +159,7 @@ description: Invoke FIRST when encountering bugs, before proposing fixes...
 
 | Component | Points | How to Earn |
 |-----------|--------|-------------|
-| Timing gates | 0-25 | MANDATORY/MUST (10), BEFORE/FIRST (7), WHEN/AFTER (4) |
+| Lifecycle positioning | 0-25 | before + specific context (10), before/first (8), required (6), when/after (4) |
 | Trigger phrases | 0-20 | 5 points per quoted phrase (max 4) |
 | Method preview | 0-15 | Named pattern, numbered steps, value statement |
 | Specificity | 0-20 | Start at 20, deduct for vague language |
@@ -183,5 +184,23 @@ description: [TIMING] [ACTION] [TRIGGERS] [METHOD]
 ```yaml
 description: MANDATORY before writing SKILL.md. Validates naming, structure, and CSO patterns. Triggers on 'check skill', 'validate skill'.
 ```
+
+## Emotional Register
+
+Descriptions set the emotional tone for everything that follows. Research shows that threat/urgency language in instructions causally increases corner-cutting in model behaviour — even when the output looks composed.
+
+**Open with what the skill does well, not what it prevents:**
+- Good: "Orchestrates systematic debugging before proposing fixes"
+- Avoid: "MANDATORY gate — prevents skipping root cause analysis"
+
+**Prefer lifecycle positioning over commands:**
+- Good: "Required before writing SKILL.md"
+- Avoid: "MANDATORY BEFORE writing SKILL.md"
+
+**Frame constraints as craft, not threat:**
+- Good: "Validates SQL before output — catches errors early"
+- Avoid: "NEVER output raw SQL without validation"
+
+The lint script checks register: ALL CAPS density, negation ratio, and opening tone. These are quality dimensions alongside structure and discoverability.
 
 Run `scripts/score_description.py` to check your score.

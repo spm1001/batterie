@@ -55,57 +55,72 @@ class CSOScore:
 
 
 def score_timing_gates(desc: str) -> ScoreComponent:
-    """Score timing-related language that creates invocation gates."""
+    """Score timing-related language that creates invocation gates.
+
+    Rewards clarity of context over command strength. 'Required before
+    BigQuery ingestion' scores the same as 'MANDATORY BEFORE loading
+    data into BigQuery' — both have clear lifecycle positioning.
+    """
     max_points = 25
     score = 0
     details = []
     suggestions = []
 
-    # Strong gates (highest value)
-    strong_gates = {
-        'mandatory': 10,
-        'must': 8,
-        'required': 8,
-        'before': 7,
-        'first': 7,
+    desc_lower = desc.lower()
+
+    # Lifecycle positioning — clear "when in the workflow" signal
+    positioning_gates = {
+        'before': 8,
+        'first': 8,
+        'required': 6,
         'always': 5,
     }
 
-    # Moderate gates
-    moderate_gates = {
+    # Context gates — "when" and "triggers on" describe the situation
+    context_gates = {
         'after': 4,
         'when': 4,
         'during': 3,
         'triggers on': 5,
     }
 
-    desc_lower = desc.lower()
+    # Bonus: "before" followed by a specific noun phrase (not just "before" alone)
+    if re.search(r'\bbefore\s+(?:any\s+|writing\s+|loading\s+|running\s+|using\s+|proposing\s+)\w+', desc_lower):
+        score += 3
+        details.append("Specific lifecycle context")
 
-    found_strong = []
-    found_moderate = []
+    # Legacy: treat "mandatory" and "must" same as their calmer equivalents
+    # (no extra points for using ALL CAPS or command-register words)
+    if 'mandatory' in desc_lower and 'before' not in desc_lower:
+        score += positioning_gates['before']  # Same as 'before'
+    if 'must' in desc_lower and 'required' not in desc_lower:
+        score += positioning_gates['required']  # Same as 'required'
 
-    for gate, points in strong_gates.items():
+    found_positioning = []
+    found_context = []
+
+    for gate, points in positioning_gates.items():
         if gate in desc_lower:
-            found_strong.append(gate)
+            found_positioning.append(gate)
             score += points
 
-    for gate, points in moderate_gates.items():
+    for gate, points in context_gates.items():
         if gate in desc_lower:
-            found_moderate.append(gate)
+            found_context.append(gate)
             score += points
 
     score = min(score, max_points)  # Cap at max
 
-    if found_strong:
-        details.append(f"Strong gates: {', '.join(found_strong)}")
-    if found_moderate:
-        details.append(f"Moderate gates: {', '.join(found_moderate)}")
+    if found_positioning:
+        details.append(f"Lifecycle positioning: {', '.join(found_positioning)}")
+    if found_context:
+        details.append(f"Context gates: {', '.join(found_context)}")
 
-    if not found_strong and not found_moderate:
+    if not found_positioning and not found_context:
         details.append("No timing gates found")
-        suggestions.append("Add: 'MANDATORY gate before...', 'Invoke FIRST when...', 'Use BEFORE...'")
-    elif not found_strong:
-        suggestions.append("Consider adding stronger gate: 'MANDATORY', 'BEFORE', 'FIRST'")
+        suggestions.append("Add lifecycle context: 'Required before...', 'Load before...', 'Use when...'")
+    elif not found_positioning:
+        suggestions.append("Consider adding lifecycle positioning: 'before', 'first', 'required'")
 
     return ScoreComponent(
         name="timing_gates",
@@ -479,10 +494,10 @@ def format_score(result: CSOScore, format_type: str = "text") -> str:
     if result.grade in ('D', 'F'):
         lines.append("\n--- EXAMPLE IMPROVEMENTS ---")
         lines.append("  Before: 'Helps with debugging code problems'")
-        lines.append("  After:  'MANDATORY gate before proposing fixes. Invoke FIRST when")
-        lines.append("           encountering bugs - 4-phase framework (root cause, pattern")
-        lines.append("           analysis, hypothesis, fix) ensures understanding before action.")
-        lines.append("           Triggers on \"test failing\", \"unexpected behavior\", \"debug this\".'")
+        lines.append("  After:  'Guides systematic debugging before proposing fixes. 4-phase")
+        lines.append("           framework (root cause, pattern analysis, hypothesis, fix)")
+        lines.append("           ensures understanding before action. Triggers on \"test failing\",")
+        lines.append("           \"unexpected behavior\", \"debug this\".'")
 
     return "\n".join(lines)
 

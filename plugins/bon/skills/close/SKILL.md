@@ -1,7 +1,15 @@
 ---
 name: close
-description: "Orchestrates end-of-session capture via 5-phase GODAR framework — prevents work loss between sessions by surfacing learnings, triaging incomplete work into Now/Bon/Handoff, writing cross-session handoff, and staging memory extraction while context is rich. MANDATORY before /exit. Invoke FIRST on 'wrap up', 'lets finish', 'close out', '/close'."
-allowed-tools: Bash, Read, Write, Edit, Glob, Grep, AskUserQuestion, Skill
+description: "Orchestrates end-of-session capture via 5-phase GODAR framework — prevents work loss between sessions by surfacing learnings, triaging incomplete work into Now/Bon/Handoff, writing cross-session handoff, and staging memory extraction while context is rich. Run before /exit. Invoke on 'wrap up', 'lets finish', 'close out', '/close'."
+allowed-tools:
+  - Bash
+  - Read
+  - Write
+  - Edit
+  - Glob
+  - Grep
+  - AskUserQuestion
+  - Skill
 ---
 
 # /close
@@ -28,7 +36,7 @@ Prerequisites → Verify infrastructure
 Pre-flight    → Return to home directory
 Gather        → todos, tracker (bon), git, drift, SESSION_ID
 Orient        → Claude answers six questions in prose → user responds
-Decide        → Claude proposes Now/Next plan → user amends (STOP)
+Decide        → Claude proposes Now/Next plan → user amends before execution
 Act           → execute, write handoff, stage extraction, commit
 Remember      → index session (background, automatic)
 ```
@@ -55,14 +63,14 @@ BON_SCRIPTS=$(ls -td ~/.claude/plugins/cache/*/bon/*/scripts 2>/dev/null | grep 
 
 ---
 
-## Pre-flight: Return Home (MANDATORY)
+## Pre-flight: Return Home
 
 You may have `cd`'d during work. Your system prompt contains `Working directory: /path/...` in the `<env>` block — this is immutable, where the session actually started.
 
 1. Extract that exact path from your system prompt
 2. Compare with `pwd -P` — if different, `cd` back immediately
 
-**Do not skip. Do not trust your memory of whether you moved back. Check.**
+**Always verify with `pwd -P` — even if you believe you're already home.**
 
 ---
 
@@ -80,11 +88,11 @@ Use TIME_OF_DAY for greetings. Use YEAR to anchor the handoff date. **Hold onto 
 
 **If the script fails (exit code 127 = file not found, or any error):**
 
-1. **STOP.** Tell the user: "close-context.sh not found."
+1. Tell the user: "close-context.sh not found."
 2. **Diagnose:** Run `find ~/.claude/plugins/cache -name "close-context.sh" 2>/dev/null` to locate it.
-3. **Fallback:** If you can't fix it, write handoff manually to `.bon/handoffs/` (or `~/.claude/handoffs/<encoded-path>/` if no .bon/) — don't skip closure entirely.
+3. **Fallback:** If you can't fix it, write handoff manually to `.bon/handoffs/` (or `~/.claude/handoffs/<encoded-path>/` if no .bon/) — closure always produces a handoff, even without the script.
 
-**Why this matters:** Broken scripts (Jan 3-10 2026) meant /close ran without proper context gathering. Never continue silently.
+**Why this matters:** Broken scripts (Jan 3-10 2026) meant /close ran without proper context gathering. Surface the problem and use the fallback path.
 
 From script output, assess:
 
@@ -101,7 +109,7 @@ Surface stale artifacts: screenshots, temp files, old sketches, superseded plans
 
 **This is THE reflection.** What emerges here feeds the handoff and the extraction. There is no second pass later.
 
-Answer all six questions in prose — don't compress into bullets, don't pre-bake options. The point is surfacing what you noticed that the user might not have.
+Answer all six questions in prose — full sentences, not compressed bullets or pre-baked options. The point is surfacing what you noticed that the user might not have.
 
 **Looking Back:**
 1. **What did we forget?** — Dropped intentions, docs now stale, tests we said we'd write, files touched with untraced downstream effects
@@ -121,9 +129,9 @@ Wait for the user's response. Their additions and corrections go into the handof
 
 ## Decide
 
-**STOP.** Do not execute anything until this phase completes.
+This is a proposal phase — nothing executes until the user confirms or amends.
 
-From Gather + Orient, identify all incomplete work and draft a concrete plan. **Present it — don't ask the user what they want.** Propose; let them amend.
+From Gather + Orient, identify all incomplete work and draft a concrete plan. **Present it as a proposal.** Propose; let them amend.
 
 ### Bucket everything
 
@@ -174,7 +182,7 @@ bon new "title" --why "consequence if not done" --what "concrete actions" --done
 
 ### Write handoff
 
-**Handoff location is non-negotiable.** The script computes the path; you use it exactly.
+**The script computes the handoff path — use it exactly.** Recomputing introduces encoding drift and folder fragmentation.
 
 ```bash
 "$BON_SCRIPTS/close-context.sh" | grep -E 'HANDOFF_DIR|SESSION_ID'
@@ -186,8 +194,8 @@ This outputs both — use them directly, never recompute.
 |------|-----|
 | Write to `{HANDOFF_DIR}/{session-id}.md` | Git-tracked in .bon/handoffs/, session-start finds it |
 | Use Write tool (handoff is in .bon/, not ~/.claude/) | .bon/ is a normal project directory — no permission issues |
-| Never write locally (`.handoff.md` in project root) | Session-start won't find it — information becomes invisible |
-| Never compute path yourself | The script walks up to find .bon/ correctly |
+| Write to HANDOFF_DIR, not locally (`.handoff.md` in project root) | Session-start won't find local files — information becomes invisible |
+| Use the script's computed path | The script walks up to find .bon/ correctly |
 
 **Cross-project handoffs:** If the user says "continue in [other project]", write the handoff to the TARGET project's `.bon/handoffs/` directory instead of the current one. The handoff's presence in the target is the signal — no `continue_in` field needed. Check the target `.bon/` exists first; if not, tell the user to `bon init` there.
 
@@ -315,13 +323,13 @@ If git dirty in the working directory:
 
 ### Tell user to exit
 
-Say: "Type `/exit` to close." Don't exit programmatically.
+Say: "Type `/exit` to close." Let the user trigger the exit.
 
 ---
 
 ## Remember
 
-**Automatic — handled by garde-manger's session-end hook, if installed.** You don't invoke this.
+**Automatic — handled by garde-manger's session-end hook, if installed.** This runs on its own.
 
 If garde-manger is installed, its hook takes one of two paths on `/exit`:
 
@@ -338,7 +346,7 @@ Just tell the user to `/exit`.
 
 ---
 
-## Anti-Patterns
+## Common Mistakes
 
 | Pattern | Problem | Fix |
 |---------|---------|-----|

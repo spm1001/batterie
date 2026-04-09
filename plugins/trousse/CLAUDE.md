@@ -35,9 +35,9 @@ The plugin system discovers skills from `skills/*/SKILL.md` — no hooks, no set
 - `user-invocable: false` for skills loaded programmatically (companion skills)
 - Reference files live in `references/` subdirectory, linked from main SKILL.md
 
-### Current Skills (17)
+### Current Skills (18)
 
-amp-close, ardoise, claude-survey, consomme, diagram, github-cleanup, google-devdocs, ia-presenter, mandoline, picture, review, screenshot, server-checkup, skill-forge, sprite, titans, toise
+amp-close, ardoise, claude-survey, consomme, deglacer, diagram, github-cleanup, google-devdocs, ia-presenter, mandoline, picture, review, screenshot, server-checkup, skill-forge, sprite, titans, toise
 
 ### Commands (7)
 
@@ -97,3 +97,8 @@ For "does this skill actually make sense?" — use `/titans`. Three Opus reviewe
 | `docs/error-patterns.md` | Common issues and troubleshooting |
 
 The handoff contract (`HANDOFF-CONTRACT.md`) lives in bon — it specifies bon's session protocol.
+
+### Cross-Skill Routing
+
+- **Before running jq on `~/.claude/projects/**/*.jsonl`** → load `/deglacer` first. The CC JSONL schema has dragons (triple-duty user entries, streaming-duplicated message IDs, version-dependent fields). Deglacer has the schema reference and `ccconv` tool.
+- **Past session recall** → deglacer reads full transcripts; garde-manger searches memory summaries. Choose based on what you need.

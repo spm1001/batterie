@@ -1,6 +1,6 @@
 ---
 name: mandoline
-description: "MANDATORY BEFORE loading data into BigQuery — transforms SPSS files, CSVs, and spreadsheet dumps into self-documenting tables (respondent-level or pre-aggregated). Invoke FIRST when you see raw column names (S1, Q1r3), numeric codes, or empty BQ descriptions. 7-phase workflow: SPSS extraction, schema design, transformation, teaching descriptions with display-label pattern, metadata enrichment, verification. Triggers on 'make this data analysis-ready', 'build a clean BQ table', 'load this SPSS file', 'enrich this table', 'process this codebook'. (user)"
+description: "Transforms SPSS files, CSVs, and spreadsheet dumps into self-documenting BigQuery tables (respondent-level or pre-aggregated). Load before ingesting raw data — invoke first when you see raw column names (S1, Q1r3), numeric codes, or empty BQ descriptions. 7-phase workflow: SPSS extraction, schema design, transformation, teaching descriptions with display-label pattern, metadata enrichment, verification. Triggers on 'make this data analysis-ready', 'build a clean BQ table', 'load this SPSS file', 'enrich this table', 'process this codebook'. (user)"
 ---
 
 # Mandoline

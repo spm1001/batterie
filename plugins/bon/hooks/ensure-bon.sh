@@ -50,6 +50,19 @@ if [ -z "$ISSUES" ] && command -v bon &>/dev/null; then
     fi
 fi
 
+# Check 3: pymysql available (needed for any Dolt-backed repo)
+# Use bon's own venv Python, not system Python — pymysql lives in the uv tool venv
+if command -v bon &>/dev/null; then
+    BON_PYTHON=$(head -1 "$(command -v bon)" | sed 's/^#!//')
+    if [ -x "$BON_PYTHON" ] && ! "$BON_PYTHON" -c "import pymysql" 2>/dev/null; then
+        # Only warn if there are Dolt repos — check common locations
+        HAS_DOLT=$(find ~/Repos -maxdepth 3 -name backend -path '*/.bon/*' -exec grep -l dolt {} + 2>/dev/null | head -1 || true)
+        if [ -n "$HAS_DOLT" ]; then
+            ISSUES="${ISSUES}• pymysql not found but Dolt-backed repos exist. Reinstall with extras:\n  uv tool install \"$INSTALL_SRC\"\n"
+        fi
+    fi
+fi
+
 # Silent exit if nothing happened
 [ -z "$FIXED" ] && [ -z "$ISSUES" ] && exit 0
 
@@ -58,6 +71,4 @@ MSG=""
 [ -n "$FIXED" ] && MSG="${MSG}✓ bon auto-fixed:\n\n${FIXED}"
 [ -n "$ISSUES" ] && MSG="${MSG}⚠️ bon needs attention:\n\n${ISSUES}"
 
-cat <<EOF
-{"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": "${MSG}"}}
-EOF
+python3 -c "import json; print(json.dumps({'hookSpecificOutput': {'hookEventName': 'SessionStart', 'additionalContext': '''${MSG}'''}}))"

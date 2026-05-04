@@ -1,6 +1,6 @@
 ---
 name: open
-description: "Activate at session start when .bon/ exists AND before any bon CLI command. Handles session orientation (process contributions, present hierarchy, pick direction) and enforces draw-down workflow (bon show → bon work → bon step). Triggers on: session start with .bon/, /open, /bon, 'bon init', 'bon new', 'bon list', 'bon done', 'what can I work on', 'next action', 'desired outcome', 'file this for later', 'track this work', or when .bon/ directory exists."
+description: "Activate at session start when .bon/ exists AND before any bon CLI command. Handles session orientation (process contributions, present hierarchy, pick direction) and structures draw-down workflow (bon show → bon work → bon step). Triggers on: session start with .bon/, /open, /bon, 'bon init', 'bon new', 'bon list', 'bon done', 'what can I work on', 'next action', 'desired outcome', 'file this for later', 'track this work', or when .bon/ directory exists."
 allowed-tools:
   - "Bash(bon:*)"
   - Read
@@ -59,16 +59,23 @@ When you'd normally enter plan mode, create bon items instead. A bon hierarchy *
 
 ## Session Start Ritual
 
-The session-start hook provides orientation automatically (understanding, handoff, outcomes, suggested items). Your job is the LLM-mediated work the hook can't do.
+The session-start hook provides orientation automatically (handoff, outcomes, suggested items). Your job is the LLM-mediated work the hook can't do.
 
-### 1. Process Contributions
+The hook output may be truncated in the system-reminder preview. When you see "Output too large ... Full output saved to: {path}", Read that file — the handoff (including "For Claudes to come") is likely past the truncation point.
 
-If `.bon/contributions/` contains files:
+### 1. Synthesize Knowledge
+
+The most recent handoff may contain a `## For Claudes to come` section — durable knowledge written by the previous Claude to transcend their session. When present:
 
 1. Read `.bon/understanding.md`
-2. Read each contribution file
-3. **Rewrite** understanding.md — integrate new knowledge, make salience judgments. Don't append.
-4. Delete processed contribution files
+2. Read the `## For Claudes to come` section from the handoff
+3. **Rewrite** understanding.md — integrate the new knowledge, make salience judgments, restructure where needed. Don't append.
+
+This synthesis is onboarding. Integrating new knowledge into an existing document forces you to read the existing understanding, find where the new insight fits, and rewrite with judgment. By the time you're done, you know the project — not just the words on the page.
+
+The handoff stays on disk — never delete it. Not every handoff has a compost zone; when absent, skip this step.
+
+**Transition:** If `.bon/contributions/` contains files, process those the same way (read, integrate into understanding.md, delete the contribution files). This path is being retired.
 
 ### 2. Present Hierarchy
 
@@ -148,6 +155,22 @@ cat <<'EOF' | bon new -q
 EOF
 ```
 
+**Standalone actions** — for field reports, one-off fixes, observations — use `type: "action"`:
+
+```bash
+cat <<'EOF' | bon new -q
+{
+  "type": "action",
+  "title": "Field Report: OAuth flaky under concurrent load",
+  "brief": {
+    "why": "Noticed 3 failures in 10 test runs under load",
+    "what": "Document the pattern, identify root cause",
+    "done": "Either fixed or filed as action under appropriate outcome"
+  }
+}
+EOF
+```
+
 ### When to Track vs Just Do
 
 | Track in Bon | Just do it |
@@ -170,7 +193,7 @@ Between actions:
 
 ## Session Close
 
-Use `/close` at session end. It handles the full GODAR framework.
+Use `/close` at session end. It handles reflection, handoff, and capture.
 
 ---
 
@@ -178,8 +201,8 @@ Use `/close` at session end. It handles the full GODAR framework.
 
 Outcomes describe what will be true, not work to be done. The CLI warns on activity-verb titles automatically.
 
-| Activity (bad) | Achievement (good) |
-|----------------|-------------------|
+| Activity | Achievement |
+|----------|-------------|
 | Implement OAuth | Users can authenticate with GitHub |
 | Build rate limiter | API stays responsive under peak load |
 | Add test coverage | Claudes don't hit surprising edges |
@@ -213,7 +236,7 @@ bon step --skip "reason"     # Skip current step
 bon step --no-complete       # Final step: don't auto-complete
 bon edit ID --title/--why/--how/--what/--done/--order  # Edit fields
 bon edit ID --how ""         # Clear how field
-bon convert ID               # Action → outcome
+bon convert ID               # Action → outcome, or outcome → standalone action
 bon convert ID --outcome P   # Outcome → action under P
 bon status                   # Overview counts
 ```
@@ -236,9 +259,9 @@ All commands support `--json` for output. `bon new` reads JSON from piped stdin 
 
 `how` is `null` in JSON output when not set. Absent from stored data when not provided.
 
-**Field-name traps:**
+**Field-name mapping:**
 
-| Wrong | Right |
+| Instead of | Use |
 |---|---|
 | `item["why"]` | `item["brief"]["why"]` |
 | `item["how"]` | `item["brief"]["how"]` |
@@ -251,7 +274,7 @@ All commands support `--json` for output. `bon new` reads JSON from piped stdin 
 
 ---
 
-## Common Mistakes
+## Quick Corrections
 
 | What you typed | Use instead | Why |
 |---|---|---|
@@ -262,9 +285,8 @@ All commands support `--json` for output. `bon new` reads JSON from piped stdin 
 
 ### Shell Escaping
 
-**For creating items:** Pipe JSON to `bon new` with a heredoc. Do not use flags with
-backslash line continuations — they look clean but break on quotes, backticks, and
-parentheses in technical content. Flags are only for quick stubs.
+**For creating items:** Pipe JSON to `bon new` with a heredoc for anything with special
+characters (quotes, backticks, parentheses). Flags are only for quick stubs.
 
 **For reading items:** When piping `bon --json` output through inline python, use a heredoc:
 
@@ -282,5 +304,4 @@ PYEOF
 
 Create sequentially, not in parallel tool calls. If one fails, Claude Code cancels all sibling calls.
 
-Pipe JSON to `bon new` for each item — clean heredocs with no escaping concerns.
-Never use flags for batch creation:
+Pipe JSON to `bon new` for each item — clean heredocs with no escaping concerns:

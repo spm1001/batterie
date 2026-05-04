@@ -151,7 +151,7 @@ bon new "Quick fix" --why w --what x --done d -q   # Flags (stubs only)
 | Reading JSONL by line position | Items are sorted by ID, not insertion order. Find by type/ID, not `lines[N]` |
 | Case-sensitive ID lookup | Use `find_by_id()` with prefix |
 | Breaking unblock-on-done | Test with `waiting_dependency` fixture |
-| Standalone actions forgotten | Check items where `parent` is None |
+| Standalone actions forgotten | Check items where `parent` is None. Create with `type: "action"` in JSON stdin |
 | Interactive mode untested | Test with `input=` parameter |
 | Mixed-case IDs (bon-huHida) | Pre-lowercase legacy. IDs are immutable — don't try to rename |
 | Changing schema fields | bon-read.sh reads items.jsonl directly with jq |
@@ -183,7 +183,7 @@ bon migrate --to jsonl                     # Back to JSONL
 
 | Need to... | Read... |
 |------------|---------|
-| Understand exact behavior | `SPEC.md` (canonical) |
+| Understand architecture & invariants | `.bon/understanding.md` |
 | See expected outputs | `fixtures/*.jsonl` |
 | Add/modify command | `cli.py` |
 | Change storage format | `storage.py` |
@@ -191,9 +191,5 @@ bon migrate --to jsonl                     # Back to JSONL
 | Update Claude integration | `skills/open/SKILL.md` |
 | Handoff format spec | `docs/HANDOFF-CONTRACT.md` |
 | Test bon-read.sh | `tests/test_bon_read.py` |
-
-## Spec-Driven Development
-
-`SPEC.md` is a reference (~55k) but has drifted from implementation in places. Verify against the code for edge cases. Tests are often derived from spec examples.
 
 

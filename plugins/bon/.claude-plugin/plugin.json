@@ -1,6 +1,6 @@
 {
   "name": "bon",
-  "version": "0.16.2",
+  "version": "0.22.0",
   "description": "GTD-native work tracker for AI coding agents \u2014 outcomes, actions, tactical steps",
   "author": {
     "name": "Sameer Modha",
@@ -30,17 +30,6 @@
         ]
       }
     ],
-    "SessionEnd": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/session-end.sh"
-          }
-        ]
-      }
-    ],
     "PostToolUse": [
       {
         "matcher": "ExitPlanMode",
@@ -62,7 +51,7 @@
           },
           {
             "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/context-budget.sh",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/session-dashboard.sh",
             "timeout": 5
           }
         ]

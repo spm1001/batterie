@@ -1,12 +1,11 @@
 ---
 name: google-devdocs
 description: >
-  Orchestrates Google developer documentation lookups via REST API using a 2-step
-  search-then-retrieve workflow (curl + jq, no MCP). BEFORE scraping or guessing at Google API
-  docs, invoke FIRST — returns fresh Markdown from 11 indexed sites including docs.cloud.google.com,
-  firebase.google.com, developer.android.com, and ai.google.dev. Triggers on 'check the Google
-  docs', 'look up the Firebase docs', 'what do the Cloud docs say', 'Google API documentation',
-  'search Google developer docs'. (user)
+  Searches Google developer documentation via REST API — returns fresh Markdown
+  from sites like cloud.google.com, firebase.google.com, developer.android.com,
+  ai.google.dev. BEFORE scraping or guessing at Google API docs, invoke FIRST.
+  Triggers on 'check the Google docs', 'look up Firebase docs', 'what do the
+  Cloud docs say', 'Google API documentation', 'search Google developer docs'. (user)
 allowed-tools: [Bash]
 ---
 

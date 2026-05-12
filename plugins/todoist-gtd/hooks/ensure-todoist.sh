@@ -1,23 +1,47 @@
 #!/bin/bash
-# SessionStart hook: ensure todoist CLI and API token are available
-# Silent when everything is fine; helpful when it's not.
+# SessionStart hook: ensure todoist CLI is available, version-aligned, and has a token.
+# Auto-fixes drift; reports what it did. Silent when everything is fine.
 
-# Ensure ~/.local/bin is in PATH (where uv tool install puts binaries)
 export PATH="$HOME/.local/bin:$PATH"
-
+PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-}"
+FIXED=""
 ISSUES=""
 
-# 1. Check CLI
+# Resolve install source
+if [ -n "$PLUGIN_ROOT" ] && [ -f "$PLUGIN_ROOT/pyproject.toml" ]; then
+    INSTALL_SRC="$PLUGIN_ROOT"
+else
+    INSTALL_SRC="todoist-gtd"
+fi
+
+# Check 1: CLI missing → auto-install
 if ! command -v todoist &>/dev/null; then
-    PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-}"
-    if [ -n "$PLUGIN_ROOT" ] && [ -f "$PLUGIN_ROOT/pyproject.toml" ]; then
-        ISSUES="${ISSUES}• todoist CLI not found. Install: uv tool install \"$PLUGIN_ROOT\" && export PATH=\"\$HOME/.local/bin:\$PATH\"\n"
+    if uv tool install "$INSTALL_SRC" --force --reinstall >/dev/null 2>&1; then
+        FIXED="${FIXED}• todoist CLI installed\n"
     else
-        ISSUES="${ISSUES}• todoist CLI not found. Install: uv tool install todoist-gtd && export PATH=\"\$HOME/.local/bin:\$PATH\"\n"
+        ISSUES="${ISSUES}• todoist CLI not found and auto-install failed. Run manually:\n\n  uv tool install \"$INSTALL_SRC\"\n"
     fi
 fi
 
-# 2. Check API token (env var, macOS Keychain, or file)
+# Check 2: version drift → auto-update
+if [ -z "$ISSUES" ] && command -v todoist &>/dev/null; then
+    if [ -n "$PLUGIN_ROOT" ] && [ -f "$PLUGIN_ROOT/.claude-plugin/plugin.json" ]; then
+        INSTALLED=$(todoist --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' || true)
+        EXPECTED=$(python3 -c "import json; print(json.load(open('$PLUGIN_ROOT/.claude-plugin/plugin.json'))['version'])" 2>/dev/null || true)
+        if [ -n "$INSTALLED" ] && [ -n "$EXPECTED" ] && [ "$INSTALLED" != "$EXPECTED" ]; then
+            CLI_BEHIND=$(python3 -c "print(tuple(int(x) for x in '$INSTALLED'.split('.')) < tuple(int(x) for x in '$EXPECTED'.split('.')))" 2>/dev/null || true)
+            if [ "$CLI_BEHIND" = "True" ]; then
+                if uv tool install "$INSTALL_SRC" --force --reinstall >/dev/null 2>&1; then
+                    FIXED="${FIXED}• todoist CLI updated: v${INSTALLED} → v${EXPECTED}\n"
+                else
+                    ISSUES="${ISSUES}• todoist CLI is v${INSTALLED} but plugin is v${EXPECTED}. Auto-update failed.\n"
+                fi
+            fi
+        fi
+    fi
+fi
+
+# Check 3: API token (env var, macOS Keychain, or file)
 HAS_TOKEN=false
 if [ -n "${TODOIST_API_KEY:-}" ]; then
     HAS_TOKEN=true
@@ -32,9 +56,14 @@ if [ "$HAS_TOKEN" = false ]; then
     ISSUES="${ISSUES}• No Todoist API token found. Run: todoist auth\n"
 fi
 
-# If no issues, exit silently
-[ -z "$ISSUES" ] && exit 0
+# Silent exit if nothing happened
+[ -z "$FIXED" ] && [ -z "$ISSUES" ] && exit 0
+
+# Report
+MSG=""
+[ -n "$FIXED" ] && MSG="${MSG}✓ todoist auto-fixed:\n\n${FIXED}"
+[ -n "$ISSUES" ] && MSG="${MSG}⚠️ Todoist needs attention:\n\n${ISSUES}"
 
 cat <<EOF
-{"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": "⚠️ Todoist setup needed:\n\n${ISSUES}"}}
+{"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": "${MSG}"}}
 EOF

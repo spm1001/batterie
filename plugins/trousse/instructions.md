@@ -4,8 +4,8 @@ Auto-loaded via `~/.claude/rules/trousse.md`.
 
 ## Skill Loading
 
-- **Before writing or editing any SKILL.md** → invoke `Skill(skill-forge)`.
-- **Before making any repo public** → use sharing-scanner skill first.
+- When writing or editing a SKILL.md, invoke `Skill(skill-forge)` first — it has the quality framework and lint criteria.
+- When making a repo public, use the sharing-scanner skill first — it checks for leaked secrets and sensitive content.
 
 ## Isolated Claude
 

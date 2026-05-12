@@ -2,15 +2,12 @@
 name: ardoise
 allowed-tools: [Bash, Read, Write]
 description: >
-  Run Claude on a blank slate — full context isolation via env scrub
-  (env -i + temporary HOME + /tmp CWD) with zero context leakage.
-  Two modes: interactive TUI (default) for manual testing like plugin installs,
-  or print mode (-p) for automated probes and evals. INVOKE BEFORE spawning a
-  Claude that MUST be uncontaminated — evals, design research, cold critique,
-  baseline comparisons, or plugin testing. Cross-platform (Linux + macOS),
-  no containers required. Triggers on 'blank slate claude', 'fresh claude',
-  'isolated claude', 'clean claude', 'run without context', 'test plugin install',
-  'out of box claude', 'ardoise'. (user)
+  Spawns an isolated Claude with no CLAUDE.md, no skills, no hooks, no plugin
+  context — only training weights and built-in skills. INVOKE BEFORE running
+  evals, design research, cold critique, baseline comparisons, or testing
+  plugin installs as a fresh user would experience them. Triggers on 'blank
+  slate claude', 'fresh claude', 'isolated claude', 'naive claude', 'test
+  plugin install', 'out of box claude', 'ardoise'. (user)
 ---
 
 # Ardoise
@@ -58,12 +55,15 @@ The `claude.json` is copied from the real one (preserving onboarding state and f
 
 ## Usage
 
-The script lives in the trousse plugin. Find it at runtime:
+The script lives in the trousse plugin. Resolve the path:
 
 ```bash
-SCRIPT=$(find ~/.claude/plugins/cache -path "*/trousse/*/scripts/ardoise.sh" 2>/dev/null | head -1)
-[ -z "$SCRIPT" ] && SCRIPT="${CLAUDE_PLUGIN_ROOT}/scripts/ardoise.sh"
+SCRIPT="${CLAUDE_PLUGIN_ROOT}/scripts/ardoise.sh"
+# Fallback if CLAUDE_PLUGIN_ROOT isn't set in the calling context:
+[ -x "$SCRIPT" ] || SCRIPT=$(find ~/.claude/plugins/cache -path "*/trousse/*/scripts/ardoise.sh" 2>/dev/null | sort -r | head -1)
 ```
+
+The fallback uses `sort -r | head -1` to prefer the highest-versioned cached copy when multiple are present.
 
 ### Interactive mode (default)
 
@@ -112,10 +112,7 @@ Claude Code reads config from `$HOME/.claude.json` (a symlink in HOME root), not
 
 | Skill | How they compose |
 |-------|-----------------|
-| **claude-survey** | Survey uses ardoise in print mode as its isolation backend |
 | **skill-forge** | Eval baselines — run prompts without the skill for A/B comparison |
-| **sandbox** | Sandbox provides security isolation (containers/VMs); ardoise provides context isolation. Different threat models. |
-| **sprite** | Sprite handles TTY interaction for remote VMs; ardoise handles local context stripping. They compose for isolated remote testing. |
 
 ## Anti-Patterns
 

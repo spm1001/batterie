@@ -1,8 +1,0 @@
-{
-  "mcpServers": {
-    "mise": {
-      "type": "http",
-      "url": "http://172.16.10.1:8000/mcp"
-    }
-  }
-}

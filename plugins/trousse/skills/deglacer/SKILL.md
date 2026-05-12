@@ -4,9 +4,9 @@ description: >
   MANDATORY gate BEFORE running jq on any .jsonl under ~/.claude/ or reading past CC sessions.
   Invoke FIRST when introspecting conversations, searching session history, parsing transcripts,
   or building tools that read ~/.claude/projects/ data. Provides the CC JSONL schema reference
-  and `ccconv` extraction tool — prevents the 54-attempt fumble pattern where Claudes guess
+  and `deglacer` CLI tool — prevents the 54-attempt fumble pattern where Claudes guess
   at field names. Triggers on 'what happened last session', 'find when we discussed',
-  'parse session', 'read conversation', 'session history', 'token usage', 'ccconv'.
+  'parse session', 'read conversation', 'session history', 'token usage', 'deglacer'.
   Do NOT use for live session context (use garde-manger) or git history (use git log). (user)
 allowed-tools: [Bash, Read, Grep, Glob]
 ---
@@ -36,42 +36,42 @@ You are working with Claude Code session data. This includes:
 
 ---
 
-## ccconv — The Extraction Tool
+## deglacer — The CLI Tool
 
-`ccconv` is a PEP 723 Python script that knows the CC JSONL schema. Use it instead of raw jq for structured extraction.
+`deglacer` is the CC JSONL extraction CLI, installed as a uv tool. Use it instead of raw jq for structured extraction.
 
 ```bash
-# Run directly (no install needed)
-uv run --script ${CLAUDE_SKILL_DIR}/scripts/ccconv.py SESSION.jsonl
+# Install (once):
+uv tool install ~/Repos/batterie/deglacer
 
-# Or if installed as a uv tool:
-ccconv SESSION.jsonl
+# Use:
+deglacer SESSION.jsonl
 ```
 
 ### Commands
 
 ```bash
-ccconv SESSION.jsonl                  # conversation text (human + assistant)
-ccconv --summary SESSION.jsonl        # human messages only (what was discussed)
-ccconv --with-tools SESSION.jsonl     # include tool call summaries
-ccconv --with-thinking SESSION.jsonl  # include thinking blocks
-ccconv --last 5 SESSION.jsonl         # last 5 turns only
-ccconv --json SESSION.jsonl           # structured JSON output
-ccconv --stats SESSION.jsonl          # session statistics (tokens, models, tools)
-ccconv --timeline SESSION.jsonl       # timestamped turn log
-ccconv --find "search term"           # search across recent sessions
-ccconv --recent                       # list recent sessions (default 20)
-ccconv --recent 10                    # list N most recent
-ccconv --today                        # list today's sessions
-ccconv --since 2026-03-25             # sessions since a date
+deglacer SESSION.jsonl                  # conversation text (human + assistant)
+deglacer --summary SESSION.jsonl        # human messages only (what was discussed)
+deglacer --with-tools SESSION.jsonl     # include tool call summaries
+deglacer --with-thinking SESSION.jsonl  # include thinking blocks
+deglacer --last 5 SESSION.jsonl         # last 5 turns only
+deglacer --json SESSION.jsonl           # structured JSON output
+deglacer --stats SESSION.jsonl          # session statistics (tokens, models, tools)
+deglacer --timeline SESSION.jsonl       # timestamped turn log
+deglacer --find "search term"           # search across recent sessions
+deglacer --recent                       # list recent sessions (default 20)
+deglacer --recent 10                    # list N most recent
+deglacer --today                        # list today's sessions
+deglacer --since 2026-03-25             # sessions since a date
 ```
 
 ### Combining Flags
 
 ```bash
-ccconv --with-tools --last 10 SESSION.jsonl    # recent turns with tools
-ccconv --with-tools --with-thinking --json ...  # everything, structured
-ccconv --summary --last 5 SESSION.jsonl         # quick recap of recent turns
+deglacer --with-tools --last 10 SESSION.jsonl    # recent turns with tools
+deglacer --with-tools --with-thinking --json ...  # everything, structured
+deglacer --summary --last 5 SESSION.jsonl         # quick recap of recent turns
 ```
 
 ---
@@ -170,7 +170,7 @@ isSidechain     boolean   Side conversation flag
 
 **DRAGON: Multiple entries share the same `message.id`.** CC streams
 incremental updates. Merge content blocks by `message.id`, dedup
-`tool_use` blocks by their `id` field. ccconv handles this automatically.
+`tool_use` blocks by their `id` field. deglacer handles this automatically.
 
 **DRAGON: `stop_reason` is null in older sessions** (pre-v2.1.79).
 
@@ -239,7 +239,7 @@ No uuid, parentUuid, timestamp, version, or sessionId. Three fields only.
 
 ---
 
-## jq Recipes (when ccconv isn't enough)
+## jq Recipes (when deglacer isn't enough)
 
 **Quick schema discovery (do this FIRST, not `head | jq .`):**
 ```bash
@@ -282,7 +282,7 @@ jq -c 'select(.type == "assistant") | .message.usage
 
 **Find sessions mentioning a term:**
 ```bash
-# Prefer: ccconv --find "term"
+# Prefer: deglacer --find "term"
 # Raw jq fallback:
 for f in ~/.claude/projects/*/*.jsonl; do
   if jq -e 'select(.type == "user" and (.message.content | type) == "string"

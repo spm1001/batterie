@@ -9,7 +9,7 @@
   "plugins": [
     {
       "name": "batterie",
-      "source": "./",
+      "source": "./plugins/batterie",
       "description": "Suite-level utilities — cross-plugin updates and maintenance.",
       "category": "productivity",
       "homepage": "https://github.com/spm1001/batterie",

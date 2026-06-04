@@ -35,9 +35,9 @@ The plugin system discovers skills from `skills/*/SKILL.md` — no hooks, no set
 - `user-invocable: false` for skills loaded programmatically (companion skills)
 - Reference files live in `references/` subdirectory, linked from main SKILL.md
 
-### Current Skills (16)
+### Current Skills (17)
 
-ardoise, consomme, deglacer, diagram, google-devdocs, ia-presenter, mandoline, peer-review, picture, review, scaffold, screenshot, server-checkup, skill-forge, titans, toise
+ardoise, consomme, deglacer, diagram, github-cleanup, google-devdocs, ia-presenter, mandoline, peer-review, picture, review, scaffold, screenshot, server-checkup, skill-forge, titans, toise
 
 ### Commands (7)
 

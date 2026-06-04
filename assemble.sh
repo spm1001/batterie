@@ -9,7 +9,11 @@ BATTERIE_DIR="$(cd "$(dirname "$0")" && pwd)"
 SOURCE_DIR="$(dirname "$BATTERIE_DIR")"
 
 # plugin_name:repo_dir pairs
+# batterie (suite-level plugin) is sourced from batterie-de-savoir's root —
+# its .claude-plugin/ also holds that repo's marketplace.json, hence the
+# rsync --exclude below.
 PLUGINS="
+batterie:batterie-de-savoir
 bon:bon
 trousse:trousse
 mise:mise-en-space
@@ -34,8 +38,9 @@ for entry in $PLUGINS; do
   dest="$BATTERIE_DIR/plugins/$plugin"
   mkdir -p "$dest"
 
-  # Sync the .claude-plugin directory
-  rsync -a --delete "$src/.claude-plugin/" "$dest/.claude-plugin/"
+  # Sync the .claude-plugin directory (marketplace.json excluded: a source
+  # repo's own marketplace manifest is not plugin content)
+  rsync -a --delete --exclude marketplace.json "$src/.claude-plugin/" "$dest/.claude-plugin/"
 
   # Copy plugin-level files that skills/agents/hooks might reference
   for item in commands skills agents hooks .mcp.json CLAUDE.md instructions.md; do

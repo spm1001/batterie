@@ -34,16 +34,19 @@ jobs:
         with:
           path: batterie
 
-      - name: Checkout source repos
+      - name: Checkout source repos (list derived from assemble.sh)
+        # Single source of truth: the PLUGINS mapping in assemble.sh. A repo
+        # added there is automatically cloned here — the tafelmusik failure
+        # mode (mapped but never cloned, silently SKIPped every run) can't
+        # recur. batterie-de-savoir is in the mapping too (suite plugin) and
+        # doubles as the lint-script source.
         run: |
-          for repo in bon trousse mise-en-space passe garde-manger todoist-gtd tafelmusik; do
+          repos=$(grep -E '^[a-z-]+:[a-z-]+$' batterie/assemble.sh | cut -d: -f2 | sort -u)
+          test -n "$repos"
+          for repo in $repos; do
             git clone --depth=1 --quiet "https://github.com/spm1001/$repo.git"
             echo "  OK $repo"
           done
-
-      - name: Checkout batterie-de-savoir (suite plugin source + lint script)
-        run: |
-          git clone --depth=1 --quiet https://github.com/spm1001/batterie-de-savoir.git
 
       - name: Install uv
         uses: astral-sh/setup-uv@cec208311dfd045dd5311c1add060b2062131d57 # v8
@@ -69,7 +72,24 @@ jobs:
           cd batterie
           # --porcelain catches new files too; `git diff --quiet` does not.
           if [ -z "$(git status --porcelain)" ]; then
-            echo "No changes — plugins/ already current."
+            # Heartbeat: GitHub auto-disables scheduled workflows after ~60
+            # days of repo inactivity. A long drift-free stretch would mean
+            # no commits, "inactive" repo, schedule silently killed — and
+            # the NEXT drift would never be picked up. If the last commit
+            # is >25 days old, commit a heartbeat to keep the schedule
+            # alive (and exercise this push path).
+            age_days=$(( ( $(date +%s) - $(git log -1 --format=%ct) ) / 86400 ))
+            if [ "$age_days" -le 25 ]; then
+              echo "No changes — plugins/ already current (last commit ${age_days}d ago)."
+              exit 0
+            fi
+            echo "No drift, but last commit is ${age_days}d old — heartbeat to keep the schedule alive."
+            date -u +%Y-%m-%dT%H:%M:%SZ > .assemble-heartbeat
+            git add .assemble-heartbeat
+            git -c user.name="github-actions[bot]" \
+                -c user.email="github-actions[bot]@users.noreply.github.com" \
+                commit -m "Heartbeat — no drift for ${age_days} days; keeping scheduled workflow alive"
+            git push origin main
             exit 0
           fi
           echo "Changes detected:"

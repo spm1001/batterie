@@ -29,6 +29,13 @@ Not to be confused with **batterie-de-savoir**, two different repos with two dif
 
 A **red run is the only failure signal** — GitHub emails on scheduled-run failures. A green run *means* a fresh check happened and main reflects the sources.
 
+**Drift guards** (added 2026-06-04, after the structural worry-pass):
+
+- **Heartbeat** — GitHub auto-disables scheduled workflows after ~60 days of repo inactivity; a long drift-free stretch would silently kill the schedule. If the last commit is >25 days old, the no-change path commits a dated `.assemble-heartbeat` instead of exiting quietly.
+- **Single clone list** — the workflow derives its clone list from assemble.sh's PLUGINS mapping; a repo mapped there cannot be silently un-cloned (the tafelmusik failure mode).
+- **Manifest invariant** — a marketplace.json entry whose `./plugins/X` has no vendored plugin.json fails the run (the gueridon / batterie-0.1.6 husk failure mode). The reverse (vendored but unlisted) only warns: publishing is a human decision.
+- **Version ratchet** — vendored content changes without a plugin.json version bump fail the run, naming the source repo to fix. Without this, clients see "no update available" over silently drifted content. Local escape hatch: `ASSEMBLE_NO_RATCHET=1`.
+
 History that shaped this design (May 2026 drift, diagnosed in `~/notes/raw/2026-05-31-mise-update-bug-vendor-drift.md`, post-mortem 2026-06-04):
 
 - The previous PR-based flow needed a weekly human merge that never happened — mise 0.7.3 sat in an unmerged PR for 17 days while every surface served 0.7.2.

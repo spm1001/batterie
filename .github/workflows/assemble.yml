@@ -1,13 +1,29 @@
 name: Assemble plugins
 
+# Keeps plugins/ in sync with the source repos and pushes the result
+# straight to main. Design notes (post-mortem of the May 2026 drift,
+# diagnosed 2026-06-04 — see CLAUDE.md):
+#
+# - Direct push, no PR: plugins/ is a derived artifact and the lint step
+#   is the gate. The PR ceremony required a weekly human merge that
+#   never happened on schedule — mise 0.7.3 sat in an unmerged PR for
+#   17 days. Green run now MEANS shipped; a red run is the only failure
+#   signal, and GitHub emails on scheduled-run failures.
+# - A commit to THIS repo is what triggers Desktop/org marketplace
+#   re-sync (confirmed by probe 2026-06-04). Source-repo bumps alone are
+#   invisible to clients — this workflow's commits are the update bus.
+# - Change detection uses `git status --porcelain`, not `git diff`:
+#   git diff is blind to new (untracked) files, which silently dropped a
+#   week of purely-new-file drift from the June 1 run's detection.
+# - Daily, not weekly: propagation latency to every surface IS this cadence.
+
 on:
   workflow_dispatch:
   schedule:
-    - cron: "0 7 * * 1" # Monday 07:00 UTC
+    - cron: "0 7 * * *" # daily 07:00 UTC
 
 permissions:
   contents: write
-  pull-requests: write
 
 jobs:
   assemble:
@@ -20,12 +36,12 @@ jobs:
 
       - name: Checkout source repos
         run: |
-          for repo in bon trousse mise-en-space passe garde-manger consomme todoist-gtd; do
+          for repo in bon trousse mise-en-space passe garde-manger todoist-gtd tafelmusik; do
             git clone --depth=1 --quiet "https://github.com/spm1001/$repo.git"
             echo "  OK $repo"
           done
 
-      - name: Checkout batterie-de-savoir (lint script)
+      - name: Checkout batterie-de-savoir (suite plugin source + lint script)
         run: |
           git clone --depth=1 --quiet https://github.com/spm1001/batterie-de-savoir.git
 
@@ -36,41 +52,32 @@ jobs:
 
       - name: Run assemble.sh
         run: |
+          # Default Actions bash has -e but NOT -o pipefail: without it,
+          # an assemble.sh failure would vanish into tee's exit 0.
+          set -o pipefail
           cd batterie
           chmod +x assemble.sh
-          ./assemble.sh
+          ./assemble.sh | tee /tmp/assemble.log
 
       - name: Run batterie-lint
         run: |
           cd batterie-de-savoir
           uv run --script scripts/batterie-lint.py --local
 
-      - name: Check for changes
-        id: changes
+      - name: Commit and push if changed
         run: |
           cd batterie
-          if git diff --quiet; then
-            echo "changed=false" >> "$GITHUB_OUTPUT"
-            echo "No changes detected"
-          else
-            echo "changed=true" >> "$GITHUB_OUTPUT"
-            echo "Changes detected:"
-            git diff --stat
+          # --porcelain catches new files too; `git diff --quiet` does not.
+          if [ -z "$(git status --porcelain)" ]; then
+            echo "No changes — plugins/ already current."
+            exit 0
           fi
-
-      - name: Create PR
-        if: steps.changes.outputs.changed == 'true'
-        run: |
-          cd batterie
-          BRANCH="reassemble-$(date +%Y%m%d-%H%M)"
-          git checkout -b "$BRANCH"
+          echo "Changes detected:"
+          git status --porcelain
           git add -A
           git -c user.name="github-actions[bot]" \
               -c user.email="github-actions[bot]@users.noreply.github.com" \
-              commit -m "Reassemble — $(date +%Y-%m-%d)"
-          git push -u origin "$BRANCH"
-          gh pr create \
-            --title "Reassemble — $(date +%Y-%m-%d)" \
-            --body "Automated assembly from source repos. Review the diff before merging."
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              commit -m "Reassemble — $(date +%Y-%m-%d)
+
+          $(grep -E ' (OK|SKIP) ' /tmp/assemble.log)"
+          git push origin main

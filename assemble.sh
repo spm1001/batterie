@@ -55,7 +55,12 @@ for entry in $PLUGINS; do
     fi
   done
 
-  echo "  OK $plugin ← $repo"
+  # Forensic line: version + source SHA, so any future "why is X stale?"
+  # is answerable from the commit message alone (the May 2026 drift was
+  # undiagnosable because runs logged neither).
+  version=$(python3 -c "import json; print(json.load(open('$dest/.claude-plugin/plugin.json'))['version'])" 2>/dev/null || echo "?")
+  sha=$(git -C "$src" rev-parse --short HEAD 2>/dev/null || echo "?")
+  echo "  OK $plugin ← $repo ($version @ $sha)"
 done
 
 echo "Done. Review with: git status"

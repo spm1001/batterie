@@ -1,6 +1,6 @@
 {
   "name": "trousse",
-  "version": "0.5.8",
+  "version": "0.5.9",
   "description": "Session lifecycle, code review, data analysis, and behavioral skills for Claude Code. Best with: bon, garde-manger",
   "author": {
     "name": "Sameer Modha",

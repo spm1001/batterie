@@ -62,14 +62,6 @@
       "category": "productivity",
       "homepage": "https://github.com/spm1001/todoist-gtd",
       "keywords": ["todoist", "gtd"]
-    },
-    {
-      "name": "gueridon",
-      "source": "./plugins/gueridon",
-      "description": "Mobile web UI for Claude Code — setup and management.",
-      "category": "infrastructure",
-      "homepage": "https://github.com/spm1001/gueridon",
-      "keywords": ["mobile", "pwa"]
     }
   ]
 }

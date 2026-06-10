@@ -55,24 +55,13 @@ Test rendering before pushing: `docker run --rm -v "$PWD/docs:/srv/jekyll" -p 40
 
 This machine runs Python 3.9, which doesn't have `tomllib` (added in 3.11). The PEP 723 scripts declare `tomli; python_version < '3.11'` as a dependency — `uv run --script` handles this automatically. Don't validate TOML with bare `python3 -c "import tomllib"` — it'll fail. Use `uv run --with tomli python3 -c "import tomli; ..."` or just run the scripts via uv.
 
-## Two-Repo Marketplace Pattern
+## The Marketplace Lives Elsewhere
 
-This repo (`batterie-de-savoir`) is the **CLI marketplace** — uses `source: url` to reference plugins across repos. The CLI handles this natively.
+This repo **stopped being a marketplace on 2026-06-10** (the bds-bajibo cutover — there is no `marketplace.json` here anymore). [`spm1001/batterie`](https://github.com/spm1001/batterie) is the single assembled marketplace for every surface — CLI, Desktop, and the claude.ai org. It vendors each plugin's content physically (Desktop's backend rejects external URL sources), reassembled daily by its GitHub Actions bot from the source repos.
 
-Desktop's backend rejects all external sources from personal marketplaces. A second repo, [`spm1001/batterie`](https://github.com/spm1001/batterie), serves as the **Desktop marketplace** with all plugin content physically present and `"./"` relative paths.
+This repo remains a **source repo**: the suite-level `batterie` plugin (`.claude-plugin/plugin.json`, `skills/`, `hooks/`, `instructions.md`) is vendored from here. To ship a change to it: edit, bump the version in `.claude-plugin/plugin.json`, push — the daily bot does the rest (or trigger immediately with `gh workflow run assemble.yml -R spm1001/batterie`). A commit landing in spm1001/batterie is what makes clients re-resolve plugins — its commit stream is the suite's update bus.
 
-### Keeping Desktop in sync
-
-```bash
-cd ~/Repos/batterie/batterie
-./assemble.sh          # copies .claude-plugin/, skills/, hooks/, etc. from each source repo
-git add -A
-git add -f plugins/mise/   # global gitignore has mise/ — always force-add
-git commit -m "Reassemble — <reason>"
-git push
-```
-
-Then refresh the marketplace in Desktop (may need uninstall/reinstall of individual plugins to pick up changes).
+Anyone who installed plugins as `<name>@batterie-de-savoir` before the cutover migrates by add + reinstall + remove (plugin keys change with the marketplace name; a plain repoint isn't enough).
 
 ### Debugging Desktop marketplace
 

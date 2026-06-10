@@ -68,7 +68,14 @@ print('yes' if d.get('mcpServers') else 'no')
       --exclude mise/ --exclude mise-fetch/ --exclude .mcp-workspace/ \
       --exclude data/ --exclude '*.db' --exclude uploads/ \
       --exclude .oauth-stash --exclude token.json --exclude .env \
+      --exclude .claude/ --exclude .coverage \
+      --exclude .gitignore --exclude .gitattributes \
       "$src/" "$dest/"
+    # .gitignore exclusion is load-bearing, not cosmetic: a vendored source
+    # .gitignore (mise's lists uv.lock) makes THIS repo's git treat vendored
+    # files as ignorable, so the workflow's `git add` would silently skip
+    # them — shipping a package that resolves deps unpinned. Nested
+    # gitignores change the host repo's commit behaviour.
   else
     # Skill plugins: the lean copy-list.
     # Sync the .claude-plugin directory (marketplace.json excluded: a source

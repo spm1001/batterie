@@ -1,7 +1,7 @@
 {
   "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
   "name": "batterie",
-  "description": "Kitchen tools for knowledge work — plugins for GTD tracking, session lifecycle, Google Workspace, browser automation, and more",
+  "description": "Kitchen tools for knowledge work \u2014 plugins for GTD tracking, session lifecycle, Google Workspace, browser automation, and more",
   "owner": {
     "name": "Sameer Modha",
     "email": "sameer@modha.dev"
@@ -10,34 +10,49 @@
     {
       "name": "batterie",
       "source": "./plugins/batterie",
-      "description": "Suite-level utilities — cross-plugin updates and maintenance.",
+      "description": "Suite-level utilities \u2014 cross-plugin updates and maintenance.",
       "category": "productivity",
       "homepage": "https://github.com/spm1001/batterie",
-      "keywords": ["update", "maintenance", "utilities"]
+      "keywords": [
+        "update",
+        "maintenance",
+        "utilities"
+      ]
     },
     {
       "name": "bon",
       "source": "./plugins/bon",
-      "description": "GTD-native work tracker — outcomes, actions, tactical steps. Includes session lifecycle (/open, /close).",
+      "description": "GTD-native work tracker \u2014 outcomes, actions, tactical steps. Includes session lifecycle (/open, /close).",
       "category": "productivity",
       "homepage": "https://github.com/spm1001/bon",
-      "keywords": ["gtd", "tracking"]
+      "keywords": [
+        "gtd",
+        "tracking"
+      ]
     },
     {
       "name": "trousse",
       "source": "./plugins/trousse",
-      "description": "Utility skills — code review, diagrams, screenshots, data analysis, architecture review, and more.",
+      "description": "Utility skills \u2014 code review, diagrams, screenshots, data analysis, architecture review, and more.",
       "category": "workflow",
       "homepage": "https://github.com/spm1001/trousse",
-      "keywords": ["session", "hooks", "review"]
+      "keywords": [
+        "session",
+        "hooks",
+        "review"
+      ]
     },
     {
       "name": "mise",
       "source": "./plugins/mise",
-      "description": "Google Workspace MCP — search Drive, fetch Gmail, act on documents. Requires Google OAuth.",
+      "description": "Google Workspace MCP \u2014 search Drive, fetch Gmail, act on documents. Requires Google OAuth.",
       "category": "integration",
       "homepage": "https://github.com/spm1001/mise-en-space",
-      "keywords": ["google", "workspace", "mcp"]
+      "keywords": [
+        "google",
+        "workspace",
+        "mcp"
+      ]
     },
     {
       "name": "passe",
@@ -45,23 +60,22 @@
       "description": "Fast browser automation via Chrome DevTools Protocol.",
       "category": "automation",
       "homepage": "https://github.com/spm1001/passe",
-      "keywords": ["browser", "cdp", "chrome"]
-    },
-    {
-      "name": "garde-manger",
-      "source": "./plugins/garde-manger",
-      "description": "Persistent searchable memory across Claude sessions.",
-      "category": "memory",
-      "homepage": "https://github.com/spm1001/garde-manger",
-      "keywords": ["memory", "search"]
+      "keywords": [
+        "browser",
+        "cdp",
+        "chrome"
+      ]
     },
     {
       "name": "todoist-gtd",
       "source": "./plugins/todoist-gtd",
-      "description": "Todoist with GTD coaching — outcomes, weekly review, pattern detection.",
+      "description": "Todoist with GTD coaching \u2014 outcomes, weekly review, pattern detection.",
       "category": "productivity",
       "homepage": "https://github.com/spm1001/todoist-gtd",
-      "keywords": ["todoist", "gtd"]
+      "keywords": [
+        "todoist",
+        "gtd"
+      ]
     }
   ]
 }

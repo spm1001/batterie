@@ -19,12 +19,13 @@ trousse:trousse
 mise:mise-en-space
 passe:passe
 todoist-gtd:todoist-gtd
-tafelmusik:tafelmusik
 "
 # garde-manger delisted 2026-06-10 (decommissioned per the estate audit;
-# Sameer confirmed). De-registration is manual by design: the assembler
-# never deletes a dest dir for an unmapped plugin, so retiring one means
-# removing it from this list, marketplace.json, and plugins/ together.
+# Sameer confirmed). tafelmusik unvendored 2026-06-10 (too experimental to
+# publish; Sameer's call — source repo lives on, just not distributed).
+# De-registration is manual by design: the assembler never deletes a dest
+# dir for an unmapped plugin, so retiring one means removing it from this
+# list, marketplace.json, and plugins/ together.
 
 echo "Assembling plugins from $SOURCE_DIR"
 

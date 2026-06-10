@@ -1,0 +1,816 @@
+"""
+Drive file fetch — routes by MIME type, extracts content, deposits to workspace.
+"""
+
+from pathlib import Path
+from typing import Any
+
+import orjson
+
+from adapters.drive import get_file_metadata, parse_email_context, download_file, GOOGLE_DOC_MIME, GOOGLE_SHEET_MIME, GOOGLE_SLIDES_MIME, GOOGLE_FOLDER_MIME, GOOGLE_FORM_MIME
+from adapters.drive import list_folder as adapter_list_folder, list_folder_recursive as adapter_list_folder_recursive
+from adapters.docs import fetch_document
+from adapters.forms import fetch_form as adapter_fetch_form
+from adapters.sheets import fetch_spreadsheet
+from adapters.slides import fetch_presentation
+from adapters.genai import get_video_summary, is_media_file
+from adapters.cdp import is_cdp_available
+from adapters.pdf import fetch_and_convert_pdf, convert_pdf_content
+from adapters.office import fetch_and_convert_office, get_office_type_from_mime, OfficeType
+from adapters.image import fetch_image as adapter_fetch_image, is_image_file, is_svg
+from extractors.image import resize_image_bytes
+from extractors.docs import extract_doc_content
+from extractors.folder import extract_folder_content, extract_folder_tree
+from extractors.forms import extract_form_content
+from extractors.sheets import extract_sheets_content, extract_sheets_per_tab
+from extractors.slides import extract_slides_content
+from extractors.video import extract_video_content
+from models import FetchResult, FetchError, EmailContext
+from workspace import get_deposit_folder, write_content, write_manifest, write_thumbnail, write_image, write_chart, write_charts_metadata, slugify
+
+from .common import (
+    _build_cues, _build_email_context_metadata, _deposit_pdf_thumbnails,
+    _enrich_with_comments, is_text_file,
+)
+
+
+def _add_file_dates(extra: dict[str, Any], metadata: dict[str, Any]) -> None:
+    """Add created/modified timestamps from Drive metadata to manifest extra dict."""
+    if metadata.get("createdTime"):
+        extra["created_time"] = metadata["createdTime"]
+    if metadata.get("modifiedTime"):
+        extra["modified_time"] = metadata["modifiedTime"]
+
+
+def fetch_drive(file_id: str, base_path: Path | None = None, recursive: bool = False, tabs: list[str] | None = None) -> FetchResult | FetchError:
+    """Fetch Drive file, route by type, extract content, deposit to workspace."""
+    # Get metadata to determine type
+    metadata = get_file_metadata(file_id)
+    mime_type = metadata.get("mimeType", "")
+    title = metadata.get("name", "untitled")
+
+    # Parse email context for cross-source linkage (exfil'd files)
+    email_context = parse_email_context(metadata.get("description"))
+
+    # Route by MIME type
+    if mime_type == GOOGLE_FOLDER_MIME:
+        return fetch_folder(file_id, title, metadata, base_path=base_path, recursive=recursive)
+    elif mime_type == GOOGLE_DOC_MIME:
+        return fetch_doc(file_id, title, metadata, email_context, base_path=base_path)
+    elif mime_type == GOOGLE_SHEET_MIME:
+        return fetch_sheet(file_id, title, metadata, email_context, base_path=base_path, tabs=tabs)
+    elif mime_type == GOOGLE_SLIDES_MIME:
+        return fetch_slides(file_id, title, metadata, email_context, base_path=base_path)
+    elif mime_type == GOOGLE_FORM_MIME:
+        return fetch_form_file(file_id, title, metadata, email_context, base_path=base_path)
+    elif is_media_file(mime_type):
+        return fetch_video(file_id, title, metadata, email_context, base_path=base_path)
+    elif mime_type == "application/pdf":
+        return fetch_pdf(file_id, title, metadata, email_context, base_path=base_path)
+    elif (office_type := get_office_type_from_mime(mime_type)):
+        return fetch_office(file_id, title, metadata, office_type, email_context, base_path=base_path)
+    elif is_text_file(mime_type):
+        return fetch_text(file_id, title, metadata, email_context, base_path=base_path)
+    elif is_image_file(mime_type):
+        return fetch_image_file(file_id, title, metadata, email_context, base_path=base_path)
+    else:
+        # Return error for unsupported types
+        return FetchError(
+            kind="unsupported_type",
+            message=f"Unsupported file type: {mime_type}",
+            file_id=file_id,
+            name=title,
+        )
+
+
+def fetch_folder(folder_id: str, title: str, metadata: dict[str, Any], *, base_path: Path | None = None, recursive: bool = False) -> FetchResult:
+    """Fetch Drive folder — deposit directory listing as content.md."""
+    if recursive:
+        return _fetch_folder_recursive(folder_id, title, base_path=base_path)
+
+    listing = adapter_list_folder(folder_id)
+    content = extract_folder_content(listing, title=title)
+
+    folder_path = get_deposit_folder("folder", title, folder_id, base_path=base_path)
+    content_path = write_content(folder_path, content)
+
+    extra: dict[str, Any] = {
+        "file_count": listing.file_count,
+        "folder_count": listing.folder_count,
+        "types": listing.types,
+        "truncated": listing.truncated,
+    }
+    if listing.truncated:
+        extra["truncation_warning"] = f"Folder has more than {listing.item_count} items — only first 300 shown"
+    write_manifest(folder_path, "folder", title, folder_id, extra=extra)
+
+    result_meta: dict[str, Any] = {
+        "title": title,
+        "file_count": listing.file_count,
+        "folder_count": listing.folder_count,
+        "types": listing.types,
+    }
+
+    warnings: list[str] = []
+    if listing.truncated:
+        warnings.append(f"Folder truncated — showing first 300 of {listing.item_count}+ items")
+
+    cues = _build_cues(folder_path, warnings=warnings if warnings else None)
+    cues["file_count"] = listing.file_count
+    cues["folder_count"] = listing.folder_count
+    cues["types"] = listing.types
+    if listing.truncated:
+        cues["truncated"] = True
+
+    return FetchResult(
+        path=str(folder_path),
+        content_file=str(content_path),
+        format="markdown",
+        type="folder",
+        metadata=result_meta,
+        cues=cues,
+    )
+
+
+def _fetch_folder_recursive(folder_id: str, title: str, *, base_path: Path | None = None) -> FetchResult:
+    """Fetch Drive folder recursively — deposit tree view as content.md."""
+    tree = adapter_list_folder_recursive(folder_id, folder_name=title)
+    content = extract_folder_tree(tree)
+
+    folder_path = get_deposit_folder("folder", title, folder_id, base_path=base_path)
+    content_path = write_content(folder_path, content)
+
+    # Count totals across the tree
+    total_files, total_folders = _count_tree(tree)
+    any_truncated = _any_truncated(tree)
+
+    extra: dict[str, Any] = {
+        "file_count": total_files,
+        "folder_count": total_folders,
+        "recursive": True,
+    }
+    if any_truncated:
+        extra["truncated"] = True
+    write_manifest(folder_path, "folder", title, folder_id, extra=extra)
+
+    result_meta: dict[str, Any] = {
+        "title": title,
+        "file_count": total_files,
+        "folder_count": total_folders,
+        "recursive": True,
+    }
+
+    cues = _build_cues(folder_path)
+    cues["file_count"] = total_files
+    cues["folder_count"] = total_folders
+    cues["recursive"] = True
+    if any_truncated:
+        cues["truncated"] = True
+        cues["truncation_note"] = (
+            "Recursive traversal was capped (depth 5 or 1000 items) — some subfolders not shown. "
+            "Fetch individual subfolders to explore further."
+        )
+
+    return FetchResult(
+        path=str(folder_path),
+        content_file=str(content_path),
+        format="markdown",
+        type="folder",
+        metadata=result_meta,
+        cues=cues,
+    )
+
+
+def _count_tree(node: "FolderTreeNode") -> tuple[int, int]:
+    """Count total files and folders in a tree."""
+    from models import FolderTreeNode  # avoid circular at module level
+    files = node.listing.file_count
+    folders = node.listing.folder_count
+    for child in node.children:
+        cf, cfo = _count_tree(child)
+        files += cf
+        folders += cfo
+    return files, folders
+
+
+def _any_truncated(node: "FolderTreeNode") -> bool:
+    """Check if any node in the tree was truncated."""
+    from models import FolderTreeNode
+    if node.listing.truncated or node.depth_truncated:
+        return True
+    return any(_any_truncated(c) for c in node.children)
+
+
+def fetch_doc(doc_id: str, title: str, metadata: dict[str, Any], email_context: EmailContext | None = None, *, base_path: Path | None = None) -> FetchResult:
+    """Fetch Google Doc with open comments included."""
+    doc_data = fetch_document(doc_id)
+    content = extract_doc_content(doc_data)
+
+    folder = get_deposit_folder("doc", title, doc_id, base_path=base_path)
+    content_path = write_content(folder, content)
+
+    # Enrich with open comments (sous-chef philosophy)
+    open_comment_count, _ = _enrich_with_comments(doc_id, folder)
+
+    extra: dict[str, Any] = {"tab_count": len(doc_data.tabs) if doc_data.tabs else 1}
+    if doc_data.warnings:
+        extra["warnings"] = doc_data.warnings
+    if open_comment_count > 0:
+        extra["open_comment_count"] = open_comment_count
+    _add_file_dates(extra, metadata)
+    write_manifest(folder, "doc", title, doc_id, extra=extra)
+
+    result_metadata: dict[str, Any] = {"title": title, "mimeType": metadata.get("mimeType")}
+    if email_context:
+        result_metadata["email_context"] = _build_email_context_metadata(email_context)
+
+    cues = _build_cues(
+        folder,
+        open_comment_count=open_comment_count,
+        warnings=doc_data.warnings,
+        email_context=email_context,
+    )
+
+    return FetchResult(
+        path=str(folder),
+        content_file=str(content_path),
+        format="markdown",
+        type="doc",
+        metadata=result_metadata,
+        cues=cues,
+    )
+
+
+def _write_per_tab_csvs(
+    folder: Path, data: Any, *, tabs_info: list[dict[str, str]] | None = None
+) -> list[dict[str, str]]:
+    """Write per-tab CSV files for multi-tab spreadsheets.
+
+    Returns list of {name, filename} dicts for manifest.
+    Only writes per-tab files when there are 2+ tabs.
+    Mutates tabs_info list if provided, otherwise creates new.
+    """
+    per_tab = extract_sheets_per_tab(data)
+    if len(per_tab) <= 1:
+        return []
+
+    result = tabs_info if tabs_info is not None else []
+    for tab_name, csv_content in per_tab:
+        tab_slug = slugify(tab_name, max_length=40)
+        filename = f"content_{tab_slug}.csv"
+        write_content(folder, csv_content, filename=filename)
+        result.append({"name": tab_name, "filename": filename})
+    return result
+
+
+def fetch_sheet(sheet_id: str, title: str, metadata: dict[str, Any], email_context: EmailContext | None = None, *, base_path: Path | None = None, tabs: list[str] | None = None) -> FetchResult:
+    """Fetch Google Sheet with charts rendered as PNGs and open comments included."""
+    sheet_data = fetch_spreadsheet(sheet_id, tabs=tabs)
+    content = extract_sheets_content(sheet_data)
+
+    folder = get_deposit_folder("sheet", title, sheet_id, base_path=base_path)
+    content_path = write_content(folder, content, filename="content.csv")
+
+    # Write per-tab CSVs for multi-tab spreadsheets
+    tabs_info = _write_per_tab_csvs(folder, sheet_data)
+
+    # Write chart PNGs
+    chart_count = 0
+    charts_meta: list[dict[str, Any]] = []
+    for i, chart in enumerate(sheet_data.charts):
+        if chart.png_bytes:
+            write_chart(folder, chart.png_bytes, i)
+            chart_count += 1
+
+        # Always include metadata even if PNG failed
+        charts_meta.append({
+            "chart_id": chart.chart_id,
+            "title": chart.title,
+            "sheet_name": chart.sheet_name,
+            "chart_type": chart.chart_type,
+            "has_png": chart.png_bytes is not None,
+        })
+
+    # Write charts.json if there are charts
+    if charts_meta:
+        write_charts_metadata(folder, charts_meta)
+
+    # Enrich with open comments (sous-chef philosophy)
+    open_comment_count, _ = _enrich_with_comments(sheet_id, folder)
+
+    # Build manifest extras
+    extra: dict[str, Any] = {"sheet_count": len(sheet_data.sheets)}
+    if tabs_info:
+        extra["tabs"] = tabs_info
+    if sheet_data.formula_count > 0:
+        extra["formula_count"] = sheet_data.formula_count
+    if sheet_data.merged_cell_count > 0:
+        extra["merged_cell_count"] = sheet_data.merged_cell_count
+    if chart_count > 0:
+        extra["chart_count"] = chart_count
+        extra["chart_render_time_ms"] = sheet_data.chart_render_time_ms
+    if sheet_data.warnings:
+        extra["warnings"] = sheet_data.warnings
+    if open_comment_count > 0:
+        extra["open_comment_count"] = open_comment_count
+    _add_file_dates(extra, metadata)
+    write_manifest(folder, "sheet", title, sheet_id, extra=extra)
+
+    result_meta: dict[str, Any] = {
+        "title": title,
+        "sheet_count": len(sheet_data.sheets),
+    }
+    if chart_count > 0:
+        result_meta["chart_count"] = chart_count
+        result_meta["chart_render_time_ms"] = sheet_data.chart_render_time_ms
+    if email_context:
+        result_meta["email_context"] = _build_email_context_metadata(email_context)
+
+    if sheet_data.merged_cell_count > 0:
+        sheet_data.warnings.append(
+            f"{sheet_data.merged_cell_count} merged cells detected and resolved "
+            "— verify values in merged regions"
+        )
+
+    tab_names = [s.name for s in sheet_data.sheets] if len(sheet_data.sheets) > 1 else None
+    cues = _build_cues(
+        folder,
+        open_comment_count=open_comment_count,
+        warnings=sheet_data.warnings,
+        email_context=email_context,
+        tab_names=tab_names,
+        formula_count=sheet_data.formula_count,
+        merged_cell_count=sheet_data.merged_cell_count,
+    )
+
+    return FetchResult(
+        path=str(folder),
+        content_file=str(content_path),
+        format="csv",
+        type="sheet",
+        metadata=result_meta,
+        cues=cues,
+    )
+
+
+def fetch_slides(presentation_id: str, title: str, metadata: dict[str, Any], email_context: EmailContext | None = None, *, base_path: Path | None = None) -> FetchResult:
+    """Fetch Google Slides with open comments included."""
+    # Enable thumbnails - selective logic in adapter skips stock photos/text-only
+    presentation_data = fetch_presentation(presentation_id, include_thumbnails=True)
+    content = extract_slides_content(presentation_data)
+
+    folder = get_deposit_folder("slides", title, presentation_id, base_path=base_path)
+    content_path = write_content(folder, content)
+
+    # Write thumbnails if available, track failures
+    thumbnail_count = 0
+    thumbnail_failures: list[int] = []
+    for slide in presentation_data.slides:
+        if slide.thumbnail_bytes:
+            write_thumbnail(folder, slide.thumbnail_bytes, slide.index)
+            thumbnail_count += 1
+        elif slide.needs_thumbnail:
+            # Thumbnail was requested but not received
+            thumbnail_failures.append(slide.index + 1)  # 1-indexed for humans
+
+    # Enrich with open comments (sous-chef philosophy)
+    open_comment_count, _ = _enrich_with_comments(presentation_id, folder)
+
+    extra: dict[str, Any] = {
+        "slide_count": len(presentation_data.slides),
+        "has_thumbnails": thumbnail_count > 0,
+        "thumbnail_count": thumbnail_count,
+    }
+    if thumbnail_failures:
+        extra["thumbnail_failures"] = thumbnail_failures
+    if presentation_data.warnings:
+        extra["warnings"] = presentation_data.warnings
+    if open_comment_count > 0:
+        extra["open_comment_count"] = open_comment_count
+    _add_file_dates(extra, metadata)
+    write_manifest(folder, "slides", title, presentation_id, extra=extra)
+
+    result_meta: dict[str, Any] = {
+        "title": title,
+        "slide_count": len(presentation_data.slides),
+        "thumbnail_count": thumbnail_count,
+    }
+    if email_context:
+        result_meta["email_context"] = _build_email_context_metadata(email_context)
+
+    cues = _build_cues(
+        folder,
+        open_comment_count=open_comment_count,
+        warnings=presentation_data.warnings,
+        email_context=email_context,
+    )
+
+    return FetchResult(
+        path=str(folder),
+        content_file=str(content_path),
+        format="markdown",
+        type="slides",
+        metadata=result_meta,
+        cues=cues,
+    )
+
+
+def fetch_form_file(file_id: str, title: str, metadata: dict[str, Any], email_context: EmailContext | None = None, *, base_path: Path | None = None) -> FetchResult:
+    """Fetch Google Form — deposits question structure as markdown."""
+    form_data = adapter_fetch_form(file_id)
+    content = extract_form_content(form_data)
+
+    folder = get_deposit_folder("form", title, file_id, base_path=base_path)
+    content_path = write_content(folder, content)
+
+    (folder / "structure.json").write_bytes(orjson.dumps(form_data, option=orjson.OPT_INDENT_2))
+
+    items = form_data.get("items", [])
+    question_count = sum(
+        1 for i in items if "questionItem" in i or "questionGroupItem" in i
+    )
+    section_count = sum(1 for i in items if "pageBreakItem" in i)
+    is_quiz = form_data.get("settings", {}).get("quizSettings", {}).get("isQuiz", False)
+
+    extra: dict[str, Any] = {
+        "question_count": question_count,
+        "section_count": section_count,
+        "is_quiz": is_quiz,
+    }
+    if form_data.get("linkedSheetId"):
+        extra["linked_sheet_id"] = form_data["linkedSheetId"]
+    _add_file_dates(extra, metadata)
+    write_manifest(folder, "form", title, file_id, extra=extra)
+
+    result_meta: dict[str, Any] = {
+        "title": title,
+        "question_count": question_count,
+        "section_count": section_count,
+    }
+    if is_quiz:
+        result_meta["is_quiz"] = True
+    if form_data.get("linkedSheetId"):
+        result_meta["linked_sheet_id"] = form_data["linkedSheetId"]
+    if email_context:
+        result_meta["email_context"] = _build_email_context_metadata(email_context)
+
+    cues = _build_cues(folder, email_context=email_context)
+
+    return FetchResult(
+        path=str(folder),
+        content_file=str(content_path),
+        format="markdown",
+        type="form",
+        metadata=result_meta,
+        cues=cues,
+    )
+
+
+def fetch_video(file_id: str, title: str, metadata: dict[str, Any], email_context: EmailContext | None = None, *, base_path: Path | None = None) -> FetchResult:
+    """
+    Fetch video/audio file with AI summary if available.
+
+    Tries to get pre-computed AI summary via GenAI API (requires chrome-debug).
+    Falls back to basic metadata if CDP not available.
+    """
+    mime_type = metadata.get("mimeType", "")
+    duration_ms = metadata.get("videoMediaMetadata", {}).get("durationMillis")
+
+    # Try to get AI summary
+    summary_result = get_video_summary(file_id)
+
+    # Build content via extractor (pure markdown assembly)
+    content = extract_video_content(
+        title,
+        summary=summary_result.summary if summary_result else None,
+        transcript_snippets=summary_result.transcript_snippets if summary_result else None,
+        summary_error=summary_result.error if summary_result else None,
+        has_summary=summary_result.has_content if summary_result else False,
+        mime_type=mime_type,
+        duration_ms=duration_ms,
+        web_view_link=metadata.get("webViewLink", ""),
+        cdp_available=is_cdp_available(),
+    )
+
+    # Deposit to workspace
+    folder = get_deposit_folder("video", title, file_id, base_path=base_path)
+    content_path = write_content(folder, content)
+
+    extra = {
+        "mime_type": mime_type,
+        "has_summary": summary_result.has_content if summary_result else False,
+    }
+    if duration_ms:
+        extra["duration_ms"] = int(duration_ms)
+    _add_file_dates(extra, metadata)
+    write_manifest(folder, "video", title, file_id, extra=extra)
+
+    result_meta: dict[str, Any] = {
+        "title": title,
+        "mime_type": mime_type,
+        "has_summary": summary_result.has_content if summary_result else False,
+    }
+    if email_context:
+        result_meta["email_context"] = _build_email_context_metadata(email_context)
+
+    cues = _build_cues(folder, email_context=email_context)
+
+    return FetchResult(
+        path=str(folder),
+        content_file=str(content_path),
+        format="markdown",
+        type="video",
+        metadata=result_meta,
+        cues=cues,
+    )
+
+
+def fetch_pdf(file_id: str, title: str, metadata: dict[str, Any], email_context: EmailContext | None = None, *, base_path: Path | None = None) -> FetchResult:
+    """
+    Fetch PDF file with hybrid extraction strategy.
+
+    Uses adapters/pdf.py which tries markitdown first, falls back to Drive
+    conversion for complex/image-heavy PDFs.
+    """
+    # Extract via adapter (handles download + hybrid extraction + thumbnail rendering)
+    result = fetch_and_convert_pdf(file_id)
+
+    # Deposit to workspace
+    folder = get_deposit_folder("pdf", title, file_id, base_path=base_path)
+    content_path = write_content(folder, result.content)
+
+    # Deposit page thumbnails (shared helper writes PNGs, returns manifest extras)
+    thumb_extras = _deposit_pdf_thumbnails(folder, result)
+
+    extra: dict[str, Any] = {
+        "char_count": result.char_count,
+        "extraction_method": result.method,
+        **thumb_extras,
+    }
+    if result.warnings:
+        extra["warnings"] = result.warnings
+    _add_file_dates(extra, metadata)
+    write_manifest(folder, "pdf", title, file_id, extra=extra)
+
+    result_meta: dict[str, Any] = {
+        "title": title,
+        "extraction_method": result.method,
+    }
+    if email_context:
+        result_meta["email_context"] = _build_email_context_metadata(email_context)
+
+    cues = _build_cues(
+        folder,
+        warnings=result.warnings,
+        email_context=email_context,
+    )
+
+    return FetchResult(
+        path=str(folder),
+        content_file=str(content_path),
+        format="markdown",
+        type="pdf",
+        metadata=result_meta,
+        cues=cues,
+    )
+
+
+def fetch_office(file_id: str, title: str, metadata: dict[str, Any], office_type: OfficeType, email_context: EmailContext | None = None, *, base_path: Path | None = None) -> FetchResult:
+    """
+    Fetch Office file via Drive conversion.
+
+    Uses adapters/office.py which handles download, conversion, and cleanup.
+    """
+    # Extract via adapter (handles download + conversion)
+    result = fetch_and_convert_office(file_id, office_type)
+
+    # Determine output format
+    output_format = "csv" if office_type == "xlsx" else "markdown"
+    filename = f"content.{result.extension}"
+
+    # Deposit to workspace
+    folder = get_deposit_folder(office_type, title, file_id, base_path=base_path)
+    content_path = write_content(folder, result.content, filename=filename)
+
+    # Write per-tab CSVs for multi-tab XLSX
+    tabs_info: list[dict[str, str]] = []
+    tab_names: list[str] | None = None
+    if office_type == "xlsx" and result.spreadsheet_data:
+        tabs_info = _write_per_tab_csvs(folder, result.spreadsheet_data)
+        if len(result.spreadsheet_data.sheets) > 1:
+            tab_names = [s.name for s in result.spreadsheet_data.sheets]
+
+    # Deposit raw xlsx alongside CSV for roundtrip workflows
+    raw_file: str | None = None
+    if office_type == "xlsx" and (result.raw_bytes or result.raw_temp_path):
+        # Preserve original filename — consistent with Gmail attachment deposits
+        raw_file = title if title.lower().endswith(".xlsx") else f"{title}.xlsx"
+        dest = folder / raw_file
+        if result.raw_temp_path:
+            # Large file: copy directly from temp — avoids doubling peak memory
+            import shutil
+            shutil.copy2(result.raw_temp_path, dest)
+            result.raw_temp_path.unlink(missing_ok=True)
+        else:
+            dest.write_bytes(result.raw_bytes)  # type: ignore[arg-type]
+
+    # Formula count from spreadsheet data (XLSX only)
+    formula_count: int | None = None
+    if result.spreadsheet_data and result.spreadsheet_data.formula_count > 0:
+        formula_count = result.spreadsheet_data.formula_count
+
+    extra_office: dict[str, Any] = {}
+    if tabs_info:
+        extra_office["tabs"] = tabs_info
+    if formula_count:
+        extra_office["formula_count"] = formula_count
+    if raw_file:
+        extra_office["raw_file"] = raw_file
+    if result.warnings:
+        extra_office["warnings"] = result.warnings
+    _add_file_dates(extra_office, metadata)
+    write_manifest(folder, office_type, title, file_id, extra=extra_office if extra_office else None)
+
+    result_meta: dict[str, Any] = {
+        "title": title,
+    }
+    if email_context:
+        result_meta["email_context"] = _build_email_context_metadata(email_context)
+
+    cues = _build_cues(
+        folder,
+        warnings=result.warnings,
+        email_context=email_context,
+        tab_names=tab_names,
+        formula_count=formula_count if formula_count else 0,
+    )
+
+    return FetchResult(
+        path=str(folder),
+        content_file=str(content_path),
+        format=output_format,
+        type=office_type,
+        metadata=result_meta,
+        cues=cues,
+    )
+
+
+def fetch_text(file_id: str, title: str, metadata: dict[str, Any], email_context: EmailContext | None = None, *, base_path: Path | None = None) -> FetchResult:
+    """
+    Fetch text-based file (txt, csv, json, etc.) by downloading directly.
+
+    No extraction needed — just download and deposit.
+    """
+    mime_type = metadata.get("mimeType", "text/plain")
+
+    # Download content
+    content_bytes = download_file(file_id)
+    content = content_bytes.decode("utf-8", errors="replace")
+
+    # Determine output format and extension
+    extension_map = {
+        "text/csv": ("csv", "csv"),
+        "application/json": ("json", "json"),
+        "text/markdown": ("markdown", "md"),
+        "text/html": ("html", "html"),
+        "text/xml": ("xml", "xml"),
+        "application/xml": ("xml", "xml"),
+        "application/x-yaml": ("yaml", "yaml"),
+    }
+    output_format, ext = extension_map.get(mime_type, ("text", "txt"))
+    filename = f"content.{ext}"
+
+    # Deposit to workspace
+    folder = get_deposit_folder("text", title, file_id, base_path=base_path)
+    content_path = write_content(folder, content, filename=filename)
+
+    extra: dict[str, Any] = {
+        "mime_type": mime_type,
+        "char_count": len(content),
+    }
+    _add_file_dates(extra, metadata)
+    write_manifest(folder, "text", title, file_id, extra=extra)
+
+    result_meta: dict[str, Any] = {
+        "title": title,
+        "mime_type": mime_type,
+        "char_count": len(content),
+    }
+    if email_context:
+        result_meta["email_context"] = _build_email_context_metadata(email_context)
+
+    cues = _build_cues(folder, email_context=email_context)
+
+    return FetchResult(
+        path=str(folder),
+        content_file=str(content_path),
+        format=output_format,
+        type="text",
+        metadata=result_meta,
+        cues=cues,
+    )
+
+
+def fetch_image_file(file_id: str, title: str, metadata: dict[str, Any], email_context: EmailContext | None = None, *, base_path: Path | None = None) -> FetchResult | FetchError:
+    """
+    Fetch image file (PNG, JPEG, GIF, WEBP, SVG, etc.).
+
+    For raster images: deposit as-is (after PIL validation).
+    For SVG: deposit raw SVG + render to PNG (Claude can view PNGs but not SVGs).
+    """
+    mime_type = metadata.get("mimeType", "")
+
+    # Fetch via adapter (handles download + SVG rendering)
+    result = adapter_fetch_image(file_id, title, mime_type)
+
+    # Open with PIL and resize if needed (raster only; SVG bypasses this).
+    # Oversized images are scaled to MAX_LONG_EDGE_PX rather than rejected.
+    # Only PIL failures (genuine MIME mismatch) return an error.
+    image_bytes = result.image_bytes
+    deposited_mime = mime_type
+    resize_meta: dict[str, Any] = {}
+    if not is_svg(mime_type):
+        try:
+            resized = resize_image_bytes(result.image_bytes, mime_type)
+        except ValueError as e:
+            return FetchError(
+                kind="extraction_failed",
+                message=f"Image validation failed: {e}",
+                file_id=file_id,
+                name=title,
+            )
+        image_bytes = resized.content_bytes
+        deposited_mime = resized.mime_type
+        resize_meta["dimensions"] = resized.dimensions
+        if resized.original_dimensions:
+            resize_meta["original_dimensions"] = resized.original_dimensions
+            resize_meta["scaled_to"] = resized.dimensions
+            resize_meta["scale_factor"] = resized.scale_factor
+        if resized.jpeg_fallback:
+            resize_meta["jpeg_fallback"] = True
+
+    # Deposit to workspace
+    folder = get_deposit_folder("image", title, file_id, base_path=base_path)
+
+    # Write the image (possibly resized)
+    deposit_filename = result.filename
+    if resize_meta.get("jpeg_fallback"):
+        deposit_filename = result.filename.rsplit(".", 1)[0] + ".jpg"
+    image_path = write_image(folder, image_bytes, deposit_filename)
+
+    # For SVG, also write rendered PNG if available
+    rendered_png_filename = None
+    if result.rendered_png_bytes:
+        rendered_png_filename = "image_rendered.png"
+        write_image(folder, result.rendered_png_bytes, rendered_png_filename)
+
+    # Build manifest extras
+    extra: dict[str, Any] = {
+        "mime_type": deposited_mime,
+        "size_bytes": len(image_bytes),
+        **resize_meta,
+    }
+    if is_svg(mime_type):
+        extra["is_svg"] = True
+        if result.render_method:
+            extra["render_method"] = result.render_method
+            extra["has_rendered_png"] = True
+        else:
+            extra["has_rendered_png"] = False
+    if result.warnings:
+        extra["warnings"] = result.warnings
+    _add_file_dates(extra, metadata)
+    write_manifest(folder, "image", title, file_id, extra=extra)
+
+    # Build result metadata
+    result_meta: dict[str, Any] = {
+        "title": title,
+        "mime_type": deposited_mime,
+        "size_bytes": len(image_bytes),
+        **resize_meta,
+    }
+    if is_svg(mime_type):
+        result_meta["is_svg"] = True
+        result_meta["has_rendered_png"] = result.rendered_png_bytes is not None
+        if result.render_method:
+            result_meta["render_method"] = result.render_method
+    if email_context:
+        result_meta["email_context"] = _build_email_context_metadata(email_context)
+
+    # Content file is the original image (or rendered PNG for SVG if available)
+    content_file = str(folder / rendered_png_filename) if rendered_png_filename else str(image_path)
+
+    cues = _build_cues(
+        folder,
+        warnings=result.warnings,
+        email_context=email_context,
+    )
+
+    return FetchResult(
+        path=str(folder),
+        content_file=content_file,
+        format="image",
+        type="image",
+        metadata=result_meta,
+        cues=cues,
+    )

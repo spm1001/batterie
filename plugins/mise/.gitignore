@@ -1,0 +1,59 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+
+# Secrets - NEVER commit
+credentials.json
+token.json
+.oauth-stash/
+*.env
+.env.*
+*_secret*
+*_key*
+*.key
+*.secret
+
+# Apps Script user config (personal script IDs)
+apps-script/deploy.json
+
+# MCP workspace output
+.mcp-workspace/
+/mise/
+/mise-fetch/
+
+# uv
+uv.lock
+
+# macOS
+.DS_Store

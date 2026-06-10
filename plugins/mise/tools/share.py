@@ -1,0 +1,170 @@
+"""
+Share operation — share a Drive file with specific people.
+
+Uses Drive API permissions().create() to grant access.
+Default role is reader (least privilege).
+
+Two-step confirm gate: first call returns a preview, second call
+with confirm=True executes. This prevents Claude from sharing
+files without explicit user approval.
+
+Non-Google accounts (iCloud, Outlook, etc.) require a notification
+email — the API rejects silent sharing. We handle this automatically:
+try silent first, fall back to notification if Google requires it.
+
+Uses httpx via MiseSyncClient (Phase 1 migration).
+"""
+
+from typing import Any
+
+import httpx
+
+from cues_util import with_identity
+
+from adapters.http_client import get_sync_client
+from models import DoResult, MiseError
+from retry import with_retry
+from validation import validate_drive_id
+
+VALID_ROLES = frozenset({"reader", "writer", "commenter"})
+
+# Drive API v3 base URL
+_DRIVE_API = "https://www.googleapis.com/drive/v3/files"
+
+
+def do_share(
+    file_id: str | None = None,
+    to: str | None = None,
+    role: str | None = None,
+    confirm: bool = False,
+    **_kwargs: Any,
+) -> DoResult | dict[str, Any]:
+    """
+    Share a file with one or more people via email.
+
+    Two-step operation: call once without confirm to preview,
+    then again with confirm=True to execute.
+
+    Args:
+        file_id: The file to share
+        to: Email address(es), comma-separated for multiple
+        role: Permission role — reader (default), writer, or commenter
+        confirm: Must be True to actually share. Without it, returns preview.
+
+    Returns:
+        Preview dict (confirm=False), DoResult (confirm=True), or error dict
+    """
+    if not file_id or not to:
+        missing = []
+        if not file_id:
+            missing.append("file_id")
+        if not to:
+            missing.append("to (email address)")
+        return {"error": True, "kind": "invalid_input",
+                "message": f"share requires {' and '.join(missing)}"}
+
+    effective_role = role or "reader"
+    if effective_role not in VALID_ROLES:
+        return {"error": True, "kind": "invalid_input",
+                "message": f"Invalid role '{effective_role}'. Must be one of: {', '.join(sorted(VALID_ROLES))}"}
+
+    # Parse comma-separated emails
+    emails = [e.strip() for e in to.split(",") if e.strip()]
+    if not emails:
+        return {"error": True, "kind": "invalid_input",
+                "message": "No valid email addresses in 'to'"}
+
+    try:
+        validate_drive_id(file_id, "file_id")
+    except ValueError as e:
+        return {"error": True, "kind": "invalid_input", "message": str(e)}
+
+    try:
+        return _share_file(file_id, emails, effective_role, confirm)
+    except MiseError as e:
+        return {"error": True, "kind": e.kind.value, "message": e.message}
+
+
+@with_retry(max_attempts=3, delay_ms=1000)
+def _share_file(
+    file_id: str, emails: list[str], role: str, confirm: bool,
+) -> DoResult | dict[str, Any]:
+    """Preview or execute share via permissions create."""
+    client = get_sync_client()
+
+    # Always fetch file metadata — needed for both preview and execute
+    file_meta = client.get_json(
+        f"{_DRIVE_API}/{file_id}",
+        params={"fields": "id,name,webViewLink", "supportsAllDrives": "true"},
+    )
+
+    file_name = file_meta.get("name", file_id)
+    email_list = ", ".join(emails)
+
+    if not confirm:
+        return {
+            "preview": True,
+            "operation": "share",
+            "file_id": file_meta["id"],
+            "title": file_name,
+            "web_link": file_meta.get("webViewLink", ""),
+            "message": f"Would share '{file_name}' with {email_list} as {role}",
+            "shared_with": emails,
+            "role": role,
+            "cues": with_identity({
+                "confirm_required": (
+                    "This is a preview. To execute, call again with confirm=True. "
+                    "Show this to the user and get their approval first."
+                ),
+            }),
+        }
+
+    shared_with = []
+    notified = []
+    for email in emails:
+        _create_permission(client, file_id, email, role, notified)
+        shared_with.append(email)
+
+    cues: dict[str, Any] = {
+        "action": f"Shared with {', '.join(shared_with)} as {role}",
+        "shared_with": shared_with,
+        "role": role,
+    }
+    if notified:
+        cues["notified"] = notified
+        cues["notification_note"] = (
+            "Google required a notification email for non-Google accounts. "
+            "These recipients received an invite email from Google."
+        )
+
+    return DoResult(
+        file_id=file_meta["id"],
+        title=file_name,
+        web_link=file_meta.get("webViewLink", ""),
+        operation="share",
+        cues=cues,
+    )
+
+
+def _create_permission(
+    client: Any, file_id: str, email: str, role: str, notified: list[str],
+) -> None:
+    """Create a single permission, falling back to notification for non-Google accounts."""
+    body = {"type": "user", "role": role, "emailAddress": email}
+    try:
+        client.post_json(
+            f"{_DRIVE_API}/{file_id}/permissions",
+            json_body=body,
+            params={"sendNotificationEmail": "false", "supportsAllDrives": "true"},
+        )
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code == 400 and "invalidSharingRequest" in e.response.text:
+            # Non-Google account — requires notification email
+            client.post_json(
+                f"{_DRIVE_API}/{file_id}/permissions",
+                json_body=body,
+                params={"sendNotificationEmail": "true", "supportsAllDrives": "true"},
+            )
+            notified.append(email)
+        else:
+            raise

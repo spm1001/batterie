@@ -1,0 +1,256 @@
+"""
+Retry decorator with exponential backoff.
+
+Used by adapters to handle transient API failures.
+"""
+
+import asyncio
+import random
+import time
+from functools import wraps
+from typing import TypeVar, Callable, Any, ParamSpec, Awaitable, cast
+
+from logging_config import logger, log_retry
+from models import MiseError, ErrorKind
+from adapters.http_client import clear_sync_client
+
+T = TypeVar("T")
+P = ParamSpec("P")
+
+
+# Exceptions that should trigger retry
+RETRYABLE_EXCEPTIONS: tuple[type[Exception], ...] = (
+    ConnectionError,
+    TimeoutError,
+)
+
+# HTTP status codes that should trigger retry
+RETRYABLE_STATUS_CODES: frozenset[int] = frozenset({
+    429,  # Rate limited
+    500,  # Internal server error
+    502,  # Bad gateway
+    503,  # Service unavailable
+    504,  # Gateway timeout
+})
+
+
+def _get_http_status(exception: Exception) -> int | None:
+    """
+    Extract HTTP status code from exception if available.
+
+    Works with httpx.HTTPStatusError (response.status_code).
+    """
+    if hasattr(exception, "response") and hasattr(exception.response, "status_code"):
+        status = exception.response.status_code
+        if isinstance(status, int):
+            return status
+
+    return None
+
+
+_BODY_TRUNCATE_AT = 500
+
+
+def _format_http_error(exception: Exception) -> str:
+    """
+    Build error message including the response body when available.
+
+    httpx.HTTPStatusError stringifies to URL + status only, dropping the body
+    that carries the actual reason (e.g. Google's "Invalid field selection: …").
+    Surface the body so failures are diagnosable without a debugger.
+    """
+    base = str(exception)
+    response = getattr(exception, "response", None)
+    if response is None:
+        return base
+
+    # Prefer Google-style structured error: {"error": {"message": "...", "status": "..."}}
+    try:
+        body = response.json()
+    except Exception:
+        body = None
+
+    if isinstance(body, dict) and isinstance(body.get("error"), dict):
+        err = body["error"]
+        msg = err.get("message")
+        status_text = err.get("status")
+        if msg:
+            detail = msg + (f" ({status_text})" if status_text else "")
+            return f"{base} | API: {detail}"
+
+    # Fall back to raw text body
+    try:
+        text = response.text
+    except Exception:
+        text = ""
+    # isinstance check guards against Mock auto-magic in tests and any
+    # response stand-ins where .text isn't a real string
+    if isinstance(text, str) and text:
+        if len(text) > _BODY_TRUNCATE_AT:
+            text = text[:_BODY_TRUNCATE_AT] + "…"
+        return f"{base} | Body: {text}"
+
+    return base
+
+
+def _should_retry(exception: Exception) -> bool:
+    """Determine if an exception is retryable."""
+    # Check if it's a known retryable exception type
+    if isinstance(exception, RETRYABLE_EXCEPTIONS):
+        return True
+
+    # Check for HTTP status code
+    status = _get_http_status(exception)
+    if status is not None and status in RETRYABLE_STATUS_CODES:
+        return True
+
+    return False
+
+
+def _convert_to_mise_error(exception: Exception) -> MiseError:
+    """Convert an exception to a MiseError if not already one."""
+    if isinstance(exception, MiseError):
+        return exception
+
+    # Check HTTP status first (more reliable than string matching)
+    status = _get_http_status(exception)
+    if status is not None:
+        message = _format_http_error(exception)
+        if status == 401:
+            # Invalidate cached client so next call gets fresh credentials
+            clear_sync_client()
+            return MiseError(ErrorKind.AUTH_EXPIRED, message)
+        elif status == 403:
+            return MiseError(ErrorKind.PERMISSION_DENIED, message)
+        elif status == 404:
+            return MiseError(ErrorKind.NOT_FOUND, message)
+        elif status == 429:
+            return MiseError(ErrorKind.RATE_LIMITED, message, retryable=True)
+        elif status >= 500:
+            return MiseError(ErrorKind.NETWORK_ERROR, message, retryable=True)
+        else:
+            return MiseError(ErrorKind.UNKNOWN, message)
+
+    # Fall back to exception type
+    if isinstance(exception, (ConnectionError, TimeoutError)):
+        return MiseError(ErrorKind.NETWORK_ERROR, str(exception), retryable=True)
+
+    return MiseError(ErrorKind.UNKNOWN, str(exception))
+
+
+def _calculate_wait_with_jitter(
+    base_delay_ms: int,
+    attempt: int,
+    backoff_multiplier: float,
+    jitter_factor: float,
+) -> int:
+    """
+    Calculate wait time with exponential backoff and random jitter.
+
+    Jitter prevents thundering herd when multiple requests retry together.
+    """
+    base_wait = base_delay_ms * (backoff_multiplier ** attempt)
+    # Add jitter: ±jitter_factor of base wait (e.g., ±25%)
+    jitter_range = base_wait * jitter_factor
+    jitter = random.uniform(-jitter_range, jitter_range)
+    return max(0, int(base_wait + jitter))
+
+
+def with_retry(
+    max_attempts: int = 3,
+    delay_ms: int = 1000,
+    backoff_multiplier: float = 2.0,
+    jitter_factor: float = 0.25,
+    convert_errors: bool = True,
+) -> Callable[[Callable[P, T]], Callable[P, T]]:
+    """
+    Retry decorator with exponential backoff and jitter.
+
+    Args:
+        max_attempts: Maximum number of retry attempts
+        delay_ms: Initial delay in milliseconds
+        backoff_multiplier: Multiplier for exponential backoff
+        jitter_factor: Random jitter as fraction of wait (0.25 = ±25%)
+        convert_errors: Convert exceptions to MiseError on final failure
+
+    Returns:
+        Decorated function with retry logic
+
+    Example:
+        @with_retry(max_attempts=3, delay_ms=1000)
+        def fetch_file(file_id: str):
+            return service.files().get(fileId=file_id).execute()
+    """
+
+    def decorator(func: Callable[P, T]) -> Callable[P, T]:
+        @wraps(func)
+        async def async_wrapper(*args: Any, **kwargs: Any) -> T:
+            last_exception: Exception | None = None
+
+            for attempt in range(max_attempts):
+                try:
+                    # Cast needed because mypy can't verify async at runtime
+                    coro = cast(Awaitable[T], func(*args, **kwargs))
+                    return await coro
+                except Exception as e:
+                    last_exception = e
+
+                    # Check if we should retry
+                    if not _should_retry(e) or attempt == max_attempts - 1:
+                        logger.error(
+                            f"{func.__name__} failed after {attempt + 1} attempts: {e}"
+                        )
+                        if convert_errors:
+                            raise _convert_to_mise_error(e) from e
+                        raise
+
+                    # Calculate wait time with exponential backoff + jitter
+                    wait_ms = _calculate_wait_with_jitter(
+                        delay_ms, attempt, backoff_multiplier, jitter_factor
+                    )
+                    log_retry(attempt + 1, max_attempts, wait_ms, str(e))
+                    await asyncio.sleep(wait_ms / 1000)
+
+            # Should never reach here, but satisfy type checker
+            assert last_exception is not None
+            if convert_errors:
+                raise _convert_to_mise_error(last_exception) from last_exception
+            raise last_exception
+
+        @wraps(func)
+        def sync_wrapper(*args: Any, **kwargs: Any) -> T:
+            last_exception: Exception | None = None
+
+            for attempt in range(max_attempts):
+                try:
+                    return func(*args, **kwargs)
+                except Exception as e:
+                    last_exception = e
+
+                    if not _should_retry(e) or attempt == max_attempts - 1:
+                        logger.error(
+                            f"{func.__name__} failed after {attempt + 1} attempts: {e}"
+                        )
+                        if convert_errors:
+                            raise _convert_to_mise_error(e) from e
+                        raise
+
+                    wait_ms = _calculate_wait_with_jitter(
+                        delay_ms, attempt, backoff_multiplier, jitter_factor
+                    )
+                    log_retry(attempt + 1, max_attempts, wait_ms, str(e))
+                    time.sleep(wait_ms / 1000)
+
+            # Should never reach here, but satisfy type checker
+            assert last_exception is not None
+            if convert_errors:
+                raise _convert_to_mise_error(last_exception) from last_exception
+            raise last_exception
+
+        # Return appropriate wrapper based on whether function is async
+        if asyncio.iscoroutinefunction(func):
+            return cast(Callable[P, T], async_wrapper)
+        else:
+            return cast(Callable[P, T], sync_wrapper)
+
+    return decorator

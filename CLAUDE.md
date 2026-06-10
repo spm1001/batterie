@@ -2,7 +2,7 @@
 
 This repo is the **assembled marketplace mirror** for the Batterie de Savoir plugin suite. `plugins/` holds vendored copies of each plugin, assembled from the standalone source repos. The claude.ai **org marketplace syncs from this repo** (Sync-automatically is on), and per the planned convergence (`bds-sucega` in batterie-de-savoir's bon) it will become the single marketplace for every surface — CLI, Desktop, org.
 
-Not to be confused with **batterie-de-savoir**, two different repos with two different jobs: that one is the suite's docs umbrella (brigade.toml, Jekyll site) *and* the source of the suite-level `batterie` plugin, and it currently also serves as a URL-source marketplace (slated for retirement as a marketplace once convergence lands).
+Not to be confused with **batterie-de-savoir**, two different repos with two different jobs: that one is the suite's docs umbrella (brigade.toml, Jekyll site) *and* the source of the suite-level `batterie` plugin. It was retired as a marketplace on 2026-06-10 (the bds-bajibo cutover) — this repo is now the single marketplace for every surface.
 
 ## The iron rule
 
@@ -17,9 +17,9 @@ Not to be confused with **batterie-de-savoir**, two different repos with two dif
 | trousse | trousse |
 | mise | mise-en-space |
 | passe | passe |
-| garde-manger | garde-manger |
 | todoist-gtd | todoist-gtd |
-| tafelmusik | tafelmusik |
+
+Retired from distribution: garde-manger (decommissioned 2026-06-03), tafelmusik (unvendored 2026-06-10 — too experimental to publish; the source repo lives on).
 
 ## Why commits here matter — the update bus
 

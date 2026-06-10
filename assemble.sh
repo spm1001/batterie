@@ -59,16 +59,19 @@ print('yes' if d.get('mcpServers') else 'no')
     # --delete-excluded: plugins/ is fully generated, so anything in dest
     # matching an exclude (e.g. cruft vendored before the exclude existed)
     # is stale and must go — without it, --exclude protects old cruft.
+    # Repo-shaped excludes are ROOT-ANCHORED (leading /): an unanchored
+    # `mise/` matches at every depth and ate skills/mise/ — Desktop showed
+    # "no skills" on 0.7.6. Only genuinely-anywhere patterns stay bare.
     rsync -a --delete --delete-excluded \
-      --exclude .git --exclude .github --exclude .bon \
-      --exclude tests --exclude docs --exclude fixtures --exclude bakeoff \
-      --exclude .claude-plugin/marketplace.json \
+      --exclude /.git --exclude /.github --exclude /.bon \
+      --exclude /tests --exclude /docs --exclude /fixtures --exclude /bakeoff \
+      --exclude /.claude-plugin/marketplace.json \
+      --exclude /mise --exclude /mise-fetch --exclude /.mcp-workspace \
+      --exclude /data --exclude /uploads \
+      --exclude /.oauth-stash --exclude /.claude --exclude /.coverage \
       --exclude .venv --exclude node_modules --exclude __pycache__ --exclude '*.pyc' \
       --exclude .pytest_cache --exclude .mypy_cache --exclude .ruff_cache \
-      --exclude mise/ --exclude mise-fetch/ --exclude .mcp-workspace/ \
-      --exclude data/ --exclude '*.db' --exclude uploads/ \
-      --exclude .oauth-stash --exclude token.json --exclude .env \
-      --exclude .claude/ --exclude .coverage \
+      --exclude .hypothesis --exclude '*.db' --exclude token.json --exclude .env \
       --exclude .gitignore --exclude .gitattributes \
       "$src/" "$dest/"
     # .gitignore exclusion is load-bearing, not cosmetic: a vendored source
@@ -76,6 +79,15 @@ print('yes' if d.get('mcpServers') else 'no')
     # files as ignorable, so the workflow's `git add` would silently skip
     # them — shipping a package that resolves deps unpinned. Nested
     # gitignores change the host repo's commit behaviour.
+
+    # Parity guard: a copy rule must never eat plugin content. Whatever
+    # capability dirs the source ships, the vendored package ships.
+    for must in skills hooks commands; do
+      if [ -d "$src/$must" ] && [ ! -d "$dest/$must" ]; then
+        echo "FAIL: $plugin has $must/ in source but not in vendored package — an exclude is eating content" >&2
+        exit 1
+      fi
+    done
   else
     # Skill plugins: the lean copy-list.
     # Sync the .claude-plugin directory (marketplace.json excluded: a source

@@ -84,25 +84,25 @@ print('yes' if d.get('mcpServers') else 'no')
     # them — shipping a package that resolves deps unpinned. Nested
     # gitignores change the host repo's commit behaviour.
 
-    # Parity guard: a copy rule must never eat plugin content. Whatever
-    # capability dirs the source ships, the vendored package ships.
-    for must in skills hooks commands; do
-      if [ -d "$src/$must" ] && [ ! -d "$dest/$must" ]; then
-        echo "FAIL: $plugin has $must/ in source but not in vendored package — an exclude is eating content" >&2
-        exit 1
-      fi
-    done
   else
     # Skill plugins: the lean copy-list.
     # Sync the .claude-plugin directory (marketplace.json excluded: a source
     # repo's own marketplace manifest is not plugin content)
     rsync -a --delete --exclude marketplace.json "$src/.claude-plugin/" "$dest/.claude-plugin/"
 
-    # Copy plugin-level files that skills/agents/hooks might reference
-    for item in commands skills agents hooks .mcp.json CLAUDE.md instructions.md; do
+    # Copy plugin-level files that skills/agents/hooks might reference.
+    # scripts/ is load-bearing: bon's close/open context scripts and
+    # trousse's ardoise.sh live there — its omission at the 2026-06-10
+    # cutover broke /close and silently degraded bon's session-start hook.
+    for item in commands skills agents hooks scripts .mcp.json CLAUDE.md instructions.md; do
       if [ -e "$src/$item" ]; then
         if [ -d "$src/$item" ]; then
-          rsync -a --delete "$src/$item/" "$dest/$item/"
+          # Same genuinely-anywhere hygiene patterns as the MCP branch:
+          # source scripts/ dirs can carry __pycache__ and local secrets.
+          rsync -a --delete --delete-excluded \
+            --exclude __pycache__ --exclude '*.pyc' \
+            --exclude token.json --exclude .env \
+            "$src/$item/" "$dest/$item/"
         else
           cp "$src/$item" "$dest/$item"
         fi
@@ -111,6 +111,17 @@ print('yes' if d.get('mcpServers') else 'no')
       fi
     done
   fi
+
+  # Parity guard (BOTH branches): a copy rule must never eat plugin content.
+  # Whatever capability dirs the source ships, the vendored package ships.
+  # Guarding only the MCP branch is how the lean branch dropped scripts/
+  # for a day unnoticed (2026-06-11) — the consuming hook failed open.
+  for must in skills hooks commands agents scripts; do
+    if [ -d "$src/$must" ] && [ ! -d "$dest/$must" ]; then
+      echo "FAIL: $plugin has $must/ in source but not in vendored package — a copy rule is eating content" >&2
+      exit 1
+    fi
+  done
 
   # Forensic line: version + source SHA, so any future "why is X stale?"
   # is answerable from the commit message alone (the May 2026 drift was

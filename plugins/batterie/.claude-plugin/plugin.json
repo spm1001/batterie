@@ -1,6 +1,6 @@
 {
   "name": "batterie",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Suite-level utilities for the Batterie de Savoir suite \u2014 cross-plugin updates and maintenance",
   "author": {
     "name": "Sameer Modha",

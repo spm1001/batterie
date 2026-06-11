@@ -192,7 +192,13 @@ elif [ -n "${CLAUDE_CONTEXT_WINDOW:-}" ]; then
 else
     # No sidecar — true for every bg session (no statusline render). Infer:
     # a fable/[1m] model implies a 1M window; real input beyond 200k proves
-    # 1M regardless of model string. Bare 200k only as last resort.
+    # 1M regardless of model string. On a genuine turn 1 the transcript has
+    # no assistant entry yet, so fall back to the configured default model
+    # (settings.json) — self-corrects from turn 2 via the transcript.
+    # Bare 200k only as last resort.
+    if [ -z "$MODEL" ]; then
+        MODEL=$(jq -r '.model // empty' "$HOME/.claude/settings.json" 2>/dev/null || true)
+    fi
     case "$MODEL" in
         *fable*|*"[1m]"*) MAX_TOKENS=1000000 ;;
         *) if [ "$TOTAL_IN" -gt 200000 ] 2>/dev/null; then

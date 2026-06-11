@@ -1,8 +1,8 @@
 # batterie — Assembled Plugin Marketplace
 
-This repo is the **assembled marketplace mirror** for the Batterie de Savoir plugin suite. `plugins/` holds vendored copies of each plugin, assembled from the standalone source repos. The claude.ai **org marketplace syncs from this repo** (Sync-automatically is on), and per the planned convergence (`bds-sucega` in batterie-de-savoir's bon) it will become the single marketplace for every surface — CLI, Desktop, org.
+This repo is the **assembled marketplace mirror** for the Batterie de Savoir plugin suite. `plugins/` holds vendored copies of each plugin, assembled from the standalone source repos. The claude.ai **org marketplace syncs from this repo** (Sync-automatically is on), and since the 2026-06-10 cutover (`bds-bajibo`) it is the single marketplace for every surface — CLI, Desktop, org.
 
-Not to be confused with **batterie-de-savoir**, two different repos with two different jobs: that one is the suite's docs umbrella (brigade.toml, Jekyll site) *and* the source of the suite-level `batterie` plugin. It was retired as a marketplace on 2026-06-10 (the bds-bajibo cutover) — this repo is now the single marketplace for every surface.
+Not to be confused with **batterie-de-savoir** — the two are a **source/artifact pair**: that one is where the suite is *authored* (the docs umbrella — brigade.toml, Jekyll site — and the source of the suite-level `batterie` plugin); this one is what clients consume. Don't retire bds in a tidy-up: assessed 2026-06-11 — it sources the suite plugin, holds the brigade registry, serves the live Pages docs site, and the tool repos' READMEs link into it.
 
 ## The iron rule
 

@@ -1,6 +1,6 @@
 # trousse — Project Context
 
-Trousse is a **skill drawer** for Claude Code — 17 SKILL.md files that teach Claude specialized workflows (code review, diagramming, data analysis, etc.).
+Trousse is a **skill drawer** for Claude Code — 18 SKILL.md files that teach Claude specialized workflows (code review, diagramming, data analysis, etc.).
 
 It does NOT own session lifecycle hooks or scripts. Those belong to [bon](https://github.com/spm1001/bon), which owns the full session protocol (hooks, handoffs, briefings, tactical tracking).
 
@@ -35,9 +35,9 @@ The plugin system discovers skills from `skills/*/SKILL.md` — no hooks, no set
 - `user-invocable: false` for skills loaded programmatically (companion skills)
 - Reference files live in `references/` subdirectory, linked from main SKILL.md
 
-### Current Skills (17)
+### Current Skills (18)
 
-ardoise, consomme, deglacer, diagram, github-cleanup, google-devdocs, ia-presenter, mandoline, peer-review, picture, review, scaffold, screenshot, server-checkup, skill-forge, titans, toise
+ardoise, consomme, deglacer, diagram, github-cleanup, google-devdocs, ia-presenter, mandoline, peer-review, picture, review, scaffold, screenshot, server-checkup, skill-forge, tamis, titans, toise
 
 ### Commands (7)
 

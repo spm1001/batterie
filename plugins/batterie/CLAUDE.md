@@ -1,6 +1,6 @@
 # Batterie de Savoir — Agent Guide
 
-This is the **documentation umbrella repo** for the Batterie de Savoir tool suite. It contains no runnable tools — just docs, a registry, and generation scripts.
+This repo has **two jobs**: it is the **documentation umbrella** for the Batterie de Savoir tool suite (docs, registry, generation scripts — no runnable tools), **and the source of the suite-level `batterie` plugin** that [`spm1001/batterie`](https://github.com/spm1001/batterie) assembles and distributes (see "The Marketplace Lives Elsewhere" below). The two repos are a source/artifact pair: author here, consume there. Retirement was assessed and rejected 2026-06-11 — "batterie is the marketplace anchor" is true of distribution only; this repo stays.
 
 ## What this repo does
 

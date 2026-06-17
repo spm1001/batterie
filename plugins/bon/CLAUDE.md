@@ -4,7 +4,7 @@ Guidance for working on bon (the codebase, not with bon).
 
 ## What This Is
 
-Bon is a lightweight work tracker for Claude-human collaboration. JSONL default, optional Dolt backend, Git-tracked. 20 commands (incl. cross-repo `bon move`), ~2850 LOC core (+600 optional Dolt module), 503 tests (10 are opt-in Dolt integration via BON_DOLT_TEST=1).
+Bon is a lightweight work tracker for Claude-human collaboration. JSONL default, optional Dolt backend, Git-tracked. 20 commands (incl. cross-repo `bon move`), ~2850 LOC core (+600 optional Dolt module), 506 tests (10 are opt-in Dolt integration via BON_DOLT_TEST=1).
 
 ## Quick Commands
 
@@ -156,7 +156,7 @@ bon new "Quick fix" --why w --what x --done d -q   # Flags (stubs only)
 | Mixed-case IDs (bon-huHida) | Pre-lowercase legacy. IDs are immutable — don't try to rename |
 | Changing schema fields | bon-read.sh reads items.jsonl directly with jq |
 | Tactical lookup ignoring session | Always pass `session=os.getcwd()` to `find_active_tactical()`. Omitting it returns only unscoped (legacy) tacticals. |
-| Stale global install after code changes | `uv tool install` reuses cached wheels. After changing bon code: `uv cache clean bon && uv tool install ~/repos/spm1001/bon --force --reinstall --with pymysql` |
+| Stale global install after code changes | `uv tool install` reuses a cached *build* of the local source, and `uv cache clean bon` does **not** clear it. Since bon's version is dynamic from `plugin.json` (hatchling regex-read), a bump touching only `plugin.json`/CLAUDE.md leaves `src/` byte-identical, so the old wheel is reused and the version never moves (verified 2026-06-17). Force a real rebuild with `--no-cache`: `uv tool install ~/repos/spm1001/bon --force --reinstall --no-cache --with pymysql` |
 | Calling `items_path()` in Dolt mode | Raises `BonError`. Check `_get_backend()` first, or use `load_items()`/`save_items()` which dispatch automatically. |
 | Dolt backend without pymysql | `BonError` with install instructions. Install: `pip install bon[dolt]` |
 | Session identity differs per backend | Use `get_session_identity()` not `os.path.realpath(os.getcwd())`. Dolt mode prefixes with hostname. |

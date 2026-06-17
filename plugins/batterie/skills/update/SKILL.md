@@ -90,22 +90,23 @@ Each plugin key maps to a **list** of installations (one per scope). Use `v[0]` 
 
 Three batterie plugins ship CLI tools installed via `uv tool install`:
 
-| Plugin | CLI binary | Extras |
-|--------|-----------|--------|
-| bon | `bon` | `[dolt]` |
-| passe | `passe` | |
-| todoist-gtd | `todoist` | |
+| Plugin | CLI binary | Source repo | Extras |
+|--------|-----------|-------------|--------|
+| bon | `bon` | `~/repos/spm1001/bon` | `[dolt]` |
+| passe | `passe` | `~/repos/spm1001/passe` | |
+| todoist-gtd | `todoist` | `~/repos/spm1001/todoist-gtd` | |
 
-For each installed plugin that has a CLI:
-1. Get the plugin's `installPath` from the JSON above (e.g. `plugins["bon@batterie"][0]["installPath"]`)
-2. The plugin version is already in the same entry — use `["version"]`
-3. Compare against the CLI version shown in the "before" snapshot above
-4. If they differ (or the CLI is not in PATH), run:
+**Install from the source repo, not `installPath`.** Post-cutover the marketplace vendors only skills/hooks/CLAUDE.md for skill plugins — there is **no `pyproject.toml`** in the plugin cache, so `uv tool install <installPath>` fails with *"does not appear to be a Python project"*. The installable package lives in the source repo (`~/repos/spm1001/<repo>`), which is the canonical source of truth for these CLIs.
+
+For each plugin in the table:
+1. Read the plugin's `version` from the JSON above (`plugins["bon@batterie"][0]["version"]`) — used only to detect drift.
+2. Compare against the CLI version shown in the "before" snapshot above.
+3. If they differ (or the CLI is not in PATH), reinstall from the **source repo** in the table:
    ```
-   uv cache clean <cli_name> --force && uv tool install "<installPath>[<extras>]" --force --reinstall
+   uv cache clean <cli_name> --force && uv tool install "<source_repo>[<extras>]" --force --reinstall
    ```
-   Always include extras from the table above (e.g. bon is always `"<installPath>[dolt]"`). PyMySQL is tiny and harmless — always installing it avoids silent breakage when any project uses the Dolt backend.
-   The `--force` on `uv cache clean` prevents blocking on lock contention from other uv processes (e.g. marketplace refresh). Report success or failure. If `uv` is not available or the install fails, fall back to showing the manual command.
+   e.g. `uv tool install "~/repos/spm1001/bon[dolt]" --force --reinstall`. Always include extras from the table (bon is always `[dolt]` — PyMySQL is tiny and harmless; always installing it avoids silent breakage when any project uses the Dolt backend). The `--force` on `uv cache clean` prevents blocking on lock contention from other uv processes (e.g. marketplace refresh). Report success or failure.
+4. If the source repo isn't present (a machine without `~/repos`, or a Cowork sandbox), the CLI can't be reinstalled from source here — report that and show the manual command rather than failing. Cowork CLI provisioning is a separate path (`bds-dacase`), not `uv tool` against local repos.
 
 ### 5. Summarise
 

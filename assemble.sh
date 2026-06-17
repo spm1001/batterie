@@ -2,6 +2,16 @@
 # Assemble all Batterie de Savoir plugins into this repo for Desktop marketplace.
 # Copies .claude-plugin/ directories from each source repo.
 # Run from the repo root: ./assemble.sh
+#
+# Failure model is two-tier. STRUCTURAL faults (husk/parity guard, manifest
+# invariant, MCP entry-point) hard-exit 1 immediately — corrupt content is
+# never published. A VERSION-RATCHET lag (content changed but plugin.json
+# version didn't) is QUARANTINED, not fatal: the laggard's vendored dir is
+# reverted to last-published and named in a sentinel file
+# ($ASSEMBLE_QUARANTINE_FILE, default /tmp/assemble-quarantine.txt); the run
+# still exits 0 so the healthy plugins publish, and assemble.yml's final step
+# fails the build red on the sentinel. One missed bump no longer wedges the
+# whole bus (bds-pujaki, 2026-06-17).
 
 set -euo pipefail
 
@@ -30,6 +40,7 @@ todoist-gtd:todoist-gtd
 echo "Assembling plugins from $SOURCE_DIR"
 
 RATCHET_FAILURES=""
+QUARANTINED=""
 
 for entry in $PLUGINS; do
   plugin="${entry%%:*}"
@@ -66,7 +77,13 @@ print('yes' if d.get('mcpServers') else 'no')
     # Repo-shaped excludes are ROOT-ANCHORED (leading /): an unanchored
     # `mise/` matches at every depth and ate skills/mise/ — Desktop showed
     # "no skills" on 0.7.6. Only genuinely-anywhere patterns stay bare.
-    rsync -a --delete --delete-excluded \
+    # --checksum, not rsync's default size+mtime quick-check: a same-byte-size
+    # version bump (e.g. 0.26.2→0.26.3) with an aligned mtime is otherwise
+    # silently skipped — the bump never propagates, and the ratchet then
+    # either misses it or FALSELY quarantines a plugin that did bump (mtimes
+    # come from sequential git clones, so alignment is incidental, not
+    # impossible; confirmed 2026-06-17). Tiny trees — checksum cost is noise.
+    rsync -a --checksum --delete --delete-excluded \
       --exclude /.git --exclude /.github --exclude /.bon \
       --exclude /tests --exclude /docs --exclude /fixtures --exclude /bakeoff \
       --exclude /.claude-plugin/marketplace.json \
@@ -88,7 +105,8 @@ print('yes' if d.get('mcpServers') else 'no')
     # Skill plugins: the lean copy-list.
     # Sync the .claude-plugin directory (marketplace.json excluded: a source
     # repo's own marketplace manifest is not plugin content)
-    rsync -a --delete --exclude marketplace.json "$src/.claude-plugin/" "$dest/.claude-plugin/"
+    # --checksum: defeat the size+mtime skip on same-size bumps (see MCP branch)
+    rsync -a --checksum --delete --exclude marketplace.json "$src/.claude-plugin/" "$dest/.claude-plugin/"
 
     # Copy plugin-level files that skills/agents/hooks might reference.
     # scripts/ is load-bearing: bon's close/open context scripts and
@@ -99,7 +117,8 @@ print('yes' if d.get('mcpServers') else 'no')
         if [ -d "$src/$item" ]; then
           # Same genuinely-anywhere hygiene patterns as the MCP branch:
           # source scripts/ dirs can carry __pycache__ and local secrets.
-          rsync -a --delete --delete-excluded \
+          # --checksum: defeat the size+mtime skip on same-size bumps (see MCP branch)
+          rsync -a --checksum --delete --delete-excluded \
             --exclude __pycache__ --exclude '*.pyc' \
             --exclude token.json --exclude .env \
             "$src/$item/" "$dest/$item/"
@@ -123,26 +142,51 @@ print('yes' if d.get('mcpServers') else 'no')
     fi
   done
 
-  # Forensic line: version + source SHA, so any future "why is X stale?"
-  # is answerable from the commit message alone (the May 2026 drift was
-  # undiagnosable because runs logged neither).
+  # Version + source SHA for the status line below — so any future "why is
+  # X stale?" is answerable from the commit message alone (the May 2026
+  # drift was undiagnosable because runs logged neither).
   version=$(python3 -c "import json; print(json.load(open('$dest/.claude-plugin/plugin.json'))['version'])" 2>/dev/null || echo "?")
   sha=$(git -C "$src" rev-parse --short HEAD 2>/dev/null || echo "?")
-  echo "  OK $plugin ← $repo ($version @ $sha)"
 
   # Version ratchet: content changed but version didn't → the source repo
   # forgot to bump plugin.json. Without this, clients see "no update
   # available" forever while content silently drifts under them.
   # git status --porcelain (not git diff) — diff is blind to new files.
-  # Escape hatch for deliberate local runs: ASSEMBLE_NO_RATCHET=1
+  # Escape hatch for deliberate local runs: ASSEMBLE_NO_RATCHET=1.
+  #
+  # QUARANTINE, don't abort (2026-06-17, bds-pujaki): on a ratchet trip we
+  # revert THIS plugin's vendored dir to its last-published state and record
+  # it, instead of failing the whole run. Healthy plugins still publish; a
+  # final assemble.yml step fails the run RED naming the laggards. Reverting
+  # to HEAD is safe for the post-loop structural invariants (marketplace,
+  # MCP) — last-published already satisfied them. Applies ONLY to the
+  # version ratchet; the husk/parity guard above stays a hard exit.
+  quarantined_this=0
   if [ -z "${ASSEMBLE_NO_RATCHET:-}" ]; then
     old_version=$(git -C "$BATTERIE_DIR" show "HEAD:plugins/$plugin/.claude-plugin/plugin.json" 2>/dev/null \
       | python3 -c "import json,sys; print(json.load(sys.stdin)['version'])" 2>/dev/null || echo "")
     content_changes=$(git -C "$BATTERIE_DIR" status --porcelain -- "plugins/$plugin" \
       | grep -v '\.claude-plugin/plugin\.json' | grep -c . || true)
     if [ -n "$old_version" ] && [ "$content_changes" -gt 0 ] && [ "$version" = "$old_version" ]; then
+      # Restore the laggard's vendored dir to EXACTLY last-published:
+      # checkout restores tracked files; clean -fd drops newly-added drift
+      # files checkout leaves behind (porcelain counts new files, so the
+      # revert must drop them too — else `git add -A` would republish them).
+      git -C "$BATTERIE_DIR" checkout HEAD -- "plugins/$plugin"
+      git -C "$BATTERIE_DIR" clean -fdq -- "plugins/$plugin"
       RATCHET_FAILURES="${RATCHET_FAILURES}  $plugin: $content_changes content change(s) but version still $version — bump .claude-plugin/plugin.json in $repo\n"
+      QUARANTINED="${QUARANTINED}${plugin}\n"
+      quarantined_this=1
     fi
+  fi
+
+  # Exactly one status line per plugin, AFTER the ratchet, so the committed
+  # commit message tells the truth about what shipped: OK = vendored and
+  # published; QUARANTINE = reverted to last-published for a missing bump.
+  if [ "$quarantined_this" = 1 ]; then
+    echo "  QUARANTINE $plugin ← $repo (held at last-published $version — $repo content drifted, version not bumped)"
+  else
+    echo "  OK $plugin ← $repo ($version @ $sha)"
   fi
 done
 
@@ -221,11 +265,20 @@ sys.exit(0 if any(p.get('source') == './plugins/$name' for p in m['plugins']) el
 " || echo "  WARN $name vendored in plugins/ but absent from marketplace.json — unpublished"
 done
 
-if [ -n "$RATCHET_FAILURES" ]; then
+# Version-ratchet laggards are QUARANTINED, not fatal: their vendored dirs
+# were reverted to last-published in the loop, so the healthy plugins still
+# publish this run. Emit the laggard list to a sentinel file; the final
+# assemble.yml step fails the run RED (after commit/push) naming them —
+# loud, but blast-radius-isolated, so one missed bump no longer wedges the
+# whole bus (bds-pujaki 2026-06-17). The structural/husk guards above
+# already exit hard; only the ratchet reaches here.
+QUARANTINE_FILE="${ASSEMBLE_QUARANTINE_FILE:-/tmp/assemble-quarantine.txt}"
+rm -f "$QUARANTINE_FILE"
+if [ -n "$QUARANTINED" ]; then
   echo "" >&2
-  echo "FAIL: version ratchet — content drifted without a version bump:" >&2
+  echo "QUARANTINE: version-ratchet drift without a bump — reverted to last-published, healthy plugins still ship:" >&2
   printf "%b" "$RATCHET_FAILURES" >&2
-  exit 1
+  printf "%b" "$QUARANTINED" > "$QUARANTINE_FILE"
 fi
 
 echo "Done. Review with: git status"

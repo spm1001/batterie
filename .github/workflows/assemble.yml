@@ -99,5 +99,21 @@ jobs:
               -c user.email="github-actions[bot]@users.noreply.github.com" \
               commit -m "Reassemble — $(date +%Y-%m-%d)
 
-          $(grep -E ' (OK|SKIP) ' /tmp/assemble.log)"
+          $(grep -E ' (OK|SKIP|QUARANTINE) ' /tmp/assemble.log)"
           git push origin main
+
+      - name: Fail red on any quarantined plugin
+        # Runs only after the healthy plugins have been committed and pushed
+        # above, so a single laggard never blocks the others (bds-pujaki).
+        # The laggard's vendored dir was reverted to last-published in
+        # assemble.sh, so the marketplace stays consistent — but the run
+        # still goes RED naming it, so a missed version bump can't hide
+        # behind a green build (no silent SKIP, the husk lesson).
+        run: |
+          if [ -s /tmp/assemble-quarantine.txt ]; then
+            echo "::error::Version-ratchet quarantine — these plugins drifted without a version bump and were held at their last-published version:"
+            sed 's/^/  - /' /tmp/assemble-quarantine.txt
+            echo "Healthy plugins published normally. Bump .claude-plugin/plugin.json in each laggard's source repo, then re-run."
+            exit 1
+          fi
+          echo "No quarantined plugins — all assembled plugins published."

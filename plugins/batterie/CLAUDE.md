@@ -36,7 +36,7 @@ Tool pages are hand-authored by design. The registry holds one-liners; tool page
 
 - `pyproject.toml` uses `dynamic = ["version"]` with `[tool.hatch.version]` pointing at `.claude-plugin/plugin.json` via regex — never has a hardcoded version
 - To bump a version: edit the `"version"` field in `.claude-plugin/plugin.json` only
-- `/batterie-update` triggers when the installed plugin.json version is lower than the repo's — so bumping plugin.json is what drives updates
+- `/batterie:update` triggers when the installed plugin.json version is lower than the repo's — so bumping plugin.json is what drives updates
 
 Repos aligned on this pattern: bon, passe, mise-en-space, trousse. If you add a new tool with a pyproject.toml, follow the same pattern.
 

@@ -38,7 +38,7 @@ Tool pages are hand-authored by design. The registry holds one-liners; tool page
 - To bump a version: edit the `"version"` field in `.claude-plugin/plugin.json` only
 - `/batterie-update` triggers when the installed plugin.json version is lower than the repo's — so bumping plugin.json is what drives updates
 
-Repos aligned on this pattern: bon, passe, garde-manger, mise-en-space, trousse. If you add a new tool with a pyproject.toml, follow the same pattern.
+Repos aligned on this pattern: bon, passe, mise-en-space, trousse. If you add a new tool with a pyproject.toml, follow the same pattern.
 
 ### Suite version (the human-facing number)
 
@@ -67,7 +67,7 @@ This machine runs Python 3.9, which doesn't have `tomllib` (added in 3.11). The 
 
 This repo **stopped being a marketplace on 2026-06-10** (the bds-bajibo cutover — there is no `marketplace.json` here anymore). [`spm1001/batterie`](https://github.com/spm1001/batterie) is the single assembled marketplace, serving the **CLI and personal Desktop installs** (both accept a public repo). It vendors each plugin's content physically (Desktop's backend rejects external URL sources), reassembled daily by its GitHub Actions bot from the source repos. **The claude.ai *org/Teams* Directory is NOT a working surface for this repo — see "Repo visibility" below.**
 
-This repo remains a **source repo**: the suite-level `batterie` plugin (`.claude-plugin/plugin.json`, `skills/`, `hooks/`, `instructions.md`) is vendored from here. To ship a change to it: edit, bump the version in `.claude-plugin/plugin.json`, push — the daily bot does the rest (or trigger immediately with `gh workflow run assemble.yml -R spm1001/batterie`). A commit landing in spm1001/batterie is what makes clients re-resolve plugins — its commit stream is the suite's update bus.
+This repo remains a **source repo**: the suite-level `batterie` plugin (`.claude-plugin/plugin.json`, `skills/`, `hooks/`, `instructions.md`) is vendored from here. To ship a change to it (or to any batterie source repo): **`/batterie:publish`** from the repo's working tree — it bumps the version, commits, pushes, triggers `assemble.yml`, watches it green, and pulls this machine current (`scripts/publish.py` is the engine). Under the hood that is: edit, bump `.claude-plugin/plugin.json`, push — the daily bot does the rest (or trigger immediately with `gh workflow run assemble.yml -R spm1001/batterie`). A commit landing in spm1001/batterie is what makes clients re-resolve plugins — its commit stream is the suite's update bus.
 
 Anyone who installed plugins as `<name>@batterie-de-savoir` before the cutover migrates by add + reinstall + remove (plugin keys change with the marketplace name; a plain repoint isn't enough).
 

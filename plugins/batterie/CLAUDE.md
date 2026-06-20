@@ -40,6 +40,14 @@ Tool pages are hand-authored by design. The registry holds one-liners; tool page
 
 Repos aligned on this pattern: bon, passe, garde-manger, mise-en-space, trousse. If you add a new tool with a pyproject.toml, follow the same pattern.
 
+### Suite version (the human-facing number)
+
+The **`batterie` plugin's own version doubles as the suite version** — the single number a user quotes ("I'm on Batterie v1.0") or checks against ("you need ≥ v1.x"). It's the Debian model: one headline number on top of the independent per-plugin versions (`bon 0.26.5`, `passe 0.6.2`, …), which stay separate so each plugin's "update available" signal only fires when *that* plugin actually changes.
+
+- **Set it at milestones**, not every change — bump the `batterie` plugin.json to a round number when the suite reaches a meaningful state (set to `1.0.0` on 2026-06-20, the first real suite release). Patch ticks still happen when the batterie plugin itself changes; that's fine.
+- **Surfaced via `/batterie:version`** (reports suite version + per-plugin + CLI versions) and as a banner atop `/batterie:update`. The "build date" half is the clients' own "last updated" date — no extra machinery needed.
+- Distribution is **public CLI** (`claude plugin marketplace add spm1001/batterie`); the Teams/org Directory is unavailable (see "Repo visibility"). So `/batterie:version` is the canonical "what am I on?" surface.
+
 ## Deliberate quirks — do not "fix" these
 
 - **jeton has no public README** — it's the renamed `itv-google-auth` library. A 404 when fetching its README is expected.
@@ -57,11 +65,17 @@ This machine runs Python 3.9, which doesn't have `tomllib` (added in 3.11). The 
 
 ## The Marketplace Lives Elsewhere
 
-This repo **stopped being a marketplace on 2026-06-10** (the bds-bajibo cutover — there is no `marketplace.json` here anymore). [`spm1001/batterie`](https://github.com/spm1001/batterie) is the single assembled marketplace for every surface — CLI, Desktop, and the claude.ai org. It vendors each plugin's content physically (Desktop's backend rejects external URL sources), reassembled daily by its GitHub Actions bot from the source repos.
+This repo **stopped being a marketplace on 2026-06-10** (the bds-bajibo cutover — there is no `marketplace.json` here anymore). [`spm1001/batterie`](https://github.com/spm1001/batterie) is the single assembled marketplace, serving the **CLI and personal Desktop installs** (both accept a public repo). It vendors each plugin's content physically (Desktop's backend rejects external URL sources), reassembled daily by its GitHub Actions bot from the source repos. **The claude.ai *org/Teams* Directory is NOT a working surface for this repo — see "Repo visibility" below.**
 
 This repo remains a **source repo**: the suite-level `batterie` plugin (`.claude-plugin/plugin.json`, `skills/`, `hooks/`, `instructions.md`) is vendored from here. To ship a change to it: edit, bump the version in `.claude-plugin/plugin.json`, push — the daily bot does the rest (or trigger immediately with `gh workflow run assemble.yml -R spm1001/batterie`). A commit landing in spm1001/batterie is what makes clients re-resolve plugins — its commit stream is the suite's update bus.
 
 Anyone who installed plugins as `<name>@batterie-de-savoir` before the cutover migrates by add + reinstall + remove (plugin keys change with the marketplace name; a plain repoint isn't enough).
+
+### Repo visibility — deliberately PUBLIC (and what that costs)
+
+`spm1001/batterie` is **public on purpose** (decided 2026-06-20, `bds-kanuve`): ITV + public users install via `claude plugin marketplace add spm1001/batterie`, and personal Desktop installs (Customize → Add marketplace) also accept a public repo. The cost, accepted knowingly: **org/Teams Directory marketplaces require a _private or internal_ repo** — public is rejected by Anthropic policy (error: *"Only private and internal repositories can be used for marketplaces"* on the org sync endpoint; documented at code.claude.com/docs/en/plugin-marketplaces). "Internal" isn't available here — it needs a GitHub Org/Enterprise, and `spm1001` is a personal account.
+
+**So the Teams Directory one-click path is unavailable for this repo. Do NOT re-add the org marketplace (it errors on every sync), and do NOT flip the repo private to "fix Teams" — that breaks the CLI/personal path everyone actually uses.** Family-scale users are onboarded manually via the CLI. (Separately, Desktop's *personal* marketplace can serve a stale pre-cutover snapshot — a server-side Anthropic cache bug tracked in `bds-hitoga`, not this visibility policy.)
 
 ### Debugging Desktop marketplace
 

@@ -20,6 +20,9 @@ batterie = {k: v[0] for k, v in plugins.items() if k.endswith("@batterie")}
 if not batterie:
     print("No batterie plugins installed.")
 else:
+    suite = batterie.get("batterie@batterie", {}).get("version")
+    if suite:
+        print(f"📦 Batterie suite v{suite}\n")
     print(f"Found {len(batterie)} batterie plugin(s):\n")
     for key, info in sorted(batterie.items()):
         name = key.split("@")[0]
@@ -112,6 +115,8 @@ For each plugin in the table:
 4. The git source works anywhere with network, so a machine without `~/repos` (a fresh user, the Mac) is no longer a dead end — fall back to it rather than failing. Cowork additionally has its own skill-level provisioning path (`bds-dacase`).
 
 ### 5. Summarise
+
+Lead with the **Batterie suite version** — read the post-update `batterie@batterie` version from `installed_plugins.json` and report it as the headline (e.g. `📦 Batterie suite v1.0.0`), since that's the single number the user quotes. Then:
 
 If any plugins were updated:
 ```

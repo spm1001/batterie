@@ -15,7 +15,7 @@ Two paths:
 
 | Path | Command | Skill names |
 |------|---------|-------------|
-| **Plugin** (recommended) | `/plugin` → batterie-de-savoir → trousse | `/trousse:diagram` |
+| **Plugin** (recommended) | `claude plugin marketplace add spm1001/batterie` then `/plugin install trousse@batterie` | `/trousse:diagram` |
 | **Manual** | `git clone` → plugin auto-discovers | `/diagram` |
 
 The plugin system discovers skills from `skills/*/SKILL.md` — no hooks, no settings.json registration needed.
@@ -101,4 +101,4 @@ The handoff contract (`HANDOFF-CONTRACT.md`) lives in bon — it specifies bon's
 ### Cross-Skill Routing
 
 - **Before running jq on `~/.claude/projects/**/*.jsonl`** → load `/deglacer` first. The CC JSONL schema has dragons (triple-duty user entries, streaming-duplicated message IDs, version-dependent fields). Deglacer has the schema reference and `deglacer` CLI tool.
-- **Past session recall** → deglacer reads full transcripts; garde-manger searches memory summaries. Choose based on what you need.
+- **Past session recall** → deglacer reads full transcripts.

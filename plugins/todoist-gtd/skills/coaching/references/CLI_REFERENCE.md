@@ -4,7 +4,7 @@ Setup, authentication, query patterns, and data model for the todoist CLI.
 
 ## CLI Setup
 
-Installed via `uv tool install`, which creates a `todoist` shim in `~/.local/bin/`.
+Installed via `uv tool install` from the source repo (local clone or `git+https`), which creates a `todoist` shim in `~/.local/bin/`.
 
 ```bash
 todoist <command>

@@ -17,14 +17,16 @@ allowed-tools: ["Bash(todoist:*)", Read, AskUserQuestion]
 
 ### 1. Install the CLI (if missing)
 
-Find and install from the plugin cache:
+Install from the **source repo** — the marketplace cache ships no `pyproject.toml`, so a cache/`CLAUDE_PLUGIN_ROOT` install fails ("does not appear to be a Python project"):
 ```bash
-TODOIST_DIR=$(find ~/.claude/plugins/cache -path "*/todoist-gtd/*/pyproject.toml" -exec dirname {} \; 2>/dev/null | head -1)
-uv tool install "$TODOIST_DIR"
+# Local clone if present, else git+https:
+[ -f ~/repos/spm1001/todoist-gtd/pyproject.toml ] \
+  && uv tool install ~/repos/spm1001/todoist-gtd --force --reinstall --no-cache \
+  || uv tool install 'todoist-gtd @ git+https://github.com/spm1001/todoist-gtd' --force --reinstall --no-cache
 export PATH="$HOME/.local/bin:$PATH"
 ```
 
-If `CLAUDE_PLUGIN_ROOT` is set, use that instead: `uv tool install "${CLAUDE_PLUGIN_ROOT}"`.
+The SessionStart hook (`ensure-todoist.sh`) already runs this logic automatically — you usually don't need to install by hand.
 
 ### 2. Authenticate
 

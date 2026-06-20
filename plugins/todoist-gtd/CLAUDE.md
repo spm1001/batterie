@@ -5,7 +5,7 @@ Instructions for Claude when working in this repository.
 ## What This Is
 
 todoist-gtd is a Python CLI for Todoist with GTD coaching. Two parts:
-- **CLI** (`todoist_gtd/`) — MCP-free Todoist API access, installed via `uv tool install`
+- **CLI** (`todoist_gtd/`) — MCP-free Todoist API access, installed via `uv tool install` from the source repo (`~/repos/spm1001/todoist-gtd`, else `git+https`)
 - **Skill** (`SKILL.md` + `references/`) — GTD semantics and coaching
 
 ## Quick Commands
@@ -41,8 +41,8 @@ Entry points defined in `pyproject.toml`:
 - `todoist` → `todoist_gtd.cli:main`
 - `todoist-flatten` → `todoist_gtd.flatten:main`
 
-Install: `uv tool install ~/Repos/todoist-gtd`
-Reinstall after changes: `uv tool install --force ~/Repos/todoist-gtd`
+Install: `uv tool install ~/repos/spm1001/todoist-gtd` (else `uv tool install 'todoist-gtd @ git+https://github.com/spm1001/todoist-gtd'`)
+Reinstall after changes: `uv tool install --force --reinstall --no-cache ~/repos/spm1001/todoist-gtd`
 
 ## Working with Bon
 

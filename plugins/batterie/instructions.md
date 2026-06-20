@@ -33,3 +33,4 @@ All tools follow a professional kitchen metaphor. Suite: **Batterie de Savoir**.
 |-------------|-------------|
 | `uv tool install <tool>` | `uv tool install ~/repos/spm1001/<tool>` for batterie CLI tools |
 | Individual skill permissions | `Skill(*)` in settings.json covers all skills |
+| Hand-run the bump→commit→push→assemble→update dance to ship a shard | `/batterie:publish` — one verb does the whole dance (run from the source repo's working tree) |

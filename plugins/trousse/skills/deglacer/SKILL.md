@@ -7,7 +7,7 @@ description: >
   and `deglacer` CLI tool — prevents the 54-attempt fumble pattern where Claudes guess
   at field names. Triggers on 'what happened last session', 'find when we discussed',
   'parse session', 'read conversation', 'session history', 'token usage', 'deglacer'.
-  Do NOT use for live session context (use garde-manger) or git history (use git log). (user)
+  Do NOT use for git history (use git log) or your own current-session context. (user)
 allowed-tools: [Bash, Read, Grep, Glob]
 ---
 
@@ -29,7 +29,6 @@ You are working with Claude Code session data. This includes:
 
 ## When NOT to Use
 
-- **Live session context** — use garde-manger for searching across past session memories
 - **Git history** — use `git log` / `git blame` for code change history
 - **Current conversation state** — you already have context, no need to parse your own session
 - **Non-CC JSONL files** — this schema is specific to Claude Code sessions
@@ -41,8 +40,8 @@ You are working with Claude Code session data. This includes:
 `deglacer` is the CC JSONL extraction CLI, installed as a uv tool. Use it instead of raw jq for structured extraction.
 
 ```bash
-# Install (once):
-uv tool install ~/Repos/batterie/deglacer
+# Install (once) — from the source repo (local clone, else git+https):
+uv tool install 'deglacer @ git+https://github.com/spm1001/deglacer'
 
 # Use:
 deglacer SESSION.jsonl

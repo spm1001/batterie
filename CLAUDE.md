@@ -1,6 +1,8 @@
 # batterie — Assembled Plugin Marketplace
 
-This repo is the **assembled marketplace mirror** for the Batterie de Savoir plugin suite. `plugins/` holds vendored copies of each plugin, assembled from the standalone source repos. The claude.ai **org marketplace syncs from this repo** (Sync-automatically is on), and since the 2026-06-10 cutover (`bds-bajibo`) it is the single marketplace for every surface — CLI, Desktop, org.
+This repo is the **assembled marketplace mirror** for the Batterie de Savoir plugin suite. `plugins/` holds vendored copies of each plugin, assembled from the standalone source repos. Since the 2026-06-10 cutover (`bds-bajibo`) it is the single marketplace, serving the **public CLI** (`claude plugin marketplace add spm1001/batterie`) and **personal Desktop** installs (Customize → Add marketplace — both accept a public repo).
+
+**The repo is deliberately PUBLIC** (decided 2026-06-20, `bds-kanuve`). The cost, accepted knowingly: the claude.ai **org/Teams Directory is NOT a surface for this repo** — org marketplaces require a *private or internal* repo (Anthropic policy; "internal" needs a GitHub Org/Enterprise, which `spm1001` isn't). The org marketplace registration was removed. **Do NOT re-add it** (it errors on every sync) and **do NOT flip the repo private to "fix Teams"** — that breaks the CLI/personal path everyone actually uses. Family-scale users are onboarded manually via the CLI.
 
 Not to be confused with **batterie-de-savoir** — the two are a **source/artifact pair**: that one is where the suite is *authored* (the docs umbrella — brigade.toml, Jekyll site — and the source of the suite-level `batterie` plugin); this one is what clients consume. Don't retire bds in a tidy-up: assessed 2026-06-11 — it sources the suite plugin, holds the brigade registry, serves the live Pages docs site, and the tool repos' READMEs link into it.
 
@@ -23,7 +25,7 @@ Retired from distribution: garde-manger (decommissioned 2026-06-03), tafelmusik 
 
 ## Why commits here matter — the update bus
 
-**Clients re-resolve a marketplace's plugins only when the marketplace repo itself gets a new commit** (confirmed by probe, 2026-06-04). A version bump in a source repo is invisible to Desktop/org clients until a commit lands *here*. The assemble workflow's daily commit stream is therefore the suite's update bus — propagation latency to every surface equals its cadence.
+**Clients re-resolve a marketplace's plugins only when the marketplace repo itself gets a new commit** (confirmed by probe, 2026-06-04). A version bump in a source repo is invisible to CLI/Desktop clients until a commit lands *here*. The assemble workflow's daily commit stream is therefore the suite's update bus — propagation latency to every surface equals its cadence.
 
 ## The pipeline
 
@@ -44,11 +46,11 @@ History that shaped this design (May 2026 drift, diagnosed in `~/notes/raw/2026-
 - `git diff --quiet` change detection missed untracked (new) files — a week of purely-new-file drift produced no PR at all. Now `git status --porcelain`.
 - The suite-level `batterie` plugin was once declared at `./` with a root plugin.json but no vendored content — org members installed a version string over nothing. It now lives in `plugins/batterie/` like its siblings.
 
-## Troubleshooting "Desktop/org shows a stale version"
+## Troubleshooting "Desktop shows a stale version"
 
 1. **Did the source repo actually bump?** Check its `.claude-plugin/plugin.json` on GitHub `main`.
 2. **Did an assemble commit land here since?** `git log --oneline -5` — the commit body shows per-plugin versions/SHAs.
 3. **Did the workflow run and go green?** `gh run list --workflow=assemble.yml` — but remember green only means *the run* worked; step 2 is the product check.
-4. **Client-side:** Desktop/org re-sync on marketplace-repo commits; CC CLI on `claude plugin marketplace update` (or autoUpdate).
+4. **Client-side:** Desktop re-syncs on marketplace-repo commits; CC CLI on `claude plugin marketplace update` (or autoUpdate).
 
 Fuller context: home-session memory `batterie-marketplace-pipeline.md` (topology, mechanism, failure modes, convergence landmine — note the vendored shims carry no server code; verify Desktop's stdio-MCP behaviour before cutting Desktop over to this repo).

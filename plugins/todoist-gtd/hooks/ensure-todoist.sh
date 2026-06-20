@@ -7,6 +7,10 @@ PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-}"
 FIXED=""
 ISSUES=""
 
+# Capture auto-update output so failures are diagnosable, not silent (bon-babuse / bon-mavemi).
+UPDATE_LOG="$HOME/.cache/todoist/auto-update.log"
+mkdir -p "$(dirname "$UPDATE_LOG")" 2>/dev/null
+
 # Resolve install source
 if [ -n "$PLUGIN_ROOT" ] && [ -f "$PLUGIN_ROOT/pyproject.toml" ]; then
     INSTALL_SRC="$PLUGIN_ROOT"
@@ -18,10 +22,10 @@ fi
 
 # Check 1: CLI missing → auto-install
 if ! command -v todoist &>/dev/null; then
-    if uv tool install "$INSTALL_SRC" --force --reinstall >/dev/null 2>&1; then
+    if uv tool install "$INSTALL_SRC" --force --reinstall --no-cache >"$UPDATE_LOG" 2>&1; then
         FIXED="${FIXED}• todoist CLI installed\n"
     else
-        ISSUES="${ISSUES}• todoist CLI not found and auto-install failed. Run manually:\n\n  uv tool install \"$INSTALL_SRC\"\n"
+        ISSUES="${ISSUES}• todoist CLI not found and auto-install failed (full error: ${UPDATE_LOG}). Run manually:\n\n  uv tool install \"$INSTALL_SRC\" --force --reinstall --no-cache\n"
     fi
 fi
 
@@ -33,10 +37,10 @@ if [ -z "$ISSUES" ] && command -v todoist &>/dev/null; then
         if [ -n "$INSTALLED" ] && [ -n "$EXPECTED" ] && [ "$INSTALLED" != "$EXPECTED" ]; then
             CLI_BEHIND=$(python3 -c "print(tuple(int(x) for x in '$INSTALLED'.split('.')) < tuple(int(x) for x in '$EXPECTED'.split('.')))" 2>/dev/null || true)
             if [ "$CLI_BEHIND" = "True" ]; then
-                if uv tool install "$INSTALL_SRC" --force --reinstall >/dev/null 2>&1; then
+                if uv tool install "$INSTALL_SRC" --force --reinstall --no-cache >"$UPDATE_LOG" 2>&1; then
                     FIXED="${FIXED}• todoist CLI updated: v${INSTALLED} → v${EXPECTED}\n"
                 else
-                    ISSUES="${ISSUES}• todoist CLI is v${INSTALLED} but plugin is v${EXPECTED}. Auto-update failed.\n"
+                    ISSUES="${ISSUES}• todoist CLI is v${INSTALLED} but plugin is v${EXPECTED}. Auto-update failed (full error: ${UPDATE_LOG}). Run manually:\n\n  uv tool install \"$INSTALL_SRC\" --force --reinstall --no-cache\n"
                 fi
             fi
         fi
@@ -66,6 +70,6 @@ MSG=""
 [ -n "$FIXED" ] && MSG="${MSG}✓ todoist auto-fixed:\n\n${FIXED}"
 [ -n "$ISSUES" ] && MSG="${MSG}⚠️ Todoist needs attention:\n\n${ISSUES}"
 
-cat <<EOF
-{"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": "${MSG}"}}
-EOF
+# Render via json.dumps so messages containing quotes (e.g. the quoted INSTALL_SRC in
+# recovery commands) produce valid JSON — a raw heredoc does not escape them (bon-mavemi).
+python3 -c "import json; print(json.dumps({'hookSpecificOutput': {'hookEventName': 'SessionStart', 'additionalContext': '''${MSG}'''}}))"

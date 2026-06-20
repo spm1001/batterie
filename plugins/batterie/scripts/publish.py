@@ -148,6 +148,11 @@ def main() -> int:
     lvl.add_argument("--patch", dest="level", action="store_const", const="patch")
     lvl.add_argument("--minor", dest="level", action="store_const", const="minor")
     lvl.add_argument("--major", dest="level", action="store_const", const="major")
+    # Line-buffer our own progress so it interleaves correctly with the
+    # gh/git subprocesses' real-time output when stdout is a pipe (the skill
+    # runs us piped). In a TTY Python line-buffers already; this fixes the pipe.
+    sys.stdout.reconfigure(line_buffering=True)
+
     ap.set_defaults(level="patch")
     ap.add_argument("-m", "--message", help="commit message (default: chore(<plugin>): publish <version>)")
     ap.add_argument("--repo", type=Path, default=Path.cwd(),

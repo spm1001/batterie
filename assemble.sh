@@ -112,6 +112,13 @@ print('yes' if d.get('mcpServers') else 'no')
     # scripts/ is load-bearing: bon's close/open context scripts and
     # trousse's ardoise.sh live there — its omission at the 2026-06-10
     # cutover broke /close and silently degraded bon's session-start hook.
+    # NB: for some plugins (e.g. batterie) every script runs from SOURCE —
+    # CI runs scripts/batterie-lint.py from the checkout, /batterie:publish
+    # runs scripts/publish.py from ~/repos — so their vendored scripts/ is
+    # harmless dead weight. Kept anyway: the copy-list and the parity guard
+    # below are deliberately uniform, and special-casing one plugin to strip
+    # dead weight would mean exempting it from the guard that protects the
+    # plugins whose scripts DO run vendored. Not worth the assembler risk.
     for item in commands skills agents hooks scripts .mcp.json CLAUDE.md instructions.md; do
       if [ -e "$src/$item" ]; then
         if [ -d "$src/$item" ]; then

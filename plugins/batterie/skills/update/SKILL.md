@@ -96,17 +96,20 @@ Three batterie plugins ship CLI tools installed via `uv tool install`:
 | passe | `passe` | `~/repos/spm1001/passe` | |
 | todoist-gtd | `todoist` | `~/repos/spm1001/todoist-gtd` | |
 
-**Install from the source repo, not `installPath`.** Post-cutover the marketplace vendors only skills/hooks/CLAUDE.md for skill plugins — there is **no `pyproject.toml`** in the plugin cache, so `uv tool install <installPath>` fails with *"does not appear to be a Python project"*. The installable package lives in the source repo (`~/repos/spm1001/<repo>`), which is the canonical source of truth for these CLIs.
+**Install from source, never from `installPath` or PyPI.** Post-cutover the marketplace vendors only skills/hooks/CLAUDE.md for skill plugins — there is **no `pyproject.toml`** in the plugin cache, so `uv tool install <installPath>` fails with *"does not appear to be a Python project"*. The bare PyPI name is **not** a fallback either — none of these CLIs are published to PyPI (`uv tool install bon[dolt]` → *"unsatisfiable"*). Install from the source repo, preferring a local working tree and falling back to git:
+
+- **Local** (fast; dev machines with `~/repos`): `uv tool install "~/repos/spm1001/<repo>[<extras>]"`
+- **Git** (portable; fresh users, the Mac, Cowork — anything without `~/repos`): `uv tool install "<pkg>[<extras>] @ git+https://github.com/spm1001/<repo>"` — PEP 508 form, extras go **before** the `@`.
 
 For each plugin in the table:
 1. Read the plugin's `version` from the JSON above (`plugins["bon@batterie"][0]["version"]`) — used only to detect drift.
 2. Compare against the CLI version shown in the "before" snapshot above.
-3. If they differ (or the CLI is not in PATH), reinstall from the **source repo** in the table:
+3. If they differ (or the CLI is not in PATH), reinstall — pick the local working tree if `~/repos/spm1001/<repo>` exists, else the git source:
    ```
-   uv cache clean <cli_name> --force && uv tool install "<source_repo>[<extras>]" --force --reinstall
+   uv cache clean <cli_name> --force && uv tool install "<source-spec>" --force --reinstall
    ```
-   e.g. `uv tool install "~/repos/spm1001/bon[dolt]" --force --reinstall`. Always include extras from the table (bon is always `[dolt]` — PyMySQL is tiny and harmless; always installing it avoids silent breakage when any project uses the Dolt backend). The `--force` on `uv cache clean` prevents blocking on lock contention from other uv processes (e.g. marketplace refresh). Report success or failure.
-4. If the source repo isn't present (a machine without `~/repos`, or a Cowork sandbox), the CLI can't be reinstalled from source here — report that and show the manual command rather than failing. Cowork CLI provisioning is a separate path (`bds-dacase`), not `uv tool` against local repos.
+   e.g. local `uv tool install "~/repos/spm1001/bon[dolt]" --force --reinstall`, or fresh `uv tool install "bon[dolt] @ git+https://github.com/spm1001/bon" --force --reinstall`. Always include extras from the table (bon is always `[dolt]` — PyMySQL is tiny and harmless; always installing it avoids silent breakage when any project uses the Dolt backend). The `--force` on `uv cache clean` prevents blocking on lock contention from other uv processes (e.g. marketplace refresh). Report success or failure.
+4. The git source works anywhere with network, so a machine without `~/repos` (a fresh user, the Mac) is no longer a dead end — fall back to it rather than failing. Cowork additionally has its own skill-level provisioning path (`bds-dacase`).
 
 ### 5. Summarise
 

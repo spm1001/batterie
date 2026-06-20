@@ -1,6 +1,6 @@
 {
   "name": "todoist-gtd",
-  "version": "0.4.5",
+  "version": "0.4.6",
   "description": "Todoist CLI with GTD coaching \u2014 outcomes, weekly review, pattern detection",
   "author": {
     "name": "Sameer Modha",

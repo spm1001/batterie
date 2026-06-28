@@ -12,13 +12,21 @@ of the three are already automated:
     triggers the Desktop/org re-sync) is owned by assemble.yml CI: daily at
     07:00 UTC + workflow_dispatch, hardened with the version-ratchet quarantine.
   - PULL (bring THIS machine current) is owned by the /batterie:update skill.
-  - PUSH (bump plugin.json, commit, push the source repo, trigger assemble,
-    confirm it went green) was owned by nobody. That manual gap is this script.
+  - PUSH (bump the SUITE version, commit, push the source repo + the suite
+    bump, trigger assemble, confirm it went green) was owned by nobody. That
+    manual gap is this script.
 
 So publish.py is the PUSH engine, with the targeted single-plugin PULL bolted
 on the end (so one command takes an edit all the way to live-on-this-machine).
 It operates on the source repo via the cwd, and on the marketplace via `gh`
 against the spm1001/batterie remote — no local batterie checkout needed.
+
+Single-version cutover (bds-suwoho): every published plugin carries ONE suite
+version, stamped by the assembler. So the bump target is ALWAYS the suite
+version (batterie-de-savoir's plugin.json) — never the cwd repo's. Publishing
+a non-batterie repo is a 2-repo push: the content change in cwd, then the
+suite bump in batterie-de-savoir. Publishing batterie-de-savoir itself is one
+commit (the suite bump IS its content change).
 
   uv run --script publish.py [--patch|--minor|--major] [-m MSG]
                              [--no-wait] [--no-pull] [--dry-run] [--repo DIR]
@@ -43,6 +51,10 @@ from pathlib import Path
 
 BATTERIE_REMOTE = "spm1001/batterie"
 WORKFLOW = "assemble.yml"
+# The suite version lives in batterie-de-savoir's plugin.json — and this
+# script ships in that repo (scripts/publish.py), so its own location finds
+# the suite repo without a hardcoded path. Overridable via --suite-repo for tests.
+SUITE_REPO_DEFAULT = Path(__file__).resolve().parent.parent
 
 # Plugins that ship a uv-installed CLI. repo dir -> (cli binary, extras).
 # Mirrors the table in skills/update/SKILL.md — the canonical "all plugins"
@@ -157,6 +169,9 @@ def main() -> int:
     ap.add_argument("-m", "--message", help="commit message (default: chore(<plugin>): publish <version>)")
     ap.add_argument("--repo", type=Path, default=Path.cwd(),
                     help="source repo to publish (default: cwd)")
+    ap.add_argument("--suite-repo", type=Path, default=SUITE_REPO_DEFAULT,
+                    help="repo holding the suite version, the bump target "
+                         "(default: this script's own repo; override for tests)")
     ap.add_argument("--no-wait", action="store_true",
                     help="trigger assemble but don't watch the run to green")
     ap.add_argument("--no-pull", action="store_true",
@@ -167,44 +182,89 @@ def main() -> int:
     dry = args.dry_run
 
     repo = args.repo.resolve()
+    suite_repo = args.suite_repo.resolve()
     pj_path = repo / ".claude-plugin" / "plugin.json"
     if not pj_path.exists():
         die(f"no .claude-plugin/plugin.json under {repo} — not a plugin source repo")
-
-    pj_text = pj_path.read_text()
-    pj = json.loads(pj_text)
-    name = pj["name"]
-    current = pj["version"]
-    new = bump_version(current, args.level)
-    message = args.message or f"chore({name}): publish {new}"
+    name = json.loads(pj_path.read_text())["name"]
     cli = CLI_REPOS.get(repo.name)
 
-    print(f"Publish {name}: {current} -> {new}  ({args.level})")
-    print(f"  repo:    {repo}")
+    # Single-version cutover (bds-suwoho): the bump target is ALWAYS the suite
+    # version, which lives in batterie-de-savoir's plugin.json — never the cwd
+    # repo's. The assembler stamps every vendored plugin to this one number, so
+    # source repos' own plugin.json versions are local-dev-only: publishing bon
+    # bumps the SUITE, not bon.
+    suite_pj_path = suite_repo / ".claude-plugin" / "plugin.json"
+    if not suite_pj_path.exists():
+        die(f"no .claude-plugin/plugin.json under suite repo {suite_repo}")
+    suite_text = suite_pj_path.read_text()
+    suite_current = json.loads(suite_text)["version"]
+    suite_new = bump_version(suite_current, args.level)
+    is_suite = (repo == suite_repo)
+
+    message = args.message or f"chore({name}): publish suite {suite_new}"
+    suite_bump_msg = (f"chore(batterie): bump suite version to {suite_new}"
+                      + ("" if is_suite else f" (carrying {name})"))
+
+    print(f"Publish {name}: suite {suite_current} -> {suite_new}  ({args.level})")
+    if is_suite:
+        print(f"  repo:    {repo}  (== suite repo: one commit carries content + bump)")
+    else:
+        print(f"  content: {repo}")
+        print(f"  suite:   {suite_repo}  (2-repo push: content first, then suite bump)")
     print(f"  commit:  {message!r}")
     print(f"  wait:    {'no' if args.no_wait else 'watch to green'}")
     print(f"  pull:    {'no' if args.no_pull else ('this machine' + (f' + reinstall {cli[0]}' if cli else ''))}")
 
-    # What would be committed — loud, because we stage everything (-A) so a
-    # one-step publish sweeps the content change + the bump together. The skill
-    # runs --dry-run first and shows this to a human before the real run.
+    # What would be committed in the CONTENT repo — loud, because we stage
+    # everything (-A) THERE so a one-step publish sweeps the content change.
+    # The skill runs --dry-run first and shows this to a human before the real
+    # run (bds-fifuko: never sweep unrelated WIP). The case-B suite bump is a
+    # TARGETED plugin.json-only commit, so it can never sweep the suite repo's
+    # own WIP — only the content repo gets -A.
     status = subprocess.run(["git", "-C", str(repo), "status", "--short"],
                             text=True, capture_output=True, check=False)
     pending = status.stdout.rstrip()
-    print("  staging (git add -A) — these files plus the version bump:")
+    print("  staging (git add -A in content repo) — these files plus the suite bump:")
     print("\n".join(f"    {ln}" for ln in pending.splitlines()) or "    (only the version bump)")
 
     # --- PUSH ---
     print("\n[push]")
-    if dry:
-        print(f"  DRY  write version {new} into {pj_path}")
+    if is_suite:
+        # One repo: the suite bump IS this repo's plugin.json; -A sweeps it
+        # together with the content change in a single commit.
+        if dry:
+            print(f"  DRY  write suite version {suite_new} into {suite_pj_path}")
+        else:
+            suite_pj_path.write_text(replace_version(suite_text, suite_new))
+        checked(run(["git", "-C", str(repo), "add", "-A"], dry=dry), "git add")
+        checked(run(["git", "-C", str(repo), "commit", "-m", message], dry=dry,
+                    capture=True), "git commit")
+        checked(run(["git", "-C", str(repo), "push"], dry=dry, capture=True), "git push")
     else:
-        pj_path.write_text(replace_version(pj_text, new))
-
-    checked(run(["git", "-C", str(repo), "add", "-A"], dry=dry), "git add")
-    checked(run(["git", "-C", str(repo), "commit", "-m", message], dry=dry,
-                capture=True), "git commit")
-    checked(run(["git", "-C", str(repo), "push"], dry=dry, capture=True), "git push")
+        # Two repos, content FIRST (bds-kodoli): if the suite bump (b) then
+        # fails, the assembler quarantines the drifted content — a loud, caught
+        # half-fail. The reverse (suite bumped, content unpushed) only re-ships
+        # byte-identical content — harmless. So ordering makes the safe failure.
+        # (a) content repo — full -A sweep of the edit being shipped.
+        if pending:
+            checked(run(["git", "-C", str(repo), "add", "-A"], dry=dry), "git add (content)")
+            checked(run(["git", "-C", str(repo), "commit", "-m", message], dry=dry,
+                        capture=True), "git commit (content)")
+            checked(run(["git", "-C", str(repo), "push"], dry=dry, capture=True), "git push (content)")
+        else:
+            print(f"  (no pending content in {repo.name} — suite bump only)")
+        # (b) suite repo — TARGETED plugin.json-only commit (git commit -- PATH
+        # commits that path's worktree state, ignoring any other staged/dirty
+        # files in the suite repo; never -A here).
+        suite_rel = str(suite_pj_path.relative_to(suite_repo))
+        if dry:
+            print(f"  DRY  write suite version {suite_new} into {suite_pj_path}")
+        else:
+            suite_pj_path.write_text(replace_version(suite_text, suite_new))
+        checked(run(["git", "-C", str(suite_repo), "commit", "-m", suite_bump_msg,
+                     "--", suite_rel], dry=dry, capture=True), "git commit (suite bump)")
+        checked(run(["git", "-C", str(suite_repo), "push"], dry=dry, capture=True), "git push (suite)")
 
     print("\n[assemble]")
     trigger_epoch = time.time()

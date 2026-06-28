@@ -3,10 +3,13 @@
 # Copies .claude-plugin/ directories from each source repo.
 # Run from the repo root: ./assemble.sh
 #
+# Every vendored plugin is stamped with ONE suite version (the batterie/suite
+# plugin's — bds-suwoho), so all published plugins carry an identical number.
+#
 # Failure model is two-tier. STRUCTURAL faults (husk/parity guard, manifest
 # invariant, MCP entry-point) hard-exit 1 immediately — corrupt content is
-# never published. A VERSION-RATCHET lag (content changed but plugin.json
-# version didn't) is QUARANTINED, not fatal: the laggard's vendored dir is
+# never published. A VERSION-RATCHET lag (content changed but the suite
+# version didn't bump) is QUARANTINED, not fatal: the laggard's vendored dir is
 # reverted to last-published and named in a sentinel file
 # ($ASSEMBLE_QUARANTINE_FILE, default /tmp/assemble-quarantine.txt); the run
 # still exits 0 so the healthy plugins publish, and assemble.yml's final step
@@ -37,7 +40,41 @@ todoist-gtd:todoist-gtd
 # dir for an unmapped plugin, so retiring one means removing it from this
 # list, marketplace.json, and plugins/ together.
 
-echo "Assembling plugins from $SOURCE_DIR"
+# The single suite version (bds-suwoho): one number stamped onto every
+# vendored plugin so all published plugins carry an identical version. It
+# lives in the batterie/suite plugin's plugin.json; source repos keep their
+# own plugin.json versions for local dev + the CLI footnote, but those are
+# overwritten in the vendored copies below. BATTERIE_SRC_REPO is read from
+# the PLUGINS map so there's no second hardcoding of the source repo name.
+BATTERIE_SRC_REPO=$(echo "$PLUGINS" | awk -F: '$1=="batterie"{print $2}')
+SUITE_VERSION=$(python3 -c "import json; print(json.load(open('$SOURCE_DIR/$BATTERIE_SRC_REPO/.claude-plugin/plugin.json'))['version'])")
+# Last-published suite version, for the suite-level ratchet below: the
+# committed batterie plugin in HEAD is the canonical holder. Empty on a fresh
+# repo (no HEAD yet) — the ratchet treats empty as "can't compare, allow".
+OLD_SUITE_VERSION=$(git -C "$BATTERIE_DIR" show "HEAD:plugins/batterie/.claude-plugin/plugin.json" 2>/dev/null \
+  | python3 -c "import json,sys; print(json.load(sys.stdin)['version'])" 2>/dev/null || echo "")
+
+# Stamp a vendored plugin.json's version to the suite version via a TARGETED
+# string edit — NOT json.dumps, which reformats every array (self.md
+# surgical-JSON note). Each plugin.json carries exactly one top-level
+# "version"; the regex rewrites only that value, leaving the file byte-for-
+# byte elsewhere. Fails LOUD if the field isn't matched exactly once: a silent
+# no-op stamp would let a plugin ship at the wrong number.
+stamp_version() {
+  python3 - "$1" "$2" <<'PYEOF'
+import re, sys
+path, new = sys.argv[1], sys.argv[2]
+text = open(path).read()
+text2, n = re.subn(r'("version"\s*:\s*")[^"]*(")',
+                   lambda m: m.group(1) + new + m.group(2), text, count=1)
+if n != 1:
+    sys.stderr.write(f"FAIL: stamp_version matched {n} version fields in {path} (expected 1)\n")
+    sys.exit(1)
+open(path, "w").write(text2)
+PYEOF
+}
+
+echo "Assembling plugins from $SOURCE_DIR (suite version $SUITE_VERSION, last published ${OLD_SUITE_VERSION:-none})"
 
 RATCHET_FAILURES=""
 QUARANTINED=""
@@ -149,39 +186,51 @@ print('yes' if d.get('mcpServers') else 'no')
     fi
   done
 
+  # Single-version stamp (bds-suwoho): overwrite this plugin's vendored
+  # plugin.json version with the suite version, so every published plugin
+  # carries one identical number. The source repo's own version is untouched
+  # (local-dev / CLI footnote only). Done here, after vendoring + the parity
+  # guard, so the version read below reflects the stamp.
+  stamp_version "$dest/.claude-plugin/plugin.json" "$SUITE_VERSION"
+
   # Version + source SHA for the status line below — so any future "why is
   # X stale?" is answerable from the commit message alone (the May 2026
-  # drift was undiagnosable because runs logged neither).
+  # drift was undiagnosable because runs logged neither). version now reads
+  # the stamped value (== suite version) — a free check the stamp landed.
   version=$(python3 -c "import json; print(json.load(open('$dest/.claude-plugin/plugin.json'))['version'])" 2>/dev/null || echo "?")
   sha=$(git -C "$src" rev-parse --short HEAD 2>/dev/null || echo "?")
 
-  # Version ratchet: content changed but version didn't → the source repo
-  # forgot to bump plugin.json. Without this, clients see "no update
-  # available" forever while content silently drifts under them.
-  # git status --porcelain (not git diff) — diff is blind to new files.
-  # Escape hatch for deliberate local runs: ASSEMBLE_NO_RATCHET=1.
+  # Suite-level version ratchet (bds-suwoho): the whole suite ships under ONE
+  # version. If a plugin's vendored content changed but the suite version
+  # wasn't bumped, clients would see "no update available" forever while
+  # content drifts under them. So the gate is: this plugin's content changed
+  # AND the suite version still equals the last-published suite version → the
+  # source forgot to bump the suite. The per-plugin content check stays (so
+  # only the drifted plugins are quarantined), but the version comparison is
+  # suite-wide, read once above (SUITE_VERSION vs OLD_SUITE_VERSION).
+  # git status --porcelain (not git diff) — diff is blind to new files. The
+  # stamped plugin.json is filtered out (the stamp always rewrites it, so it's
+  # never itself "content drift"). Escape hatch for local runs: ASSEMBLE_NO_RATCHET=1.
   #
-  # QUARANTINE, don't abort (2026-06-17, bds-pujaki): on a ratchet trip we
-  # revert THIS plugin's vendored dir to its last-published state and record
-  # it, instead of failing the whole run. Healthy plugins still publish; a
-  # final assemble.yml step fails the run RED naming the laggards. Reverting
-  # to HEAD is safe for the post-loop structural invariants (marketplace,
-  # MCP) — last-published already satisfied them. Applies ONLY to the
-  # version ratchet; the husk/parity guard above stays a hard exit.
+  # QUARANTINE, don't abort (2026-06-17, bds-pujaki): on a trip we revert THIS
+  # plugin's vendored dir to its last-published state and record it, instead
+  # of failing the whole run. Healthy plugins still publish; a final
+  # assemble.yml step fails the run RED naming the laggards. Reverting to HEAD
+  # is safe for the post-loop structural invariants (marketplace, MCP) —
+  # last-published already satisfied them. Applies ONLY to the version
+  # ratchet; the husk/parity guard above stays a hard exit.
   quarantined_this=0
   if [ -z "${ASSEMBLE_NO_RATCHET:-}" ]; then
-    old_version=$(git -C "$BATTERIE_DIR" show "HEAD:plugins/$plugin/.claude-plugin/plugin.json" 2>/dev/null \
-      | python3 -c "import json,sys; print(json.load(sys.stdin)['version'])" 2>/dev/null || echo "")
     content_changes=$(git -C "$BATTERIE_DIR" status --porcelain -- "plugins/$plugin" \
       | grep -v '\.claude-plugin/plugin\.json' | grep -c . || true)
-    if [ -n "$old_version" ] && [ "$content_changes" -gt 0 ] && [ "$version" = "$old_version" ]; then
+    if [ -n "$OLD_SUITE_VERSION" ] && [ "$content_changes" -gt 0 ] && [ "$SUITE_VERSION" = "$OLD_SUITE_VERSION" ]; then
       # Restore the laggard's vendored dir to EXACTLY last-published:
       # checkout restores tracked files; clean -fd drops newly-added drift
       # files checkout leaves behind (porcelain counts new files, so the
       # revert must drop them too — else `git add -A` would republish them).
       git -C "$BATTERIE_DIR" checkout HEAD -- "plugins/$plugin"
       git -C "$BATTERIE_DIR" clean -fdq -- "plugins/$plugin"
-      RATCHET_FAILURES="${RATCHET_FAILURES}  $plugin: $content_changes content change(s) but version still $version — bump .claude-plugin/plugin.json in $repo\n"
+      RATCHET_FAILURES="${RATCHET_FAILURES}  $plugin: $content_changes content change(s) but suite version still $SUITE_VERSION — bump the suite version ($BATTERIE_SRC_REPO/.claude-plugin/plugin.json)\n"
       QUARANTINED="${QUARANTINED}${plugin}\n"
       quarantined_this=1
     fi

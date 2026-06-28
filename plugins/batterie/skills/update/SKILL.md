@@ -11,28 +11,63 @@ allowed-tools: ["Bash", "Read"]
 !`python3 << 'PYEOF'
 import json, os, subprocess, shutil
 
-plugins_path = os.path.join(os.path.expanduser("~"), ".claude", "plugins", "installed_plugins.json")
-plugins_file = json.load(open(plugins_path))
-plugins = plugins_file.get("plugins", {})
+# Default to the real plugins dir. BATTERIE_PLUGINS_DIR is a test seam (lets the
+# regression test point discovery at a fixture); unset in normal use.
+PLUGINS = os.environ.get("BATTERIE_PLUGINS_DIR") or os.path.join(
+    os.path.expanduser("~"), ".claude", "plugins")
 
-batterie = {k: v[0] for k, v in plugins.items() if k.endswith("@batterie")}
+def is_batterie_family(repo):
+    # The suite's marketplaces are spm1001/batterie (public) plus spm1001/batterie-*
+    # (e.g. a private Directory flavour). Match by source repo, not by "contains the
+    # batterie plugin": someone may cherry-pick a single plugin from a second
+    # batterie-family marketplace WITHOUT installing the batterie plugin from it, so
+    # plugin-membership is not a sufficient test. Source-repo matching also survives
+    # plugin renames. The pattern stays generic — no specific marketplace is named.
+    return repo == "spm1001/batterie" or repo.startswith("spm1001/batterie-")
 
-if not batterie:
+def family_marketplaces():
+    # Read CC's marketplace-name -> source-repo registry. Fall back to the public
+    # marketplace name if it can't be read, so single-marketplace users keep
+    # working (only a private flavour would be missed, in that rare case).
+    try:
+        reg = json.load(open(os.path.join(PLUGINS, "known_marketplaces.json")))
+    except Exception:
+        return {"batterie"}
+    fam = {name for name, info in reg.items()
+           if is_batterie_family((info.get("source") or {}).get("repo", ""))}
+    return fam or {"batterie"}
+
+plugins = json.load(open(os.path.join(PLUGINS, "installed_plugins.json"))).get("plugins", {})
+fam = family_marketplaces()
+mkt = lambda key: key.rsplit("@", 1)[1] if "@" in key else ""
+suite_plugins = {k: v[0] for k, v in plugins.items() if mkt(k) in fam and v}
+
+if not suite_plugins:
     print("No batterie plugins installed.")
 else:
-    suite = batterie.get("batterie@batterie", {}).get("version")
+    markets = sorted({mkt(k) for k in suite_plugins})
+    multi = len(markets) > 1
+    base_names = {k.rsplit("@", 1)[0] for k in suite_plugins}
+
+    suite = next((i["version"] for k, i in suite_plugins.items()
+                  if k.rsplit("@", 1)[0] == "batterie"), None)
     if suite:
         print(f"📦 Batterie suite v{suite}\n")
-    print(f"Found {len(batterie)} batterie plugin(s):\n")
-    for key, info in sorted(batterie.items()):
-        name = key.split("@")[0]
-        print(f"- {name}: v{info['version']} (sha: {info['gitCommitSha'][:12]})")
+    if multi:
+        print(f"Marketplaces to refresh: {', '.join(markets)}\n")
+    print(f"Found {len(suite_plugins)} batterie plugin(s):\n")
+    for key, info in sorted(suite_plugins.items()):
+        # Show the full name@marketplace key only when more than one marketplace
+        # is in play, so the single-marketplace view is unchanged.
+        label = key if multi else key.rsplit("@", 1)[0]
+        print(f"- {label}: v{info['version']} (sha: {info['gitCommitSha'][:12]})")
 
-    # CLI version check
+    # CLI version check — keyed by plugin base-name (a CLI's source repo is the
+    # same whichever marketplace shipped the plugin).
     cli_tools = {"bon": "bon", "passe": "passe", "todoist-gtd": "todoist"}
     print("\nCLI tool versions:")
     for plugin_name, cli_name in cli_tools.items():
-        if f"{plugin_name}@batterie" in batterie:
+        if plugin_name in base_names:
             path = shutil.which(cli_name)
             if path:
                 try:
@@ -49,23 +84,25 @@ PYEOF`
 
 Update every batterie plugin listed above. Follow these steps exactly:
 
-### 1. Refresh the marketplace
+### 1. Refresh each batterie-family marketplace
+
+Refresh every marketplace shown above. For each marketplace name listed, run:
 
 ```
-claude plugin marketplace update batterie
+claude plugin marketplace update <marketplace>
 ```
 
-This pulls the latest marketplace index so plugin updates can see new versions. Without this, `claude plugin update` compares against a stale index.
+In the common single-marketplace case there's just one — `batterie` — so this is a single `claude plugin marketplace update batterie`. Refreshing pulls the latest index so plugin updates can see new versions; without it, `claude plugin update` compares against a stale index.
 
-### 2. Update each plugin
+### 2. Update each plugin from its own marketplace
 
-For each plugin shown above, run:
+For each plugin shown above, update it by its **full `<name>@<marketplace>` key** — the marketplace suffix is part of the listing (e.g. `<plugin>@<marketplace>`):
 
 ```
-claude plugin update <name>@batterie
+claude plugin update <name>@<marketplace>
 ```
 
-Run them sequentially — each must complete before the next starts. Report the output of each.
+A plugin must be updated from the marketplace it was installed from, so keep the suffix. In the single-marketplace case every key ends `@batterie` (e.g. `claude plugin update bon@batterie`). Run them sequentially — each must complete before the next starts. Report the output of each.
 
 ### 3. Check what changed
 
@@ -105,7 +142,7 @@ Three batterie plugins ship CLI tools installed via `uv tool install`:
 - **Git** (portable; fresh users, the Mac, Cowork — anything without `~/repos`): `uv tool install "<pkg>[<extras>] @ git+https://github.com/spm1001/<repo>"` — PEP 508 form, extras go **before** the `@`.
 
 For each plugin in the table:
-1. Read the plugin's `version` from the JSON above (`plugins["bon@batterie"][0]["version"]`) — used only to detect drift.
+1. Read the plugin's `version` from the JSON above using its actual installed key (the CLI plugins ship from the public marketplace, so `plugins["bon@batterie"][0]["version"]`) — used only to detect drift.
 2. Compare against the CLI version shown in the "before" snapshot above.
 3. If they differ (or the CLI is not in PATH), reinstall — pick the local working tree if `~/repos/spm1001/<repo>` exists, else the git source:
    ```
@@ -116,7 +153,7 @@ For each plugin in the table:
 
 ### 5. Summarise
 
-Lead with the **Batterie suite version** — read the post-update `batterie@batterie` version from `installed_plugins.json` and report it as the headline (e.g. `📦 Batterie suite v1.0.0`), since that's the single number the user quotes. Then:
+Lead with the **Batterie suite version** — read the post-update version of the `batterie` plugin from `installed_plugins.json` (its `batterie@<marketplace>` key, normally `batterie@batterie`) and report it as the headline (e.g. `📦 Batterie suite v1.0.0`), since that's the single number the user quotes. Then:
 
 If any plugins were updated:
 ```

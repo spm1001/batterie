@@ -9,33 +9,59 @@ allowed-tools: ["Bash"]
 !`python3 << 'PYEOF'
 import json, os, subprocess, shutil
 
-plugins_path = os.path.join(os.path.expanduser("~"), ".claude", "plugins", "installed_plugins.json")
+# Default to the real plugins dir. BATTERIE_PLUGINS_DIR is a test seam; unset in normal use.
+PLUGINS = os.environ.get("BATTERIE_PLUGINS_DIR") or os.path.join(
+    os.path.expanduser("~"), ".claude", "plugins")
+
+def is_batterie_family(repo):
+    # Suite marketplaces: spm1001/batterie (public) + spm1001/batterie-* (e.g. a
+    # private flavour). Match by source repo so a cherry-picked single plugin and
+    # plugin renames still resolve — not by "contains the batterie plugin".
+    return repo == "spm1001/batterie" or repo.startswith("spm1001/batterie-")
+
+def family_marketplaces():
+    try:
+        reg = json.load(open(os.path.join(PLUGINS, "known_marketplaces.json")))
+    except Exception:
+        return {"batterie"}  # registry unreadable: fall back to the public name
+    fam = {name for name, info in reg.items()
+           if is_batterie_family((info.get("source") or {}).get("repo", ""))}
+    return fam or {"batterie"}
+
 try:
-    plugins = json.load(open(plugins_path)).get("plugins", {})
+    plugins = json.load(open(os.path.join(PLUGINS, "installed_plugins.json"))).get("plugins", {})
 except Exception as e:
     print(f"Could not read installed plugins ({e}).")
     plugins = {}
 
-# Keyed <name>@batterie; take the user-scope entry [0].
-batterie = {k.split("@")[0]: v[0] for k, v in plugins.items() if k.endswith("@batterie") and v}
+fam = family_marketplaces()
+mkt = lambda key: key.rsplit("@", 1)[1] if "@" in key else ""
+# full key -> user-scope entry, for batterie-family plugins only
+installed = {k: v[0] for k, v in plugins.items() if mkt(k) in fam and v}
+multi = len({mkt(k) for k in installed}) > 1
+base_names = {k.rsplit("@", 1)[0] for k in installed}
 
-suite = batterie.get("batterie", {}).get("version")
+suite = next((i.get("version") for k, i in installed.items()
+              if k.rsplit("@", 1)[0] == "batterie"), None)
 if suite:
     print(f"📦  Batterie suite  v{suite}")
 else:
-    print("📦  Batterie suite  — not installed (no batterie@batterie plugin found)")
+    print("📦  Batterie suite  — not installed (no batterie plugin found)")
 
-if batterie:
+if installed:
     print("\nPlugins:")
-    for name, info in sorted(batterie.items()):
+    for key, info in sorted(installed.items()):
+        name = key.rsplit("@", 1)[0]
+        # annotate the marketplace only when more than one is present
+        label = key if multi else name
         marker = "  (suite)" if name == "batterie" else ""
-        print(f"  - {name}: v{info.get('version', '?')}{marker}")
+        print(f"  - {label}: v{info.get('version', '?')}{marker}")
 
-# CLI tools shipped by some plugins
+# CLI tools shipped by some plugins (keyed by plugin base-name)
 cli_tools = {"bon": "bon", "passe": "passe", "todoist-gtd": "todoist"}
 header = False
 for plugin_name, cli_name in cli_tools.items():
-    if plugin_name in batterie and shutil.which(cli_name):
+    if plugin_name in base_names and shutil.which(cli_name):
         if not header:
             print("\nCLI tools:")
             header = True

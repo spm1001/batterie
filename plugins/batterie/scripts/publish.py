@@ -239,6 +239,14 @@ def main() -> int:
         print("\n[pull] skipped (--no-pull). When ready: /batterie:update")
     else:
         print("\n[pull] bringing this machine current")
+        # Deliberately pinned to the public "batterie" marketplace — NOT the same
+        # hardcode the /batterie:update and /batterie:version skills were freed of
+        # (bds-lodita). Those are the *read/pull* side: they must see every plugin
+        # installed locally, across any batterie-family marketplace. This is the
+        # *push* side — it pushed one plugin to the single remote hardcoded above
+        # (BATTERIE_REMOTE) and pulls that same plugin back from that marketplace.
+        # Publishing to a private flavour would be a different remote + workflow
+        # (a separate concern); generalising only this line would be incoherent.
         checked(run(["claude", "plugin", "marketplace", "update", "batterie"],
                     dry=dry, capture=True), "marketplace update")
         checked(run(["claude", "plugin", "update", f"{name}@batterie"],

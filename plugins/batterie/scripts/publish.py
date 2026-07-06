@@ -41,6 +41,7 @@ Exit codes:
 """
 
 import argparse
+import calendar
 import json
 import re
 import shlex
@@ -144,7 +145,11 @@ def find_run_id(after_epoch: float, *, attempts: int = 15, delay: float = 2.0) -
         if cp.returncode == 0:
             for r in sorted(json.loads(cp.stdout or "[]"),
                             key=lambda r: r["createdAt"], reverse=True):
-                created = time.mktime(time.strptime(
+                # timegm, NOT mktime: createdAt is UTC ("Z"), and mktime reads
+                # the struct as LOCAL time — correct on a UTC box (hezza),
+                # ~3600s early on a BST one (tube), where every run then fails
+                # the freshness gate and the watch dies (seen 2x, 2026-07-06).
+                created = calendar.timegm(time.strptime(
                     r["createdAt"], "%Y-%m-%dT%H:%M:%SZ"))
                 # 30s grace: trigger->register lag plus clock skew.
                 if created >= after_epoch - 30:

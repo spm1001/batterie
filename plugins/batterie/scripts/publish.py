@@ -253,7 +253,22 @@ def main() -> int:
                         capture=True), "git commit (content)")
             checked(run(["git", "-C", str(repo), "push"], dry=dry, capture=True), "git push (content)")
         else:
-            print(f"  (no pending content in {repo.name} — suite bump only)")
+            # No worktree changes — but a careful caller may have COMMITTED the
+            # content by hand already. Skipping the push then ships a suite bump
+            # while origin still holds the OLD content, and the eventual content
+            # push drifts under an unbumped suite → ratchet quarantine at the
+            # next assemble (seen live 2026-07-06: mise wheel fix vs 1.2.3).
+            # Push anything already committed but unpushed.
+            probe = subprocess.run(
+                ["git", "-C", str(repo), "rev-list", "@{u}..HEAD", "--count"],
+                text=True, capture_output=True, check=False,
+            )
+            ahead = (probe.stdout or "0").strip() if probe.returncode == 0 else "0"
+            if ahead != "0":
+                print(f"  ({repo.name}: {ahead} pre-committed unpushed commit(s) — pushing)")
+                checked(run(["git", "-C", str(repo), "push"], dry=dry, capture=True), "git push (content)")
+            else:
+                print(f"  (no pending content in {repo.name} — suite bump only)")
         # (b) suite repo — TARGETED plugin.json-only commit (git commit -- PATH
         # commits that path's worktree state, ignoring any other staged/dirty
         # files in the suite repo; never -A here).

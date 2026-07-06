@@ -1,6 +1,6 @@
 {
   "name": "mise",
-  "version": "1.2.6",
+  "version": "1.2.7",
   "description": "Google Workspace MCP server \u2014 search Drive, fetch Gmail, act on documents",
   "author": {
     "name": "Sameer Modha",

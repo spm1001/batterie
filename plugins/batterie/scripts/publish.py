@@ -246,11 +246,36 @@ def main() -> int:
         # fails, the assembler quarantines the drifted content — a loud, caught
         # half-fail. The reverse (suite bumped, content unpushed) only re-ships
         # byte-identical content — harmless. So ordering makes the safe failure.
+        # (a0) Lazy version convergence (bds-jomiwa): stamp the published
+        # repo's own plugin.json to the suite version being minted, so its
+        # CLI --version reads "the suite release that last changed this
+        # repo". Only the repo BEING PUBLISHED is stamped — never siblings
+        # (that would be the every-release multi-repo dance the japoca
+        # decision rejected). The assembler stamps the VENDORED copy anyway;
+        # this reaches the SOURCE copy that hatchling reads for the CLI.
+        stamped = False
+        content_pj = repo / ".claude-plugin" / "plugin.json"
+        if content_pj.exists():
+            pj_text = content_pj.read_text()
+            if json.loads(pj_text).get("version") != suite_new:
+                if dry:
+                    print(f"  DRY  stamp suite version {suite_new} into {content_pj}")
+                else:
+                    content_pj.write_text(replace_version(pj_text, suite_new))
+                stamped = True
         # (a) content repo — full -A sweep of the edit being shipped.
         if pending:
             checked(run(["git", "-C", str(repo), "add", "-A"], dry=dry), "git add (content)")
             checked(run(["git", "-C", str(repo), "commit", "-m", message], dry=dry,
                         capture=True), "git commit (content)")
+            checked(run(["git", "-C", str(repo), "push"], dry=dry, capture=True), "git push (content)")
+        elif stamped:
+            # Tree was clean apart from the stamp we just wrote: commit it
+            # TARGETED (never -A on a tree the caller left clean — bds-fifuko).
+            # The push also carries any pre-committed unpushed content.
+            checked(run(["git", "-C", str(repo), "commit", "-m", message,
+                         "--", str(content_pj.relative_to(repo))], dry=dry,
+                        capture=True), "git commit (version stamp)")
             checked(run(["git", "-C", str(repo), "push"], dry=dry, capture=True), "git push (content)")
         else:
             # No worktree changes — but a careful caller may have COMMITTED the

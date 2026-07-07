@@ -64,7 +64,7 @@ else:
 
     # CLI version check — keyed by plugin base-name (a CLI's source repo is the
     # same whichever marketplace shipped the plugin).
-    cli_tools = {"bon": "bon", "passe": "passe", "todoist-gtd": "todoist"}
+    cli_tools = {"bon": "bon", "todoist-gtd": "todoist"}
     print("\nCLI tool versions:")
     for plugin_name, cli_name in cli_tools.items():
         if plugin_name in base_names:
@@ -128,13 +128,14 @@ Each plugin key maps to a **list** of installations (one per scope). Use `v[0]` 
 
 ### 4. Detect CLI drift — by commit, never by version number
 
-Three batterie plugins ship CLI tools installed via `uv tool install`:
+Two batterie plugins ship CLI tools installed via `uv tool install`:
 
 | Plugin | CLI binary | Package | Source repo | Extras |
 |--------|-----------|---------|-------------|--------|
 | bon | `bon` | `bon` | `spm1001/bon` | `[dolt]` |
-| passe | `passe` | `passe` | `spm1001/passe` | |
 | todoist-gtd | `todoist` | `todoist-gtd` | `spm1001/todoist-gtd` | |
+
+(passe left the suite 2026-07-07 — its CLI installs standalone and its shard/tunnel live in `spm1001/passe-partout`; this skill no longer manages it.)
 
 **Do NOT compare the plugin version against the CLI version.** Post-cutover (bds-suwoho) every vendored plugin.json carries the stamped **suite** version while each CLI reports its own source-repo number — those differ by design, so a version comparison fires a false reinstall on every run (bds-zojide / bds-japoca). The truthful drift signal is the **git commit**.
 

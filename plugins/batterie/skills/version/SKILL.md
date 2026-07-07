@@ -58,7 +58,7 @@ if installed:
         print(f"  - {label}: v{info.get('version', '?')}{marker}")
 
 # CLI tools shipped by some plugins (keyed by plugin base-name)
-cli_tools = {"bon": "bon", "passe": "passe", "todoist-gtd": "todoist"}
+cli_tools = {"bon": "bon", "todoist-gtd": "todoist"}
 header = False
 for plugin_name, cli_name in cli_tools.items():
     if plugin_name in base_names and shutil.which(cli_name):

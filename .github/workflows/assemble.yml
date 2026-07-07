@@ -117,17 +117,21 @@ jobs:
           git push origin main
 
       - name: Publish private batterie-home (bds-susugu)
+        id: home
         # Pushes the private output to spm1001/batterie-home over a write
         # deploy key. Both marketplaces thus update from the ONE assemble run
         # (bds-nagoru). Runs after the public push (so a private-side failure
         # never blocks the public bus) and before the quarantine-red step (a
         # quarantine day still publishes both, held at last-published).
-        # Skips cleanly when the key or the private output is absent.
+        # Skips cleanly when the key or the private output is absent — but
+        # reports state=skipped so the deadman ping below can starve, turning
+        # the silent skip into an alert after period+grace (bds-bidasi).
         env:
           DEPLOY_KEY: ${{ secrets.BATTERIE_HOME_DEPLOY_KEY }}
         run: |
           if [ -z "$DEPLOY_KEY" ] || [ ! -d batterie/dist/batterie-home ]; then
             echo "skip: deploy key or private output missing"
+            echo "state=skipped" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           mkdir -p ~/.ssh
@@ -140,6 +144,7 @@ jobs:
           cd /tmp/batterie-home
           if [ -z "$(git status --porcelain)" ]; then
             echo "batterie-home already current."
+            echo "state=current" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           echo "Changes detected in private output:"
@@ -149,6 +154,7 @@ jobs:
               -c user.email="github-actions[bot]@users.noreply.github.com" \
               commit -m "Reassemble batterie-home — $(date +%Y-%m-%d) (from spm1001/batterie ${GITHUB_SHA::7})"
           git push origin main
+          echo "state=pushed" >> "$GITHUB_OUTPUT"
 
       - name: Fail red on any quarantined plugin
         # Runs only after the healthy plugins have been committed and pushed
@@ -165,3 +171,39 @@ jobs:
             exit 1
           fi
           echo "No quarantined plugins — all assembled plugins published."
+
+      # ---- Deadman pings (bds-bidasi) -------------------------------------
+      # Pinged ONLY when the whole run is green (if: success() — so a red run,
+      # a quarantine day, or a dead schedule all starve the ping and
+      # Healthchecks emails after period 1d + grace 6h). A deadman catches
+      # what failure-emails can't: runs that never happen at all (e.g. GitHub
+      # auto-disabling the cron after 60 days of repo inactivity).
+      # URLs are capability tokens → Actions secrets, never committed.
+
+      - name: Deadman ping — assemble green (bds-bidasi)
+        if: success()
+        env:
+          HC: ${{ secrets.ASSEMBLE_HC_URL }}
+        run: |
+          if [ -z "$HC" ]; then
+            echo "::warning::ASSEMBLE_HC_URL secret not set — assemble deadman is NOT being fed"
+            exit 0
+          fi
+          curl -fsS -m 10 --retry 3 -o /dev/null "$HC" && echo "assemble deadman pinged"
+
+      - name: Deadman ping — batterie-home published (bds-bidasi)
+        # Starves when the private-push step skipped (missing deploy key /
+        # missing private output), even though that skip keeps the run green —
+        # the exact silent-stale mode bds-bidasi exists to catch. "current"
+        # counts as healthy: the private marketplace is fresh, nothing to push.
+        # Explicit allow-list (not != 'skipped') so an exit path that forgets
+        # to set state starves the ping rather than silently feeding it.
+        if: success() && (steps.home.outputs.state == 'pushed' || steps.home.outputs.state == 'current')
+        env:
+          HC: ${{ secrets.BATTERIE_HOME_HC_URL }}
+        run: |
+          if [ -z "$HC" ]; then
+            echo "::warning::BATTERIE_HOME_HC_URL secret not set — batterie-home deadman is NOT being fed"
+            exit 0
+          fi
+          curl -fsS -m 10 --retry 3 -o /dev/null "$HC" && echo "batterie-home deadman pinged"

@@ -8,6 +8,17 @@ todoist-gtd is a Python CLI for Todoist with GTD coaching. Two parts:
 - **CLI** (`todoist_gtd/`) — MCP-free Todoist API access, installed via `uv tool install` from the source repo (`~/repos/spm1001/todoist-gtd`, else `git+https`)
 - **Skill** (`SKILL.md` + `references/`) — GTD semantics and coaching
 
+## Versioning & releasing (suite-managed)
+
+todoist-gtd ships as part of the **Batterie de Savoir** suite, which carries **one suite-wide version**. So:
+
+- **Do NOT hand-bump `.claude-plugin/plugin.json` to release.** This repo's own `plugin.json` version is **local-dev-only** — the assembler stamps every published plugin to the suite version, overwriting it.
+- **Release via `/batterie:publish`** from this working tree — it bumps the suite version centrally and ships the change (a 2-repo push: this repo + the central suite bump). Never hand-run the assemble.
+- **A `CLAUDE.md` / `instructions.md` / `skills/` / `hooks/` edit here is vendored content** — it must ride a suite bump (a publish) to actually ship, or the assembler quarantines the plugin. `docs/` / `.bon/` edits are free.
+- **`todoist --version` is separate** — it reads *the suite release that last changed this CLI* (publish.py lazy-stamps only the repo it publishes), so a CLI number **below** the current suite number is expected, not drift.
+
+Full picture: `spm1001/batterie-de-savoir` → `CLAUDE.md` "Versioning convention" + `.bon/understanding.md`.
+
 ## Quick Commands
 
 ```bash

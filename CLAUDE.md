@@ -31,6 +31,16 @@ The same `assemble.sh` run emits **two marketplaces**:
 
 Every vendored plugin (both outputs) is stamped with the **one suite version** — the `batterie` plugin's own number, sourced from batterie-de-savoir (`bds-suwoho`). Source repos' own plugin.json versions are local-dev/CLI-footnote only.
 
+**Publishing the private output** (manual until `bds-susugu` wires it into CI — a mise change is NOT live for the family until this push happens):
+
+```
+MISE_HOME_CRED=<path-to-planetmodha-credentials.json> ./assemble.sh
+rsync -a dist/batterie-home/ ../batterie-home/   # a clone of spm1001/batterie-home
+git -C ../batterie-home add -A && git -C ../batterie-home commit -m "batterie-home <suite-version> — reassemble" && git -C ../batterie-home push
+```
+
+The cred lives outside git (hezza: `~/scratch/mise-flavour/mise-home/credentials.json`; it's also vendored inside the private repo itself at `plugins/mise-home/credentials.json`, so a checkout of that repo can seed the env var).
+
 ## Why commits here matter — the update bus
 
 **Clients re-resolve a marketplace's plugins only when the marketplace repo itself gets a new commit** (confirmed by probe, 2026-06-04). A version bump in a source repo is invisible to CLI/Desktop clients until a commit lands *here*. The assemble workflow's daily commit stream is therefore the suite's update bus — propagation latency to every surface equals its cadence.

@@ -385,6 +385,36 @@ with open(f"{out}/.claude-plugin/marketplace.json", "w") as f:
     f.write("\n")
 PYEOF
 
+  # The private repo is a pure artifact — make the output self-describing so
+  # a Claude landing there knows not to hand-edit and where the source lives.
+  cat > "$HOME_OUT/README.md" <<'READMEEOF'
+# batterie-home — Private Family Marketplace (generated)
+
+Private Claude plugin marketplace for the planetmodha estate. Carries ONLY
+`mise-home` — the planetmodha-credentialled flavour of mise. Family members
+get everything else (bon, trousse, todoist-gtd, batterie) from the PUBLIC
+marketplace `spm1001/batterie`; `/batterie:update` spans both automatically
+(it matches marketplaces by source repo: `spm1001/batterie` or
+`spm1001/batterie-*`).
+
+**Every file here is GENERATED** by `spm1001/batterie`'s `assemble.sh`
+(the private output of the shared pipeline — bds-mumise). Never hand-edit;
+change mise-en-space or the transform (`transforms/make-mise-flavour.sh`
+in spm1001/batterie) and re-assemble. The vendored `credentials.json` is an
+installed-app OAuth client (secret public by design); this repo stays
+private for the Teams Directory requirement, not for the credential.
+READMEEOF
+  cat > "$HOME_OUT/CLAUDE.md" <<'CLAUDEEOF'
+# batterie-home — Agent Guide
+
+Generated artifact repo — the private output of `spm1001/batterie`'s
+`assemble.sh` (one pipeline, two marketplaces; see that repo's CLAUDE.md,
+"Two outputs, one pipeline"). **Never hand-edit anything here.** To change
+mise-home: change mise-en-space (runtime) or spm1001/batterie's
+`transforms/make-mise-flavour.sh` (identity/cred), re-assemble with
+`MISE_HOME_CRED` set, and push the fresh `dist/batterie-home` here.
+CLAUDEEOF
+
   # Same guards as the public output, same code.
   check_manifest "$HOME_OUT"
   check_mcp_entrypoints "$HOME_OUT"

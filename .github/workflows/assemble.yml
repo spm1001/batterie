@@ -53,6 +53,20 @@ jobs:
         with:
           version: "latest"
 
+      - name: Materialise mise-home cred (bds-susugu)
+        # The planetmodha OAuth client for the private batterie-home output.
+        # Secret absent → assemble.sh skips the private half gracefully (its
+        # MISE_HOME_CRED gate), so a fork or a secrets-less run stays green.
+        env:
+          CRED: ${{ secrets.MISE_HOME_CRED_JSON }}
+        run: |
+          if [ -n "$CRED" ]; then
+            printf '%s' "$CRED" > /tmp/mise-home-cred.json
+            echo "MISE_HOME_CRED=/tmp/mise-home-cred.json" >> "$GITHUB_ENV"
+          else
+            echo "MISE_HOME_CRED_JSON secret not set — private output will be skipped"
+          fi
+
       - name: Run assemble.sh
         run: |
           # Default Actions bash has -e but NOT -o pipefail: without it,
@@ -100,6 +114,40 @@ jobs:
               commit -m "Reassemble — $(date +%Y-%m-%d)
 
           $(grep -E ' (OK|SKIP|QUARANTINE) ' /tmp/assemble.log)"
+          git push origin main
+
+      - name: Publish private batterie-home (bds-susugu)
+        # Pushes the private output to spm1001/batterie-home over a write
+        # deploy key. Both marketplaces thus update from the ONE assemble run
+        # (bds-nagoru). Runs after the public push (so a private-side failure
+        # never blocks the public bus) and before the quarantine-red step (a
+        # quarantine day still publishes both, held at last-published).
+        # Skips cleanly when the key or the private output is absent.
+        env:
+          DEPLOY_KEY: ${{ secrets.BATTERIE_HOME_DEPLOY_KEY }}
+        run: |
+          if [ -z "$DEPLOY_KEY" ] || [ ! -d batterie/dist/batterie-home ]; then
+            echo "skip: deploy key or private output missing"
+            exit 0
+          fi
+          mkdir -p ~/.ssh
+          printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/batterie_home_deploy
+          chmod 600 ~/.ssh/batterie_home_deploy
+          ssh-keyscan github.com >> ~/.ssh/known_hosts 2>/dev/null
+          export GIT_SSH_COMMAND="ssh -i ~/.ssh/batterie_home_deploy -o IdentitiesOnly=yes"
+          git clone --depth=1 --quiet git@github.com:spm1001/batterie-home.git /tmp/batterie-home
+          rsync -a --delete --exclude .git batterie/dist/batterie-home/ /tmp/batterie-home/
+          cd /tmp/batterie-home
+          if [ -z "$(git status --porcelain)" ]; then
+            echo "batterie-home already current."
+            exit 0
+          fi
+          echo "Changes detected in private output:"
+          git status --porcelain
+          git add -A
+          git -c user.name="github-actions[bot]" \
+              -c user.email="github-actions[bot]@users.noreply.github.com" \
+              commit -m "Reassemble batterie-home — $(date +%Y-%m-%d) (from spm1001/batterie ${GITHUB_SHA::7})"
           git push origin main
 
       - name: Fail red on any quarantined plugin

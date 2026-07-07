@@ -13,8 +13,9 @@
 #                             so both marketplaces carry identical runtime bytes
 #                             and the same suite version — they cannot drift.
 #                             Never committed here (it carries the planetmodha
-#                             credential and belongs in the private Directory
-#                             repo — push wiring is bds-picefu).
+#                             credential); assemble.yml pushes it to the private
+#                             spm1001/batterie-home repo over a write deploy key
+#                             (bds-susugu — cred + key arrive as Actions secrets).
 #
 # Every vendored plugin is stamped with ONE suite version (the batterie/suite
 # plugin's — bds-suwoho), so all published plugins carry an identical number.

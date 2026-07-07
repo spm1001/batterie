@@ -27,19 +27,19 @@ Retired from distribution: garde-manger (decommissioned 2026-06-03), tafelmusik 
 The same `assemble.sh` run emits **two marketplaces**:
 
 - **Public `batterie`** — this repo, as ever (committed + pushed by the workflow).
-- **Private `batterie-home`** — a local `dist/batterie-home/` tree (gitignored): **mise only**, transformed to **mise-home** by `transforms/make-mise-flavour.sh` (identity strings rewritten, planetmodha OAuth client swapped in, a guard failing loud on any leftover ITV-identifying string). It derives from the **just-vendored public mise**, so both marketplaces carry identical runtime bytes and the same suite version — drift is structurally impossible. Emitted only when `MISE_HOME_CRED` points at the planetmodha `credentials.json`; the daily CI run skips it until cred delivery is wired (`bds-susugu`), and pushing the output to the private Directory repo is `bds-picefu`.
+- **Private `batterie-home`** — a local `dist/batterie-home/` tree (gitignored): **mise only**, transformed to **mise-home** by `transforms/make-mise-flavour.sh` (identity strings rewritten, planetmodha OAuth client swapped in, a guard failing loud on any leftover ITV-identifying string). It derives from the **just-vendored public mise**, so both marketplaces carry identical runtime bytes and the same suite version — drift is structurally impossible. Emitted only when `MISE_HOME_CRED` points at the planetmodha `credentials.json`. **In CI this is fully wired** (`bds-susugu`): the workflow materialises the cred from the `MISE_HOME_CRED_JSON` secret and pushes the output to [`spm1001/batterie-home`](https://github.com/spm1001/batterie-home) over a write deploy key (`BATTERIE_HOME_DEPLOY_KEY` secret) — one run, both marketplaces. Secrets absent → private half skips gracefully, public unaffected.
 
 Every vendored plugin (both outputs) is stamped with the **one suite version** — the `batterie` plugin's own number, sourced from batterie-de-savoir (`bds-suwoho`). Source repos' own plugin.json versions are local-dev/CLI-footnote only.
 
-**Publishing the private output** (manual until `bds-susugu` wires it into CI — a mise change is NOT live for the family until this push happens):
+**Manual fallback for the private output** (CI does this every run; use only if Actions is down):
 
 ```
 MISE_HOME_CRED=<path-to-planetmodha-credentials.json> ./assemble.sh
-rsync -a dist/batterie-home/ ../batterie-home/   # a clone of spm1001/batterie-home
+rsync -a --delete --exclude .git dist/batterie-home/ ../batterie-home/   # a clone of spm1001/batterie-home
 git -C ../batterie-home add -A && git -C ../batterie-home commit -m "batterie-home <suite-version> — reassemble" && git -C ../batterie-home push
 ```
 
-The cred lives outside git (hezza: `~/scratch/mise-flavour/mise-home/credentials.json`; it's also vendored inside the private repo itself at `plugins/mise-home/credentials.json`, so a checkout of that repo can seed the env var).
+The cred lives outside git (hezza: `~/scratch/mise-flavour/mise-home/credentials.json`; it's also vendored inside the private repo itself at `plugins/mise-home/credentials.json`, so a checkout of that repo can seed the env var). Rotating the deploy key: mint a new keypair, `gh api repos/spm1001/batterie-home/keys` the public half (write), `gh secret set BATTERIE_HOME_DEPLOY_KEY -R spm1001/batterie` the private half, delete the old key.
 
 ## Why commits here matter — the update bus
 

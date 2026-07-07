@@ -55,18 +55,6 @@
       ]
     },
     {
-      "name": "passe",
-      "source": "./plugins/passe",
-      "description": "Fast browser automation via Chrome DevTools Protocol.",
-      "category": "automation",
-      "homepage": "https://github.com/spm1001/passe",
-      "keywords": [
-        "browser",
-        "cdp",
-        "chrome"
-      ]
-    },
-    {
       "name": "todoist-gtd",
       "source": "./plugins/todoist-gtd",
       "description": "Todoist with GTD coaching \u2014 outcomes, weekly review, pattern detection.",

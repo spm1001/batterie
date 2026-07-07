@@ -1,7 +1,20 @@
 #!/bin/bash
-# Assemble all Batterie de Savoir plugins into this repo for Desktop marketplace.
-# Copies .claude-plugin/ directories from each source repo.
+# Assemble every Batterie de Savoir marketplace from the source repos.
 # Run from the repo root: ./assemble.sh
+#
+# ONE pipeline, TWO outputs (bds-nagoru / bds-mumise):
+#   PUBLIC  "batterie"      → this repo (plugins/ + .claude-plugin/marketplace.json,
+#                             committed + pushed by assemble.yml — the update bus).
+#   PRIVATE "batterie-home" → a LOCAL dir (default dist/batterie-home, gitignored),
+#                             mise only, transformed to mise-home via
+#                             transforms/make-mise-flavour.sh with the planetmodha
+#                             cred. Emitted ONLY when MISE_HOME_CRED is set; the
+#                             flavour derives from the just-vendored PUBLIC mise,
+#                             so both marketplaces carry identical runtime bytes
+#                             and the same suite version — they cannot drift.
+#                             Never committed here (it carries the planetmodha
+#                             credential and belongs in the private Directory
+#                             repo — push wiring is bds-picefu).
 #
 # Every vendored plugin is stamped with ONE suite version (the batterie/suite
 # plugin's — bds-suwoho), so all published plugins carry an identical number.
@@ -30,15 +43,24 @@ batterie:batterie-de-savoir
 bon:bon
 trousse:trousse
 mise:mise-en-space
-passe:passe
 todoist-gtd:todoist-gtd
 "
 # garde-manger delisted 2026-06-10 (decommissioned per the estate audit;
 # Sameer confirmed). tafelmusik unvendored 2026-06-10 (too experimental to
 # publish; Sameer's call — source repo lives on, just not distributed).
+# passe delisted 2026-07-07 (bds-wobari via bds-mumise: browser infra, not a
+# knowledge plugin — the CLI installs standalone from spm1001/passe; source
+# repo lives on, just not distributed through the suite).
 # De-registration is manual by design: the assembler never deletes a dest
 # dir for an unmapped plugin, so retiring one means removing it from this
 # list, marketplace.json, and plugins/ together.
+
+# Private-marketplace manifest (bds-mumise): which plugin, which transform,
+# where it lands. Kept as plain variables — two marketplaces don't earn a
+# data-driven loop; the shared machinery is the vendor loop above the guards
+# below, which both outputs pass through.
+HOME_OUT="${ASSEMBLE_HOME_OUT:-$BATTERIE_DIR/dist/batterie-home}"
+HOME_NAME="batterie-home"
 
 # The single suite version (bds-suwoho): one number stamped onto every
 # vendored plugin so all published plugins carry an identical version. It
@@ -249,19 +271,25 @@ done
 # Invariant check 1 (fail): every relative-source plugin in marketplace.json
 # must have vendored content — a manifest entry over nothing is how the
 # gueridon "could not sync" and the batterie-0.1.6 husk happened.
-while read -r mp; do
-  if [ ! -f "$BATTERIE_DIR/plugins/$mp/.claude-plugin/plugin.json" ]; then
-    echo "FAIL: marketplace.json declares '$mp' but plugins/$mp has no plugin.json" >&2
-    exit 1
-  fi
-done < <(python3 -c "
+# Parameterised over the marketplace ROOT (a dir holding .claude-plugin/
+# marketplace.json + plugins/) so both outputs run the same guard.
+check_manifest() {
+  local mroot="$1"
+  while read -r mp; do
+    if [ ! -f "$mroot/plugins/$mp/.claude-plugin/plugin.json" ]; then
+      echo "FAIL: marketplace.json declares '$mp' but plugins/$mp has no plugin.json (in $mroot)" >&2
+      exit 1
+    fi
+  done < <(python3 -c "
 import json
-m = json.load(open('$BATTERIE_DIR/.claude-plugin/marketplace.json'))
+m = json.load(open('$mroot/.claude-plugin/marketplace.json'))
 for p in m['plugins']:
     src = p.get('source')
     if isinstance(src, str) and src.startswith('./plugins/'):
         print(src.removeprefix('./plugins/'))
 ")
+}
+check_manifest "$BATTERIE_DIR"
 
 # Invariant check 3 (fail): MCP entry points must resolve. The manifest
 # invariant above only proves plugin.json exists — the mise-0.7.4 husk
@@ -271,7 +299,9 @@ for p in m['plugins']:
 # relative path in command/args must exist; `uv run --project|--directory`
 # requires a vendored pyproject.toml; `python -m pkg.mod` must resolve to
 # a module under the plugin root. Kills the class at build time.
-python3 - "$BATTERIE_DIR" <<'PYEOF'
+# Also a function of the marketplace root, reused by the private output.
+check_mcp_entrypoints() {
+python3 - "$1" <<'PYEOF'
 import json, re, sys
 from pathlib import Path
 
@@ -308,6 +338,69 @@ for f in failures:
 if failures:
     sys.exit(1)
 PYEOF
+}
+check_mcp_entrypoints "$BATTERIE_DIR"
+
+# ---- PRIVATE marketplace: batterie-home (bds-mumise) -------------------------
+# Derived from the just-vendored PUBLIC mise — already stamped, already through
+# the husk/parity + ratchet machinery above — so the two marketplaces carry
+# identical runtime bytes by construction (if public mise was quarantined this
+# run, the flavour inherits last-published: still coherent, never divergent).
+# The transform rewrites only identity strings + swaps the OAuth client, and
+# its built-in guard fails loudly on any leftover ITV-identifying string.
+# Gated on MISE_HOME_CRED: CI public runs skip this until bds-susugu wires
+# cred delivery; a local run with the cred produces both outputs.
+if [ -n "${MISE_HOME_CRED:-}" ]; then
+  echo ""
+  echo "Assembling private marketplace '$HOME_NAME' → $HOME_OUT"
+  [ -f "$MISE_HOME_CRED" ] || { echo "FAIL: MISE_HOME_CRED=$MISE_HOME_CRED not found" >&2; exit 1; }
+  rm -rf "$HOME_OUT"
+  mkdir -p "$HOME_OUT/plugins" "$HOME_OUT/.claude-plugin"
+  "$BATTERIE_DIR/transforms/make-mise-flavour.sh" \
+    "$BATTERIE_DIR/plugins/mise" "$HOME_OUT/plugins/mise-home" home "$MISE_HOME_CRED"
+
+  # marketplace.json is generated (a derived artifact of a derived artifact —
+  # nothing hand-maintained to drift). NB the marketplace NAME sets the
+  # @suffix in plugin keys; the updater matches by the REPO the marketplace
+  # is served from (spm1001/batterie-*), which is bds-picefu's concern.
+  python3 - "$HOME_OUT" "$HOME_NAME" <<'PYEOF'
+import json, sys
+out, name = sys.argv[1], sys.argv[2]
+manifest = {
+    "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+    "name": name,
+    "description": "Batterie de Savoir — planetmodha family flavour (mise-home: Google Workspace MCP against the planetmodha estate)",
+    "owner": {"name": "Sameer Modha", "email": "sameer@modha.dev"},
+    "plugins": [{
+        "name": "mise-home",
+        "source": "./plugins/mise-home",
+        "description": "Google Workspace MCP for the planetmodha estate — search Drive, fetch Gmail, act on documents. Requires planetmodha Google OAuth.",
+        "category": "integration",
+        "homepage": "https://github.com/spm1001/mise-en-space",
+        "keywords": ["google", "workspace", "mcp", "family"],
+    }],
+}
+with open(f"{out}/.claude-plugin/marketplace.json", "w") as f:
+    json.dump(manifest, f, indent=2)
+    f.write("\n")
+PYEOF
+
+  # Same guards as the public output, same code.
+  check_manifest "$HOME_OUT"
+  check_mcp_entrypoints "$HOME_OUT"
+
+  # Version coherence (bds-jupize): the flavour must carry exactly the version
+  # the public vendored mise shipped this run — same number on both outputs.
+  pub_v=$(python3 -c "import json; print(json.load(open('$BATTERIE_DIR/plugins/mise/.claude-plugin/plugin.json'))['version'])")
+  home_v=$(python3 -c "import json; print(json.load(open('$HOME_OUT/plugins/mise-home/.claude-plugin/plugin.json'))['version'])")
+  if [ "$pub_v" != "$home_v" ]; then
+    echo "FAIL: version skew — public mise $pub_v vs mise-home $home_v" >&2
+    exit 1
+  fi
+  echo "  OK mise-home ← plugins/mise ($home_v, transformed, cred: $(basename "$MISE_HOME_CRED"))"
+else
+  echo "  SKIP private marketplace '$HOME_NAME' — MISE_HOME_CRED not set (public-only run)"
+fi
 
 # Invariant check 2 (warn only): vendored content not in the manifest is
 # assembled-but-unpublished — probably an oversight, but listing it is a

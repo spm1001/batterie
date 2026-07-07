@@ -1,3 +1,7 @@
 # Override global gitignore patterns that would exclude plugin content
 !plugins/mise/
 !plugins/mise/**
+
+# Private-marketplace output (bds-mumise): derived artifact carrying the
+# planetmodha credential — belongs in the private Directory repo, never here.
+dist/

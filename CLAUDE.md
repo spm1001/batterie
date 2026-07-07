@@ -2,7 +2,7 @@
 
 This repo is the **assembled marketplace mirror** for the Batterie de Savoir plugin suite. `plugins/` holds vendored copies of each plugin, assembled from the standalone source repos. Since the 2026-06-10 cutover (`bds-bajibo`) it is the single marketplace, serving the **public CLI** (`claude plugin marketplace add spm1001/batterie`) and **personal Desktop** installs (Customize → Add marketplace — both accept a public repo).
 
-**The repo is deliberately PUBLIC** (decided 2026-06-20, `bds-kanuve`). The cost, accepted knowingly: the claude.ai **org/Teams Directory is NOT a surface for this repo** — org marketplaces require a *private or internal* repo (Anthropic policy; "internal" needs a GitHub Org/Enterprise, which `spm1001` isn't). The org marketplace registration was removed. **Do NOT re-add it** (it errors on every sync) and **do NOT flip the repo private to "fix Teams"** — that breaks the CLI/personal path everyone actually uses. Family-scale users are onboarded manually via the CLI.
+**The repo is deliberately PUBLIC** (decided 2026-06-20, `bds-kanuve`). The cost, accepted knowingly: the claude.ai **org/Teams Directory is NOT a surface for this repo** — org marketplaces require a *private or internal* repo (Anthropic policy; "internal" needs a GitHub Org/Enterprise, which `spm1001` isn't). The org marketplace registration was removed. **Do NOT re-add it** (it errors on every sync) and **do NOT flip the repo private to "fix Teams"** — that breaks the CLI/personal path everyone actually uses. Family-scale users get the Teams Directory via a **separate private repo** carrying the `batterie-home` output (see "Two outputs, one pipeline" below; tracked in batterie-de-savoir's `bds-niluga`).
 
 Not to be confused with **batterie-de-savoir** — the two are a **source/artifact pair**: that one is where the suite is *authored* (the docs umbrella — brigade.toml, Jekyll site — and the source of the suite-level `batterie` plugin); this one is what clients consume. Don't retire bds in a tidy-up: assessed 2026-06-11 — it sources the suite plugin, holds the brigade registry, serves the live Pages docs site, and the tool repos' READMEs link into it.
 
@@ -18,10 +18,18 @@ Not to be confused with **batterie-de-savoir** — the two are a **source/artifa
 | bon | bon |
 | trousse | trousse |
 | mise | mise-en-space |
-| passe | passe |
 | todoist-gtd | todoist-gtd |
 
-Retired from distribution: garde-manger (decommissioned 2026-06-03), tafelmusik (unvendored 2026-06-10 — too experimental to publish; the source repo lives on).
+Retired from distribution: garde-manger (decommissioned 2026-06-03), tafelmusik (unvendored 2026-06-10 — too experimental to publish; the source repo lives on), passe (delisted 2026-07-07, `bds-wobari` — browser infra, not a knowledge plugin; the CLI installs standalone from spm1001/passe and the source repo lives on).
+
+## Two outputs, one pipeline (bds-mumise)
+
+The same `assemble.sh` run emits **two marketplaces**:
+
+- **Public `batterie`** — this repo, as ever (committed + pushed by the workflow).
+- **Private `batterie-home`** — a local `dist/batterie-home/` tree (gitignored): **mise only**, transformed to **mise-home** by `transforms/make-mise-flavour.sh` (identity strings rewritten, planetmodha OAuth client swapped in, a guard failing loud on any leftover ITV-identifying string). It derives from the **just-vendored public mise**, so both marketplaces carry identical runtime bytes and the same suite version — drift is structurally impossible. Emitted only when `MISE_HOME_CRED` points at the planetmodha `credentials.json`; the daily CI run skips it until cred delivery is wired (`bds-susugu`), and pushing the output to the private Directory repo is `bds-picefu`.
+
+Every vendored plugin (both outputs) is stamped with the **one suite version** — the `batterie` plugin's own number, sourced from batterie-de-savoir (`bds-suwoho`). Source repos' own plugin.json versions are local-dev/CLI-footnote only.
 
 ## Why commits here matter — the update bus
 

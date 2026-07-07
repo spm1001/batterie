@@ -109,3 +109,9 @@ SessionStart hooks only fire on a full restart. (Any CLI reinstall is already li
   marketplace, but this pulls only the plugin you just shipped. The others show
   "update available" until `/batterie:update` — the "bring everything current"
   sibling.
+- **Lazy CLI convergence (jomiwa):** when you publish a *non*-batterie source
+  repo, its own `plugin.json` is also stamped to the new suite version inside the
+  content commit — so that CLI's `--version` reads "the suite release that last
+  changed it" and ticks toward the suite number as it changes. Only the repo being
+  published is stamped (never its siblings), so there's no per-release multi-repo
+  dance — CLIs converge lazily, not on every bump.

@@ -32,21 +32,36 @@ Tool pages are hand-authored by design. The registry holds one-liners; tool page
 
 ## Versioning convention
 
-**`plugin.json` is the single source of truth for version numbers across the entire suite.**
+**This is the canonical description of how the suite is versioned and released.** Component repos carry a thin pointer back here; this section (plus `.bon/understanding.md`) is the full picture.
 
-- `pyproject.toml` uses `dynamic = ["version"]` with `[tool.hatch.version]` pointing at `.claude-plugin/plugin.json` via regex — never has a hardcoded version
-- To bump a version: edit the `"version"` field in `.claude-plugin/plugin.json` only
-- `/batterie:update` triggers when the installed plugin.json version is lower than the repo's — so bumping plugin.json is what drives updates
+**One version number across the whole suite.** Since 2026-06-28 (suite 1.2.2) every published plugin — `batterie`, `bon`, `trousse`, `mise`, `todoist-gtd` — carries the *same* version. The earlier "Debian model" (independent per-plugin numbers under a headline suite number) is **dead**: the suite is operated as a unit — the assembler re-vendors it whole daily, and `/batterie:update` pulls every plugin in one go — so per-plugin granularity was never consumed, only confusing.
 
-Repos aligned on this pattern: bon, passe, mise-en-space, trousse. If you add a new tool with a pyproject.toml, follow the same pattern.
+**Source of truth: the `batterie` plugin's `plugin.json` version (this repo) IS the suite version.** You never hand-edit it to release — `/batterie:publish` bumps it centrally (below).
 
-### Suite version (the human-facing number)
+**How the one number reaches every plugin — the assembler stamps it.** `spm1001/batterie`'s `assemble.sh` vendors each source repo's plugin content, then *overwrites* every vendored `plugin.json` version with the suite version. Consequences:
 
-The **`batterie` plugin's own version doubles as the suite version** — the single number a user quotes ("I'm on Batterie v1.0") or checks against ("you need ≥ v1.x"). It's the Debian model: one headline number on top of the independent per-plugin versions (`bon 0.26.5`, `passe 0.6.2`, …), which stay separate so each plugin's "update available" signal only fires when *that* plugin actually changes.
+- **A source repo's own `plugin.json` version is local-dev-only** — hatchling reads it for the CLI `--version` footnote (below), but it's irrelevant to what ships. **Do NOT hand-bump a source `plugin.json` to "release"** — the stamp overwrites it. `/batterie:publish` is the only lever.
+- **The ratchet is suite-level.** If a plugin's vendored *content* changed but the *suite* version didn't bump, the assembler **quarantines** that plugin (keeps it at its last-good version) rather than shipping an unversioned change. So any vendored-content edit needs a suite bump to actually ship — see the GOTCHA below.
+- `pyproject.toml` still uses `dynamic = ["version"]` reading `.claude-plugin/plugin.json` via a hatchling regex — never a hardcoded version. Repos on this pattern: **bon, mise-en-space, trousse, todoist-gtd** (passe left the suite 2026-07-07 — see "The Marketplace Lives Elsewhere"). A new tool with a `pyproject.toml` follows the same pattern.
 
-- **Set it at milestones**, not every change — bump the `batterie` plugin.json to a round number when the suite reaches a meaningful state (set to `1.0.0` on 2026-06-20, the first real suite release). Patch ticks still happen when the batterie plugin itself changes; that's fine.
-- **Surfaced via `/batterie:version`** (reports suite version + per-plugin + CLI versions) and as a banner atop `/batterie:update`. The "build date" half is the clients' own "last updated" date — no extra machinery needed.
-- Distribution is **public CLI** (`claude plugin marketplace add spm1001/batterie`); the Teams/org Directory is unavailable (see "Repo visibility"). So `/batterie:version` is the canonical "what am I on?" surface.
+**Releasing: `/batterie:publish` from the edited repo's working tree.** It bumps the suite version centrally (this repo's `plugin.json`), commits, pushes, triggers `assemble.yml`, watches it green, and pulls this machine current. Editing a *non*-`batterie` source repo makes it a **2-repo push** (the content repo + the central suite bump). Never run `assemble.sh` locally — assembling is CI's job. (Engine: `scripts/publish.py`.)
+
+### The CLIs keep their own numbers (lazy convergence)
+
+The plugin version is one number; the **CLIs** (`bon` / `passe` / `todoist --version`) are NOT stamped to it. A CLI's `--version` reads *the suite release that last **changed** that CLI* — `publish.py` lazy-stamps only the source repo being published (japoca, 2026-07-06). So CLIs converge toward the suite number over normal releases with no multi-repo dance every release (the dance the 2026-06-28 scope decision explicitly rejected). What a Claude should know:
+
+- `/batterie:version` shows the suite number as headline, each CLI's own `--version` as a **footnote** — a CLI number *below* the suite number is expected, not drift.
+- **Session hooks are install-if-missing only** — no version-drift check at session start (that produced a false reinstall every session). They install a *missing* CLI and report the version that actually landed.
+- **`/batterie:update`'s CLI-drift check is commit-based** — installed commit (`direct_url.json` in the tool's dist-info) vs `git ls-remote` HEAD of the source repo, no version semantics. Install source is provenance-sticky: a `~/repos` clone appearing doesn't flip an install onto the working tree.
+
+### Surfaces
+
+- **`/batterie:version`** — suite version (headline) + every installed plugin + CLI `--version` (footnotes). The canonical "what am I on?" answer.
+- **`/batterie:update`** — suite-version banner atop the update; **marketplace-aware** (`bds-lodita`): updates plugins across every batterie-family marketplace — the public one and the family-private Directory one.
+
+### GOTCHA — which edits need a suite bump
+
+The assembler vendors each source repo's `CLAUDE.md`, `instructions.md`, `skills/`, `hooks/`, `.claude-plugin/`. So editing any of those in a source repo — **including this one** — is a *content change* the suite ratchet catches: it must ride a suite bump (ship it via `/batterie:publish`) or the assembler quarantines the plugin. A `docs/` or `.bon/` edit is **free** (not vendored). Rule of thumb: inside vendored content → rides a publish; docs-site or bon bookkeeping → doesn't.
 
 ## Deliberate quirks — do not "fix" these
 
@@ -67,7 +82,9 @@ This machine runs Python 3.9, which doesn't have `tomllib` (added in 3.11). The 
 
 This repo **stopped being a marketplace on 2026-06-10** (the bds-bajibo cutover — there is no `marketplace.json` here anymore). [`spm1001/batterie`](https://github.com/spm1001/batterie) is the single assembled marketplace, serving the **CLI and personal Desktop installs** (both accept a public repo). It vendors each plugin's content physically (Desktop's backend rejects external URL sources), reassembled daily by its GitHub Actions bot from the source repos. **The claude.ai *org/Teams* Directory is NOT a working surface for this repo — see "Repo visibility" below.**
 
-This repo remains a **source repo**: the suite-level `batterie` plugin (`.claude-plugin/plugin.json`, `skills/`, `hooks/`, `instructions.md`) is vendored from here. To ship a change to it (or to any batterie source repo): **`/batterie:publish`** from the repo's working tree — it bumps the version, commits, pushes, triggers `assemble.yml`, watches it green, and pulls this machine current (`scripts/publish.py` is the engine). Under the hood that is: edit, bump `.claude-plugin/plugin.json`, push — the daily bot does the rest (or trigger immediately with `gh workflow run assemble.yml -R spm1001/batterie`). A commit landing in spm1001/batterie is what makes clients re-resolve plugins — its commit stream is the suite's update bus.
+This repo remains a **source repo**: the suite-level `batterie` plugin (`.claude-plugin/plugin.json`, `skills/`, `hooks/`, `instructions.md`) is vendored from here. To ship a change to it (or to any batterie source repo): **`/batterie:publish`** from the repo's working tree — it bumps the suite version, commits, pushes, triggers `assemble.yml`, watches it green, and pulls this machine current (`scripts/publish.py` is the engine). Under the hood, publish bumps the **suite** version (this repo's `plugin.json`) — *never* a source repo's own — and triggers the assemble (the daily bot also runs it, or `gh workflow run assemble.yml -R spm1001/batterie` fires it now). See **Versioning convention** above for the single-version mechanics. A commit landing in spm1001/batterie is what makes clients re-resolve plugins — its commit stream is the suite's update bus.
+
+**passe was delisted from the suite on 2026-07-07** (browser infra, not a knowledge plugin — `bds-wobari`): it's no longer assembled or stamped, and its CLI installs standalone. Machines still carry an orphaned `passe@batterie` plugin until the shard re-home + uninstall sweep runs (`bds-tujoro`).
 
 Anyone who installed plugins as `<name>@batterie-de-savoir` before the cutover migrates by add + reinstall + remove (plugin keys change with the marketplace name; a plain repoint isn't enough).
 
@@ -75,7 +92,7 @@ Anyone who installed plugins as `<name>@batterie-de-savoir` before the cutover m
 
 `spm1001/batterie` is **public on purpose** (decided 2026-06-20, `bds-kanuve`): ITV + public users install via `claude plugin marketplace add spm1001/batterie`, and personal Desktop installs (Customize → Add marketplace) also accept a public repo. The cost, accepted knowingly: **org/Teams Directory marketplaces require a _private or internal_ repo** — public is rejected by Anthropic policy (error: *"Only private and internal repositories can be used for marketplaces"* on the org sync endpoint; documented at code.claude.com/docs/en/plugin-marketplaces). "Internal" isn't available here — it needs a GitHub Org/Enterprise, and `spm1001` is a personal account.
 
-**So the Teams Directory one-click path is unavailable for this repo. Do NOT re-add the org marketplace (it errors on every sync), and do NOT flip the repo private to "fix Teams" — that breaks the CLI/personal path everyone actually uses.** Family-scale users will get a *separate private* Directory marketplace carrying a planetmodha-cred flavour — the missing planetmodha OAuth cred for mise (not distribution) was always the blocker; public plugins still come from here, and `/batterie:update` is now marketplace-aware (`bds-lodita`) so one update spans both the public and the private marketplace. Tracked under `bds-niluga`. (Separately, Desktop's *personal* marketplace can serve a stale pre-cutover snapshot — a server-side Anthropic cache bug tracked in `bds-hitoga`, not this visibility policy.)
+**So the Teams Directory one-click path is unavailable for this repo. Do NOT re-add the org marketplace (it errors on every sync), and do NOT flip the repo private to "fix Teams" — that breaks the CLI/personal path everyone actually uses.** Family-scale users get a *separate private* Directory marketplace — `spm1001/batterie-home`, built and owner-verified 2026-07-07 — carrying a planetmodha-cred flavour of mise (`mise-home`); the missing planetmodha OAuth cred for mise (not distribution) was always the blocker. Public plugins still come from here, and `/batterie:update` is marketplace-aware (`bds-lodita`) so one update spans both the public and the private marketplace. Tracked under `bds-niluga` (one non-admin family install remains to verify member-level access — `bds-bajaja`). (Separately, Desktop's *personal* marketplace can serve a stale pre-cutover snapshot — a server-side Anthropic cache bug tracked in `bds-hitoga`, not this visibility policy.)
 
 ### Debugging Desktop marketplace
 

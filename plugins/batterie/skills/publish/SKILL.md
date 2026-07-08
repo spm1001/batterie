@@ -10,8 +10,9 @@ The dance — bump version → commit → push → assemble → pull — collaps
 command. The engine is `scripts/publish.py`; this skill is the safe wrapper:
 it previews with `--dry-run`, you confirm, then it runs for real.
 
-**Publishing is a hezza operation.** It needs the source repos (`~/repos`) and
-`gh`. On a machine without `~/repos` there's nothing to push from — use
+**Publishing runs from any host with the source repos (`~/repos`) and `gh`** —
+tube (the primary since the 2026-07 hezza turndown) or hezza while it lasts. On a
+machine without `~/repos` (the Mac) there's nothing to push from — use
 `/batterie:update` to pull instead.
 
 ## This repo (publish target)
@@ -49,7 +50,7 @@ one number every plugin ships — whichever repo you're publishing from.
 
 ### 2. Dry-run first — always
 
-Resolve the engine from the hezza source tree and preview:
+Resolve the engine from the local source tree and preview:
 
 ```
 uv run --script ~/repos/spm1001/batterie-de-savoir/scripts/publish.py --patch --dry-run

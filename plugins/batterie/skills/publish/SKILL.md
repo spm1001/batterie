@@ -34,7 +34,7 @@ else:
     print(f"mode:        {'single-repo (cwd IS the suite repo)' if is_suite else '2-repo push (content here + suite bump in batterie-de-savoir)'}")
     st = subprocess.run(["git", "status", "--short"], capture_output=True, text=True)
     pending = st.stdout.rstrip()
-    print("\nPending in this content repo (git add -A sweeps ALL of these into the content commit):")
+    print("\nPending in this content repo (tracked edits ship in the content commit; untracked files are REFUSED unless you pass --all — bds-fifuko):")
     print(pending or "  (clean tree)")
 PYEOF`
 
@@ -73,17 +73,23 @@ line it will prepend.
 ### 3. Review the plan with the human
 
 Show the dry-run output and **call out the staging list explicitly**. In the
-**content repo** `publish.py` runs `git add -A`, so every pending file there
-ships in the content commit — if anything looks unrelated to this release, stop
-and ask; don't sweep WIP into a push. (The suite-version bump is a separate,
-targeted plugin.json-only commit in batterie-de-savoir, so it can't sweep that
-repo's WIP.) Confirm: suite bump (old → new), commit message, wait+pull on, and
-— when publishing a non-batterie repo — that it's a **2-repo push** (content
-here, suite bump in batterie-de-savoir).
+**content repo** `publish.py` stages tracked modifications (`git add -u`), so
+every *tracked* pending file there ships in the content commit — if a tracked
+edit looks unrelated to this release, stop and ask. **Untracked files are a hard
+stop** (bds-fifuko): the engine refuses rather than sweep them, so a stray
+scratch/WIP file can't leak into a pushed, marketplace-triggering commit. If an
+untracked file genuinely belongs in the release (e.g. a brand-new skill file),
+re-run with `--all` — deliberately, after the human has seen it. (The
+suite-version bump is a separate, targeted plugin.json+CHANGELOG commit in
+batterie-de-savoir, so it can't sweep that repo's WIP.) Confirm: suite bump (old
+→ new), commit message, wait+pull on, and — when publishing a non-batterie repo
+— that it's a **2-repo push** (content here, suite bump in batterie-de-savoir).
 
 ### 4. Run it for real
 
-On confirmation, drop `--dry-run` (keep the same `--changelog`):
+On confirmation, drop `--dry-run` (keep the same `--changelog`). If the release
+legitimately includes new/untracked files the dry-run flagged, also pass `--all`
+(the engine refuses untracked files otherwise):
 
 ```
 uv run --script ~/repos/spm1001/batterie-de-savoir/scripts/publish.py --patch --changelog "one-line narrative"

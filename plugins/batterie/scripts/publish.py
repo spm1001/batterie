@@ -206,6 +206,10 @@ def main() -> int:
                     help="trigger assemble but don't watch the run to green")
     ap.add_argument("--no-pull", action="store_true",
                     help="push only; don't bring this machine current")
+    ap.add_argument("--all", action="store_true",
+                    help="sweep ALL content-repo changes incl. untracked files "
+                         "(git add -A). Default stages tracked modifications only "
+                         "(git add -u) and refuses on untracked files (bds-fifuko).")
     ap.add_argument("--dry-run", action="store_true",
                     help="print the plan; touch nothing")
     args = ap.parse_args()
@@ -263,30 +267,44 @@ def main() -> int:
     print(f"  wait:    {'no' if args.no_wait else 'watch to green'}")
     print(f"  pull:    {'no' if args.no_pull else ('this machine' + (f' + reinstall {cli[0]}' if cli else ''))}")
 
-    # What would be committed in the CONTENT repo — loud, because we stage
-    # everything (-A) THERE so a one-step publish sweeps the content change.
-    # The skill runs --dry-run first and shows this to a human before the real
-    # run (bds-fifuko: never sweep unrelated WIP). The case-B suite bump is a
-    # TARGETED plugin.json-only commit, so it can never sweep the suite repo's
-    # own WIP — only the content repo gets -A.
+    # What would be committed in the CONTENT repo. bds-fifuko: default stages
+    # tracked modifications only (git add -u), so an untracked scratch/WIP file
+    # lying around can't be silently swept into a pushed, marketplace-triggering
+    # release commit — the classic foot-gun. Untracked files present WITHOUT
+    # --all is a HARD STOP (loud, not silent). --all restores git add -A
+    # (include untracked); the skill's human-reviewed path passes it after
+    # showing this dry-run. This guard sits BEFORE the assemble trigger, so a
+    # dry-run exercises it without firing CI. (The case-B suite bump is a
+    # TARGETED plugin.json+CHANGELOG commit — never -A — so it can never sweep
+    # the suite repo's own WIP; only the content repo is staged here.)
+    add_flag = "-A" if args.all else "-u"
     status = subprocess.run(["git", "-C", str(repo), "status", "--short"],
                             text=True, capture_output=True, check=False)
     pending = status.stdout.rstrip()
-    print("  staging (git add -A in content repo) — these files plus the suite bump:")
+    untracked = subprocess.run(
+        ["git", "-C", str(repo), "ls-files", "--others", "--exclude-standard"],
+        text=True, capture_output=True, check=False).stdout.split()
+    if untracked and not args.all:
+        listing = "\n".join(f"    {f}" for f in untracked)
+        die(f"{repo.name}: {len(untracked)} untracked file(s) present — refusing to "
+            f"sweep them into a release commit (bds-fifuko):\n{listing}\n"
+            "  Stage or remove them, or pass --all to include them deliberately.")
+    print(f"  staging (git add {add_flag} in content repo) — these files plus the suite bump:")
     print("\n".join(f"    {ln}" for ln in pending.splitlines()) or "    (only the version bump)")
 
     # --- PUSH ---
     print("\n[push]")
     if is_suite:
-        # One repo: the suite bump IS this repo's plugin.json; -A sweeps it
-        # together with the content change in a single commit.
+        # One repo: the suite bump IS this repo's plugin.json; add_flag stages it
+        # together with the content change in a single commit (bds-fifuko: -u by
+        # default so untracked WIP is excluded; -A under --all).
         if dry:
             print(f"  DRY  write suite version {suite_new} into {suite_pj_path}")
             print(f"  DRY  prepend [{suite_new}] entry to {changelog_path}")
         else:
             suite_pj_path.write_text(replace_version(suite_text, suite_new))
             changelog_path.write_text(new_changelog)
-        checked(run(["git", "-C", str(repo), "add", "-A"], dry=dry), "git add")
+        checked(run(["git", "-C", str(repo), "add", add_flag], dry=dry), "git add")
         checked(run(["git", "-C", str(repo), "commit", "-m", message], dry=dry,
                     capture=True), "git commit")
         checked(run(["git", "-C", str(repo), "push"], dry=dry, capture=True), "git push")
@@ -312,9 +330,10 @@ def main() -> int:
                 else:
                     content_pj.write_text(replace_version(pj_text, suite_new))
                 stamped = True
-        # (a) content repo — full -A sweep of the edit being shipped.
+        # (a) content repo — stage the edit being shipped (add_flag: -u default,
+        # -A with --all — bds-fifuko).
         if pending:
-            checked(run(["git", "-C", str(repo), "add", "-A"], dry=dry), "git add (content)")
+            checked(run(["git", "-C", str(repo), "add", add_flag], dry=dry), "git add (content)")
             checked(run(["git", "-C", str(repo), "commit", "-m", message], dry=dry,
                         capture=True), "git commit (content)")
             checked(run(["git", "-C", str(repo), "push"], dry=dry, capture=True), "git push (content)")
@@ -408,12 +427,20 @@ def main() -> int:
                     dry=dry, capture=True), "plugin update")
         if cli:
             binary, extras = cli
-            spec = f"{repo}{extras}"
-            # --no-cache is load-bearing: uv reuses a cached *build* of the
-            # local source and `uv cache clean` does NOT clear it, so a bump
-            # that leaves src/ byte-identical (plugin.json-only) silently
-            # reinstalls the old wheel (bon CLAUDE.md gotcha, verified
-            # 2026-06-17). Install from the source tree, never installPath/PyPI.
+            # bds-zelobu / the weaning: reinstall from git+https (the artifact
+            # just pushed above, content-first), NOT the local working tree.
+            # Matches /batterie:update's default and the estate's go-forward
+            # doctrine (production installs from GitHub artifacts, never a
+            # working tree). The old working-tree spec (f"{repo}{extras}")
+            # silently flipped a git+https machine to file:// on every publish,
+            # so /batterie:update lost its commit-drift signal for that CLI.
+            # git+https@HEAD == what we just shipped, so no content is lost.
+            spec = f"{repo.name}{extras} @ git+https://github.com/spm1001/{repo.name}"
+            # --no-cache is load-bearing: uv reuses a cached *build* and
+            # `uv cache clean` does NOT clear it, so a bump that leaves src/
+            # byte-identical (plugin.json-only) silently reinstalls the old
+            # wheel (bon CLAUDE.md gotcha, verified 2026-06-17). Never
+            # installPath/PyPI — the plugin cache ships no pyproject.toml.
             checked(run(["uv", "tool", "install", spec,
                          "--force", "--reinstall", "--no-cache"],
                         dry=dry, capture=True), f"reinstall {binary}")

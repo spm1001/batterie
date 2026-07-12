@@ -97,6 +97,28 @@ open(path, "w").write(text2)
 PYEOF
 }
 
+# Generate a plugin's shipped CHANGELOG.md as a STUB (bds-mawitu): the suite has
+# one canonical changelog (batterie-de-savoir/CHANGELOG.md); every plugin ships
+# a generated pointer to it, stamped with the current suite version. Because the
+# stub is (re)generated with $SUITE_VERSION on every assemble, a shipped
+# changelog can never predate the release — the "stale changelog" failure class
+# is inexpressible, not merely caught. Uniform across ALL plugins (batterie
+# included) — no special case; the real changelog is browsable at the URL below.
+write_changelog_stub() {
+  dest_dir="$1"; version="$2"
+  cat > "$dest_dir/CHANGELOG.md" <<EOF
+# Changelog
+
+This plugin ships as part of the **Batterie de Savoir** suite and carries the
+single suite version — currently **$version**.
+
+The suite has one canonical changelog. This file is a generated pointer, so it
+can never fall behind the version this plugin ships at:
+
+  https://github.com/spm1001/batterie-de-savoir/blob/main/CHANGELOG.md
+EOF
+}
+
 echo "Assembling plugins from $SOURCE_DIR (suite version $SUITE_VERSION, last published ${OLD_SUITE_VERSION:-none})"
 
 RATCHET_FAILURES=""
@@ -154,7 +176,14 @@ print('yes' if d.get('mcpServers') else 'no')
       --exclude .pytest_cache --exclude .mypy_cache --exclude .ruff_cache \
       --exclude .hypothesis --exclude '*.db' --exclude token.json --exclude .env \
       --exclude .gitignore --exclude .gitattributes \
+      --exclude /CHANGELOG.md \
       "$src/" "$dest/"
+    # /CHANGELOG.md exclusion (bds-mawitu): per-repo changelogs are no longer
+    # shipped — the suite has ONE canonical changelog and every plugin ships a
+    # generated stub (below) instead. Root-anchored + --delete-excluded, so a
+    # CHANGELOG.md vendored before this rule (mise had a stale one) is removed.
+    # Skill plugins never vendored CHANGELOG.md (it's not in their copy-list),
+    # so only the full-source MCP branch needs the explicit exclude.
     # .gitignore exclusion is load-bearing, not cosmetic: a vendored source
     # .gitignore (mise's lists uv.lock) makes THIS repo's git treat vendored
     # files as ignorable, so the workflow's `git add` would silently skip
@@ -216,6 +245,12 @@ print('yes' if d.get('mcpServers') else 'no')
   # guard, so the version read below reflects the stamp.
   stamp_version "$dest/.claude-plugin/plugin.json" "$SUITE_VERSION"
 
+  # Shipped CHANGELOG is a generated stub pointing at the canonical suite
+  # changelog (bds-mawitu) — regenerated with the suite version every run, so it
+  # cannot go stale. It's written before the ratchet's git-status read below, so
+  # like the stamped plugin.json it's filtered out of the content-drift check.
+  write_changelog_stub "$dest" "$SUITE_VERSION"
+
   # Version + source SHA for the status line below — so any future "why is
   # X stale?" is answerable from the commit message alone (the May 2026
   # drift was undiagnosable because runs logged neither). version now reads
@@ -232,8 +267,10 @@ print('yes' if d.get('mcpServers') else 'no')
   # only the drifted plugins are quarantined), but the version comparison is
   # suite-wide, read once above (SUITE_VERSION vs OLD_SUITE_VERSION).
   # git status --porcelain (not git diff) — diff is blind to new files. The
-  # stamped plugin.json is filtered out (the stamp always rewrites it, so it's
-  # never itself "content drift"). Escape hatch for local runs: ASSEMBLE_NO_RATCHET=1.
+  # stamped plugin.json AND the generated CHANGELOG.md stub are filtered out:
+  # both are pure functions of the suite version (rewritten identically every
+  # run), so neither is ever "source content drift". Escape hatch for local
+  # runs: ASSEMBLE_NO_RATCHET=1.
   #
   # QUARANTINE, don't abort (2026-06-17, bds-pujaki): on a trip we revert THIS
   # plugin's vendored dir to its last-published state and record it, instead
@@ -245,7 +282,7 @@ print('yes' if d.get('mcpServers') else 'no')
   quarantined_this=0
   if [ -z "${ASSEMBLE_NO_RATCHET:-}" ]; then
     content_changes=$(git -C "$BATTERIE_DIR" status --porcelain -- "plugins/$plugin" \
-      | grep -v '\.claude-plugin/plugin\.json' | grep -c . || true)
+      | grep -v '\.claude-plugin/plugin\.json' | grep -v 'CHANGELOG\.md' | grep -c . || true)
     if [ -n "$OLD_SUITE_VERSION" ] && [ "$content_changes" -gt 0 ] && [ "$SUITE_VERSION" = "$OLD_SUITE_VERSION" ]; then
       # Restore the laggard's vendored dir to EXACTLY last-published:
       # checkout restores tracked files; clean -fd drops newly-added drift

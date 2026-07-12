@@ -170,7 +170,7 @@ print('yes' if d.get('mcpServers') else 'no')
       --exclude /tests --exclude /docs --exclude /fixtures --exclude /bakeoff \
       --exclude /.claude-plugin/marketplace.json \
       --exclude /mise --exclude /mise-fetch --exclude /.mcp-workspace \
-      --exclude /data --exclude /uploads \
+      --exclude /.mise --exclude /data --exclude /uploads \
       --exclude /.oauth-stash --exclude /.claude --exclude /.coverage \
       --exclude .venv --exclude node_modules --exclude __pycache__ --exclude '*.pyc' \
       --exclude .pytest_cache --exclude .mypy_cache --exclude .ruff_cache \

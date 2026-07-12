@@ -86,7 +86,7 @@ This repo **stopped being a marketplace on 2026-06-10** (the bds-bajibo cutover 
 
 This repo remains a **source repo**: the suite-level `batterie` plugin (`.claude-plugin/plugin.json`, `skills/`, `hooks/`, `instructions.md`) is vendored from here. To ship a change to it (or to any batterie source repo): **`/batterie:publish`** from the repo's working tree — it bumps the suite version, commits, pushes, triggers `assemble.yml`, watches it green, and pulls this machine current (`scripts/publish.py` is the engine). Under the hood, publish bumps the **suite** version (this repo's `plugin.json`) — *never* a source repo's own — and triggers the assemble (the daily bot also runs it, or `gh workflow run assemble.yml -R spm1001/batterie` fires it now). See **Versioning convention** above for the single-version mechanics. A commit landing in spm1001/batterie is what makes clients re-resolve plugins — its commit stream is the suite's update bus.
 
-**passe was delisted from the suite on 2026-07-07** (browser infra, not a knowledge plugin — `bds-wobari`): it's no longer assembled or stamped, and its CLI installs standalone. Machines still carry an orphaned `passe@batterie` plugin until the shard re-home + uninstall sweep runs (`bds-tujoro`).
+**passe was delisted from the suite on 2026-07-07** (browser infra, not a knowledge plugin — `bds-wobari`): it's no longer assembled or stamped, and its CLI installs standalone. tube was uninstalled + registry-swept the same day (`bds-tujoro`, done); hezza (deprecating) and possibly the Mac still carry an orphaned `passe@batterie` plugin — harmless, but their `/batterie:update` errors once on it until `claude plugin uninstall passe@batterie` runs there.
 
 Anyone who installed plugins as `<name>@batterie-de-savoir` before the cutover migrates by add + reinstall + remove (plugin keys change with the marketplace name; a plain repoint isn't enough).
 
@@ -104,4 +104,4 @@ Anyone who installed plugins as `<name>@batterie-de-savoir` before the cutover m
 
 ## Open outcomes
 
-- `bds-lozeti` — Track Claude Office add-in bundle changes over time
+Tracked on the bon board, not hand-listed here (a hand-maintained list drifts — see `bds-naceje`). Run `bon list` for current outcomes and actions.

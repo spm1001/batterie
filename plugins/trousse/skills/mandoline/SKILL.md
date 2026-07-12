@@ -427,7 +427,7 @@ Two approaches depending on table complexity:
 from spss_bq_builder import SpssTableBuilder
 
 builder = SpssTableBuilder(
-    spss_path="~/Taildrive/study.sav",
+    spss_path="~/scratch/study.sav",
     project="project", dataset="survey_data", table_name="study_2025_rld",
     table_description="...", friendly_name="...", table_labels={...},
     codebook_supplement={                    # What SPSS metadata doesn't carry

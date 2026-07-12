@@ -25,7 +25,7 @@ All tools follow a professional kitchen metaphor. Suite: **Batterie de Savoir**.
 | **Config** | `~/.claude/` — git: `spm1001/.claude` |
 | **Work** | Google Drive (web) — no local mount |
 | **Capture** | `~/iCloud/Work Inbox/` — iOS quick capture |
-| **Taildrive** | `~/Taildrive/` — each server shares here |
+| **Sharing** | `~/scratch/` — Syncthing (Mac ↔ tube); `~/notes` is git-canonical via notes-sync. Taildrive retired 2026-07-07. |
 
 ## Overrides
 

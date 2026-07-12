@@ -374,6 +374,7 @@ manifest = {
     "owner": {"name": "Sameer Modha", "email": "sameer@modha.dev"},
     "plugins": [{
         "name": "mise-home",
+        "displayName": "Mise Home",
         "source": "./plugins/mise-home",
         "description": "Google Workspace MCP for the planetmodha estate — search Drive, fetch Gmail, act on documents. Requires planetmodha Google OAuth.",
         "category": "integration",

@@ -49,6 +49,10 @@ for rel in (".claude-plugin/plugin.json", "mcp-local.json"):
         continue
     if "name" in d:
         d["name"] = name
+        if rel.endswith("plugin.json"):
+            # Explicit displayName → Desktop shows "Mise Home", not the id
+            # title-cased to "Mise home" (only the first letter capitalised).
+            d["displayName"] = name.replace("-", " ").title()
     if "description" in d:
         d["description"] = d["description"].rstrip(".") + f" (planetmodha estate, '{inst}' instance)"
     srv = d.get("mcpServers", {})

@@ -110,6 +110,12 @@ After all updates, read `~/.claude/plugins/installed_plugins.json` again. For ea
 - Which plugins had version changes (old → new)
 - Which were already up to date
 
+**Registry-drop guard (bds-vegowo).** Also diff the *set of keys*: every batterie plugin present in the "before" snapshot must still be present in the after-state. A plugin registry entry can vanish silently — Claude Desktop has been caught bulk-rewriting `installed_plugins.json` and emptying `@batterie` entries while leaving the plugin cache intact — and the loss is invisible (the plugin's skills just stop loading, no error, no log) until you happen to look. This update run is exactly when a human is looking. So if any batterie plugin from the "before" list is **absent** from the after-state, **warn loudly** — it's a silent registry drop, not a normal update — and offer the known fix (it restores the entry cleanly from the intact cache):
+
+```
+claude plugin install <name>@<marketplace>
+```
+
 **JSON structure of `installed_plugins.json`:**
 
 ```json

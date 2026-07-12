@@ -40,24 +40,35 @@ PYEOF`
 
 ## Your task
 
-### 1. Pick the bump level
+### 1. Pick the bump level and the changelog line
 
-Default **patch**. Use minor for a new capability, major for a breaking change.
-Map the user's words ("ship the docs fix" → patch; "release the new skill" →
-minor) and state which you picked. Under single-version (bds-suwoho) the bump
-always applies to the **suite version** (batterie-de-savoir's plugin.json) — the
-one number every plugin ships — whichever repo you're publishing from.
+**Bump level** — default **patch**. Use minor for a new capability, major for a
+breaking change. Map the user's words ("ship the docs fix" → patch; "release the
+new skill" → minor) and state which you picked. Under single-version (bds-suwoho)
+the bump always applies to the **suite version** (batterie-de-savoir's
+plugin.json) — the one number every plugin ships — whichever repo you're
+publishing from.
+
+**Changelog line** — the suite ships ONE canonical CHANGELOG (bds-mawitu), and
+`publish.py` prepends an entry to it every release, so a shipped plugin's
+changelog can never predate its version. Draft a **one-line** human narrative of
+what this release does (e.g. *"Carrying mise: fetch handles Shared Drives"*) and
+pass it as `--changelog "…"`. If you don't, the commit message is used verbatim —
+fine for a mechanical release, but a written line reads far better to the family
+Claudes who orient off these files. Confirm the line with the user alongside the
+bump level.
 
 ### 2. Dry-run first — always
 
 Resolve the engine from the local source tree and preview:
 
 ```
-uv run --script ~/repos/spm1001/batterie-de-savoir/scripts/publish.py --patch --dry-run
+uv run --script ~/repos/spm1001/batterie-de-savoir/scripts/publish.py --patch --changelog "one-line narrative" --dry-run
 ```
 
 (run from the **cwd of the repo being published** — it operates on cwd). Swap
-`--patch` for the chosen level.
+`--patch` for the chosen level. The dry-run shows the `changelog: [x.y.z] …`
+line it will prepend.
 
 ### 3. Review the plan with the human
 
@@ -72,16 +83,19 @@ here, suite bump in batterie-de-savoir).
 
 ### 4. Run it for real
 
-On confirmation, drop `--dry-run`:
+On confirmation, drop `--dry-run` (keep the same `--changelog`):
 
 ```
-uv run --script ~/repos/spm1001/batterie-de-savoir/scripts/publish.py --patch
+uv run --script ~/repos/spm1001/batterie-de-savoir/scripts/publish.py --patch --changelog "one-line narrative"
 ```
 
-It will: push the content change (cwd repo), bump + push the **suite version**
-in batterie-de-savoir (one combined commit if you're publishing
-batterie-de-savoir itself), trigger `assemble.yml`, and **watch the run to
-green** (~1–2 min). The assembler stamps every plugin to the new suite number.
+It will: push the content change (cwd repo), bump the **suite version** +
+prepend the **CHANGELOG entry** in batterie-de-savoir (one combined commit if
+you're publishing batterie-de-savoir itself; a targeted plugin.json+CHANGELOG
+commit otherwise), push, trigger `assemble.yml`, and **watch the run to green**
+(~1–2 min). The assembler stamps every plugin to the new suite number and
+regenerates each plugin's shipped CHANGELOG stub (which just points back at the
+canonical suite changelog — so no shipped changelog can ever look stale).
 A red run is almost always a suite-level version-ratchet quarantine — content
 drifted but the suite version wasn't bumped; the message names the failing run.
 Then it pulls this machine current for the published plugin (marketplace update

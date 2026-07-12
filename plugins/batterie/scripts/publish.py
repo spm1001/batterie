@@ -42,6 +42,7 @@ Exit codes:
 
 import argparse
 import calendar
+import datetime
 import json
 import re
 import shlex
@@ -102,6 +103,27 @@ def replace_version(text: str, new: str) -> str:
     if n != 1:
         raise ValueError(f"expected exactly one version field, replaced {n}")
     return new_text
+
+
+def prepend_changelog(text: str, version: str, date: str, message: str) -> str:
+    """Prepend a `## [version] - date` entry above the newest existing entry.
+
+    Single-version (bds-mawitu): one canonical suite CHANGELOG, one entry per
+    suite release. The entry goes directly above the first `## ` heading — the
+    header blockquote sits above that, so it's preserved. Idempotent guard: if
+    the newest entry is already this version, raise (a double-publish of the
+    same version would otherwise stack duplicate headings)."""
+    lines = text.splitlines(keepends=True)
+    for i, ln in enumerate(lines):
+        if ln.startswith("## "):
+            if ln.startswith(f"## [{version}]"):
+                raise ValueError(
+                    f"CHANGELOG already has a [{version}] entry — refusing to "
+                    "stack a duplicate (was this version already published?)")
+            entry = f"## [{version}] - {date}\n\n{message.rstrip()}\n\n"
+            return "".join(lines[:i]) + entry + "".join(lines[i:])
+    # No existing `## ` heading (empty/degenerate changelog): append the entry.
+    return text.rstrip() + f"\n\n## [{version}] - {date}\n\n{message.rstrip()}\n"
 
 
 # ---- side effects ------------------------------------------------------------
@@ -172,6 +194,9 @@ def main() -> int:
 
     ap.set_defaults(level="patch")
     ap.add_argument("-m", "--message", help="commit message (default: chore(<plugin>): publish <version>)")
+    ap.add_argument("--changelog", help="one-line human narrative for the suite "
+                    "CHANGELOG entry (default: the commit message). An entry is "
+                    "ALWAYS written — skipping is what let changelogs drift.")
     ap.add_argument("--repo", type=Path, default=Path.cwd(),
                     help="source repo to publish (default: cwd)")
     ap.add_argument("--suite-repo", type=Path, default=SUITE_REPO_DEFAULT,
@@ -211,6 +236,22 @@ def main() -> int:
     suite_bump_msg = (f"chore(batterie): bump suite version to {suite_new}"
                       + ("" if is_suite else f" (carrying {name})"))
 
+    # Suite CHANGELOG (bds-mawitu): one canonical changelog in the suite repo,
+    # maintained here at publish time so a shipped plugin's changelog can never
+    # predate its release. The narrative line defaults to the commit message; an
+    # entry is ALWAYS written (skipping is what let changelogs drift). Resolved
+    # and validated NOW — before any push — so a missing changelog fails loud and
+    # early, not half-way through a 2-repo push.
+    changelog_path = suite_repo / "CHANGELOG.md"
+    if not changelog_path.exists():
+        die(f"no CHANGELOG.md in suite repo {suite_repo} — the suite changelog "
+            "is maintained at publish time; seed it before publishing")
+    changelog_msg = args.changelog or message
+    changelog_date = datetime.date.today().isoformat()
+    # Fail early on a same-version double-publish rather than after the push.
+    new_changelog = prepend_changelog(
+        changelog_path.read_text(), suite_new, changelog_date, changelog_msg)
+
     print(f"Publish {name}: suite {suite_current} -> {suite_new}  ({args.level})")
     if is_suite:
         print(f"  repo:    {repo}  (== suite repo: one commit carries content + bump)")
@@ -218,6 +259,7 @@ def main() -> int:
         print(f"  content: {repo}")
         print(f"  suite:   {suite_repo}  (2-repo push: content first, then suite bump)")
     print(f"  commit:  {message!r}")
+    print(f"  changelog: [{suite_new}] {changelog_msg!r}  → {changelog_path}")
     print(f"  wait:    {'no' if args.no_wait else 'watch to green'}")
     print(f"  pull:    {'no' if args.no_pull else ('this machine' + (f' + reinstall {cli[0]}' if cli else ''))}")
 
@@ -240,8 +282,10 @@ def main() -> int:
         # together with the content change in a single commit.
         if dry:
             print(f"  DRY  write suite version {suite_new} into {suite_pj_path}")
+            print(f"  DRY  prepend [{suite_new}] entry to {changelog_path}")
         else:
             suite_pj_path.write_text(replace_version(suite_text, suite_new))
+            changelog_path.write_text(new_changelog)
         checked(run(["git", "-C", str(repo), "add", "-A"], dry=dry), "git add")
         checked(run(["git", "-C", str(repo), "commit", "-m", message], dry=dry,
                     capture=True), "git commit")
@@ -303,12 +347,18 @@ def main() -> int:
         # commits that path's worktree state, ignoring any other staged/dirty
         # files in the suite repo; never -A here).
         suite_rel = str(suite_pj_path.relative_to(suite_repo))
+        changelog_rel = str(changelog_path.relative_to(suite_repo))
         if dry:
             print(f"  DRY  write suite version {suite_new} into {suite_pj_path}")
+            print(f"  DRY  prepend [{suite_new}] entry to {changelog_path}")
         else:
             suite_pj_path.write_text(replace_version(suite_text, suite_new))
+            changelog_path.write_text(new_changelog)
+        # TARGETED path-list (never -A in the suite repo — bds-fifuko): the bump
+        # AND the changelog entry, and nothing else the suite repo's tree carries.
         checked(run(["git", "-C", str(suite_repo), "commit", "-m", suite_bump_msg,
-                     "--", suite_rel], dry=dry, capture=True), "git commit (suite bump)")
+                     "--", suite_rel, changelog_rel], dry=dry, capture=True),
+                "git commit (suite bump)")
         checked(run(["git", "-C", str(suite_repo), "push"], dry=dry, capture=True), "git push (suite)")
 
     print("\n[assemble]")

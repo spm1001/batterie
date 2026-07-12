@@ -41,6 +41,14 @@ grep -rl --include='*.sh'                   'rules/mise.md'          "$OUT" | xa
 python3 - "$OUT" "$NAME" "$INST" <<'PY'
 import json, sys
 out, name, inst = sys.argv[1], sys.argv[2], sys.argv[3]
+
+# Human Workspace label the flavour "acts on" — read by mise's SessionStart
+# hook to say WHICH mise this is (mise-tatego). Base mise ships
+# identity="ITV (itv.com)" in its source plugin.json; this overwrites it so a
+# leftover ITV label can never leak (the guard below asserts the swap landed).
+# Only two flavours will ever exist, so an explicit map beats derivation.
+IDENTITY_BY_INSTANCE = {"home": "Planet Modha (planetmodha)"}
+
 for rel in (".claude-plugin/plugin.json", "mcp-local.json"):
     p = f"{out}/{rel}"
     try:
@@ -53,6 +61,11 @@ for rel in (".claude-plugin/plugin.json", "mcp-local.json"):
             # Explicit displayName → Desktop shows "Mise Home", not the id
             # title-cased to "Mise home" (only the first letter capitalised).
             d["displayName"] = name.replace("-", " ").title()
+            try:
+                d["identity"] = IDENTITY_BY_INSTANCE[inst]
+            except KeyError:
+                sys.exit(f"ERROR: no identity label for instance '{inst}' — "
+                         "add one to IDENTITY_BY_INSTANCE in make-mise-flavour.sh")
     if "description" in d:
         d["description"] = d["description"].rstrip(".") + f" (planetmodha estate, '{inst}' instance)"
     srv = d.get("mcpServers", {})
@@ -89,6 +102,13 @@ d = json.load(open(f"{out}/.claude-plugin/plugin.json"))
 ok = d.get("name") == name and list(d.get("mcpServers", {})) == [name]
 if not ok:
     print(f"  ✗ plugin.json name/server not '{name}': name={d.get('name')} servers={list(d.get('mcpServers',{}))}")
+    sys.exit(1)
+# identity must be the flavour's own, never a leftover ITV label (mise-tatego).
+# Field-specific (not a file-wide scan) so the hook's legitimate sibling
+# reference to "ITV (itv.com)" is not a false positive.
+ident = d.get("identity", "")
+if not ident or "itv" in ident.lower():
+    print(f"  ✗ plugin.json identity not overwritten for flavour '{name}': identity={ident!r}")
     sys.exit(1)
 PY
 [ "$FAIL" -eq 0 ] || { echo "GUARD FAILED — flavour would collide with ITV mise. Aborting."; exit 1; }

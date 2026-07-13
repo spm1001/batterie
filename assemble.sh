@@ -6,15 +6,12 @@
 #   PUBLIC  "batterie"      → this repo (plugins/ + .claude-plugin/marketplace.json,
 #                             committed + pushed by assemble.yml — the update bus).
 #   PRIVATE "batterie-home" → a LOCAL dir (default dist/batterie-home, gitignored),
-#                             the WHOLE suite family-flavoured (bds-rikeno):
-#                             mise-home (transformed from public mise via
+#                             mise only, transformed to mise-home via
 #                             transforms/make-mise-flavour.sh with the planetmodha
-#                             cred) PLUS verbatim copies of every other published
-#                             plugin (batterie/bon/trousse/todoist-gtd). Emitted
-#                             ONLY when MISE_HOME_CRED is set; everything derives
-#                             from the just-vendored PUBLIC plugins, so both
-#                             marketplaces carry identical runtime bytes and the
-#                             same suite version — they cannot drift.
+#                             cred. Emitted ONLY when MISE_HOME_CRED is set; the
+#                             flavour derives from the just-vendored PUBLIC mise,
+#                             so both marketplaces carry identical runtime bytes
+#                             and the same suite version — they cannot drift.
 #                             Never committed here (it carries the planetmodha
 #                             credential); assemble.yml pushes it to the private
 #                             spm1001/batterie-home repo over a write deploy key
@@ -400,47 +397,68 @@ if [ -n "${MISE_HOME_CRED:-}" ]; then
   "$BATTERIE_DIR/transforms/make-mise-flavour.sh" \
     "$BATTERIE_DIR/plugins/mise" "$HOME_OUT/plugins/mise-home" home "$MISE_HOME_CRED"
 
-  # Full-suite mirror (bds-rikeno): family gets the WHOLE suite zero-touch, so
-  # copy every OTHER published plugin verbatim into batterie-home. They're
-  # estate-agnostic and already stamped + husk/parity/ratchet-guarded by the
-  # public vendoring above, so coherence holds by construction. mise itself is
-  # REPLACED by the credentialled mise-home flavour, never copied raw.
-  for d in "$BATTERIE_DIR"/plugins/*/; do
-    pname=$(basename "$d")
-    [ "$pname" = "mise" ] && continue
-    cp -a "$d" "$HOME_OUT/plugins/$pname"
-  done
+  # Family stub (bds-rikeno): batterie-home carries ONLY mise-home — the one
+  # plugin that MUST be private (it holds the planetmodha Google cred). The rest
+  # of the suite is public, so rather than mirror public content into a private
+  # repo (which would drag along each plugin's CLI-auto-install + rules-injection
+  # SessionStart hooks — per-session noise for tools family never asked for), we
+  # append a breadcrumb to mise-home's instruction shard. That shard auto-loads
+  # via ~/.claude/rules/, so a family member's Claude finds it IN CONTEXT and can
+  # add the public suite on request. "Ask a Claude" is the support model; this is
+  # the trail it follows. (Whole-suite mirror was built + rejected 2026-07-12 —
+  # the hook footprint made it heavier than the one command it saved.)
+  MH_SHARD="$HOME_OUT/plugins/mise-home/instructions.md"
+  if [ ! -f "$MH_SHARD" ]; then
+    echo "FAIL: mise-home/instructions.md not found — the transform should produce it (stub has nowhere to live)" >&2
+    exit 1
+  fi
+  cat >> "$MH_SHARD" <<'STUBEOF'
 
-  # marketplace.json is generated from the PUBLIC manifest (a derived artifact of
-  # a derived artifact — nothing hand-maintained to drift): every public plugin
-  # EXCEPT mise (replaced by mise-home), verbatim, plus the mise-home entry. So
-  # the private manifest auto-tracks the suite if plugins are added/removed. NB
-  # the marketplace NAME sets the @suffix in plugin keys; the updater matches by
-  # the REPO the marketplace is served from (spm1001/batterie-*), which is
-  # bds-picefu's concern. Dual-install (bds-rikeno decision a): family registers
-  # batterie-home ALONE — names collide with public batterie, so the power user
-  # who holds both estates keeps public and does not dual-register.
-  python3 - "$HOME_OUT" "$HOME_NAME" "$BATTERIE_DIR/.claude-plugin/marketplace.json" <<'PYEOF'
+## The rest of the Batterie suite (planetmodha family)
+
+This is the planetmodha family install. **mise-home** lives in the private
+`batterie-home` marketplace only because it carries the family's Google login —
+**everything else in the suite is public** and free to add.
+
+If the person you're helping wants more than mise-home, add the public
+marketplace and install what they want:
+
+```
+claude plugin marketplace add spm1001/batterie
+claude plugin install <name>@batterie
+```
+
+What's there, and the honest per-tool guide:
+- **trousse** — utility skills (diagrams, code review, data analysis). Works immediately, nothing to set up. Good default add.
+- **batterie** — keeps their plugins current (`/batterie:update`). Worth having.
+- **todoist-gtd** — Todoist with GTD coaching. Needs the `todoist` CLI *and* a Todoist account + API token. Only if they use Todoist.
+- **bon** — a power-user GTD work-tracker. Needs the `bon` CLI and a local store; most family won't want it. Don't set up unless they specifically ask (e.g. Isaac).
+
+Don't force-install anything — offer, explain what each needs, let them choose.
+STUBEOF
+  echo "  OK family stub appended → mise-home/instructions.md"
+
+  # marketplace.json is generated (a derived artifact of a derived artifact —
+  # nothing hand-maintained to drift). NB the marketplace NAME sets the
+  # @suffix in plugin keys; the updater matches by the REPO the marketplace
+  # is served from (spm1001/batterie-*), which is bds-picefu's concern.
+  python3 - "$HOME_OUT" "$HOME_NAME" <<'PYEOF'
 import json, sys
-out, name, pub_path = sys.argv[1], sys.argv[2], sys.argv[3]
-pub = json.load(open(pub_path))
-# Every public plugin except mise (the credentialled mise-home replaces it).
-plugins = [p for p in pub["plugins"] if p["name"] != "mise"]
-plugins.append({
-    "name": "mise-home",
-    "displayName": "Mise Home",
-    "source": "./plugins/mise-home",
-    "description": "Google Workspace MCP for the planetmodha estate — search Drive, fetch Gmail, act on documents. Requires planetmodha Google OAuth.",
-    "category": "integration",
-    "homepage": "https://github.com/spm1001/mise-en-space",
-    "keywords": ["google", "workspace", "mcp", "family"],
-})
+out, name = sys.argv[1], sys.argv[2]
 manifest = {
     "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
     "name": name,
-    "description": "Batterie de Savoir — the whole suite, planetmodha family flavour (mise-home carries the planetmodha Google Workspace cred; every other plugin mirrors public verbatim)",
+    "description": "Batterie de Savoir — planetmodha family flavour (mise-home: Google Workspace MCP against the planetmodha estate)",
     "owner": {"name": "Sameer Modha", "email": "sameer@modha.dev"},
-    "plugins": plugins,
+    "plugins": [{
+        "name": "mise-home",
+        "displayName": "Mise Home",
+        "source": "./plugins/mise-home",
+        "description": "Google Workspace MCP for the planetmodha estate — search Drive, fetch Gmail, act on documents. Requires planetmodha Google OAuth.",
+        "category": "integration",
+        "homepage": "https://github.com/spm1001/mise-en-space",
+        "keywords": ["google", "workspace", "mcp", "family"],
+    }],
 }
 with open(f"{out}/.claude-plugin/marketplace.json", "w") as f:
     json.dump(manifest, f, indent=2)
@@ -452,38 +470,29 @@ PYEOF
   cat > "$HOME_OUT/README.md" <<'READMEEOF'
 # batterie-home — Private Family Marketplace (generated)
 
-Private Claude plugin marketplace for the planetmodha estate. Carries the
-WHOLE Batterie de Savoir suite, family-flavoured (bds-rikeno): `mise-home`
-(the planetmodha-credentialled flavour of mise) plus verbatim copies of every
-other published plugin — `batterie`, `bon`, `trousse`, `todoist-gtd`. Family
-members register THIS marketplace **alone** and get the entire suite
-zero-touch — no need to also add the public `spm1001/batterie`.
+Private Claude plugin marketplace for the planetmodha estate. Carries ONLY
+`mise-home` — the planetmodha-credentialled flavour of mise. Family members
+get everything else (bon, trousse, todoist-gtd, batterie) from the PUBLIC
+marketplace `spm1001/batterie`; `/batterie:update` spans both automatically
+(it matches marketplaces by source repo: `spm1001/batterie` or
+`spm1001/batterie-*`).
 
-**Dual-install note:** plugin names here (`bon`, `trousse`, …) match the public
-marketplace, so registering BOTH would collide. The power user who holds both
-estates keeps the PUBLIC `spm1001/batterie`; family uses `batterie-home` only.
-`/batterie:update` spans batterie-family marketplaces by source repo
-(`spm1001/batterie` or `spm1001/batterie-*`), so one update covers whichever
-one you have.
-
-**Every file here is GENERATED** by `spm1001/batterie`'s `assemble.sh` (the
-private output of the shared pipeline — bds-mumise/bds-rikeno). Never hand-edit;
-change a source repo (runtime) or the transform (`transforms/make-mise-flavour.sh`
-in spm1001/batterie, for mise-home identity/cred) and re-assemble. The vendored
-`credentials.json` is an installed-app OAuth client (secret public by design);
-this repo stays private for the Teams Directory requirement, not the credential.
+**Every file here is GENERATED** by `spm1001/batterie`'s `assemble.sh`
+(the private output of the shared pipeline — bds-mumise). Never hand-edit;
+change mise-en-space or the transform (`transforms/make-mise-flavour.sh`
+in spm1001/batterie) and re-assemble. The vendored `credentials.json` is an
+installed-app OAuth client (secret public by design); this repo stays
+private for the Teams Directory requirement, not for the credential.
 READMEEOF
   cat > "$HOME_OUT/CLAUDE.md" <<'CLAUDEEOF'
 # batterie-home — Agent Guide
 
 Generated artifact repo — the private output of `spm1001/batterie`'s
 `assemble.sh` (one pipeline, two marketplaces; see that repo's CLAUDE.md,
-"Two outputs, one pipeline"). Carries the WHOLE suite family-flavoured
-(bds-rikeno): mise-home (credentialled) + verbatim copies of
-batterie/bon/trousse/todoist-gtd. **Never hand-edit anything here.** To change
-a plugin: change its source repo (runtime) or, for mise-home identity/cred,
-spm1001/batterie's `transforms/make-mise-flavour.sh`; then re-assemble with
-`MISE_HOME_CRED` set and push the fresh `dist/batterie-home` here.
+"Two outputs, one pipeline"). **Never hand-edit anything here.** To change
+mise-home: change mise-en-space (runtime) or spm1001/batterie's
+`transforms/make-mise-flavour.sh` (identity/cred), re-assemble with
+`MISE_HOME_CRED` set, and push the fresh `dist/batterie-home` here.
 CLAUDEEOF
 
   # Same guards as the public output, same code.

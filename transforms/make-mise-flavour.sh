@@ -36,6 +36,11 @@ rsync -a --exclude '.venv' --exclude '__pycache__' --exclude '*.pyc' "$IN"/ "$OU
 grep -rl --include='*.py' --include='*.sh' 'mise-batterie-de-savoir' "$OUT" | xargs -r sed -i "s|mise-batterie-de-savoir|${NAME}|g"
 grep -rl --include='*.py' --include='*.sh' 'mise-oauth-token'        "$OUT" | xargs -r sed -i "s|mise-oauth-token|${NAME}-oauth-token|g"
 grep -rl --include='*.sh'                   'rules/mise.md'          "$OUT" | xargs -r sed -i "s|rules/mise.md|rules/${NAME}.md|g"
+# MCP tool prefix: mcpServers is rekeyed to ${NAME} below, so every `mcp__mise__…`
+# reference must follow or the flavour's skill can't call its own tools — its
+# allowed-tools glob would still point at the WORK server (mise-timepu). Only the
+# skill's SKILL.md carries it today; *.py included so a future reference is caught.
+grep -rl --include='*.md' --include='*.py' 'mcp__mise__'             "$OUT" | xargs -r sed -i "s|mcp__mise__|mcp__${NAME}__|g"
 
 # 3. plugin.json + mcp-local.json: structured edits (name + rekey mcpServers).
 python3 - "$OUT" "$NAME" "$INST" <<'PY'
@@ -77,6 +82,31 @@ for rel in (".claude-plugin/plugin.json", "mcp-local.json"):
 print(f"  plugin.json/mcp-local.json rekeyed → {name}")
 PY
 
+# 3b. Differentiate the skill DESCRIPTION (mise-timepu). Both flavours ship a
+#     skill whose picker text is byte-identical, so a Claude choosing between
+#     `mise:mise` and `mise-home:mise` cannot tell which Workspace each acts on.
+#     Front-load a flavour marker; read identity from the plugin.json just
+#     written so the two can never disagree.
+python3 - "$OUT" <<'PY'
+import json, sys
+out = sys.argv[1]
+identity = json.load(open(f"{out}/.claude-plugin/plugin.json"))["identity"]
+sibling = "ITV (itv.com)"   # the only other flavour; work
+skill = f"{out}/skills/mise/SKILL.md"
+lines = open(skill).read().split("\n")
+for i, ln in enumerate(lines):
+    if ln.startswith("description:"):
+        body = ln[len("description:"):].strip()
+        marker = (f"[{identity} — the PERSONAL/family Google Workspace flavour; "
+                  f"the sibling `mise` skill acts on the {sibling} work Workspace.] ")
+        lines[i] = "description: " + marker + body
+        break
+else:
+    sys.exit("ERROR: no 'description:' line in skills/mise/SKILL.md")
+open(skill, "w").write("\n".join(lines))
+print("  skill description differentiated")
+PY
+
 # 4. Swap the OAuth client (installed-app secret — public by design).
 cp "$CRED" "$OUT/credentials.json"
 echo "  credentials.json ← $(basename "$CRED")"
@@ -111,5 +141,20 @@ if not ident or "itv" in ident.lower():
     print(f"  ✗ plugin.json identity not overwritten for flavour '{name}': identity={ident!r}")
     sys.exit(1)
 PY
+# skill wiring + differentiation (mise-timepu). *.md is outside scan()'s scope,
+# so check the skill directly: (a) no mcp__mise__ leftover — else its allowed-
+# tools point at the WORK server and it can't call its own tools; (b) the
+# flavour identity appears in the picker text — else the two skills are
+# indistinguishable in the chooser.
+SKILL="$OUT/skills/mise/SKILL.md"
+if [ -f "$SKILL" ]; then
+  if grep -q 'mcp__mise__' "$SKILL"; then
+    echo "  ✗ skill still references mcp__mise__ (should be mcp__${NAME}__) — its tools won't be allowed"; FAIL=1
+  fi
+  _ident=$(python3 -c "import json; print(json.load(open('$OUT/.claude-plugin/plugin.json'))['identity'])")
+  if ! grep -qF "$_ident" "$SKILL"; then
+    echo "  ✗ skill description not differentiated (missing '$_ident')"; FAIL=1
+  fi
+fi
 [ "$FAIL" -eq 0 ] || { echo "GUARD FAILED — flavour would collide with ITV mise. Aborting."; exit 1; }
 echo "✓ Guard clean. Flavour '$NAME' built at $OUT"

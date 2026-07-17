@@ -2,14 +2,14 @@
 name: snowflake-devdocs
 description: >
   Snowflake developer docs, fetched live — retrieves current pages as clean Markdown from
-  docs.snowflake.com (no API key, no scraping; the official .md and llms.txt endpoints via
-  curl). Provides a curated index across the Lantern exposure-lake decision surfaces (Iceberg
-  tables, external volumes, Open Catalog/Polaris, Secure Data Sharing, cross-cloud egress cost,
-  dynamic masking, clean rooms) and a discover→fetch→cite workflow that validates every pinned
-  URL and ensures fetched docs beat stale training memory. Load this BEFORE answering any
-  Snowflake question from memory, FIRST — Snowflake warns their Iceberg, Cortex, and pricing
-  syntax drifts fast. Triggers on 'Snowflake docs', 'Iceberg on Snowflake', 'Snowflake data
-  sharing', 'Snowflake cost', 'Open Catalog', 'Cortex Analyst'. (user)
+  docs.snowflake.com (no API key, no scraping; official .md + llms.txt via curl). Provides
+  curated indexes — general Snowflake (SQL, Cortex, CoCo/Cortex Code) and the Lantern
+  exposure-lake slice (Iceberg, Open Catalog, data sharing, egress cost, masking) — plus a
+  discover→fetch→cite workflow that validates every pinned URL and ensures fetched docs beat
+  stale memory. Load this FIRST, BEFORE answering any Snowflake question from memory — Snowflake
+  warns Iceberg, Cortex, and pricing drift fast. Triggers on 'Snowflake docs', 'Iceberg on
+  Snowflake', 'Snowflake data sharing', 'Cortex Analyst', 'Cortex Code / CoCo', 'Open
+  Catalog'. (user)
 allowed-tools: [Bash]
 ---
 
@@ -46,15 +46,19 @@ index that apply directly here:
 
 ## Workflow
 
-### 1. Curated index first (the Lantern slice)
+### 1. Curated index first
 
-For exposure-lake questions, the authoritative page is almost certainly already pinned in
-**`references/lantern-index.md`** — grouped by decision surface (storage / catalog / sharing /
-cost & egress / governance / clean rooms / marketplace / Cortex), each with its verified `.md` URL
-and a one-line "why this matters for Lantern". Start there, then fetch the page (step 3).
+Two curated maps, each pinning topic → verified `.md` URL:
 
-`references/lantern-frame.md` carries the durable architectural spine so you read whatever you
-fetch through the right lens — load it alongside the index for any Lantern reasoning.
+- **`references/general-index.md`** — the broad surface: core SQL, Cortex (AISQL / Search /
+  Analyst / Agents), data loading, performance, editions & cost, and **CoCo (Cortex Code)** —
+  Snowflake's agentic CLI and its portable Agent Skills.
+- **`references/lantern-index.md`** — the exposure-lake decision slice (storage / catalog /
+  sharing / cost & egress / governance / clean rooms / marketplace), each with a one-line "why
+  this matters for Lantern". Pair with **`references/lantern-frame.md`** (the durable
+  architectural spine) for any Lantern reasoning.
+
+Start in whichever fits, then fetch the page (step 3). For anything in neither, use discovery (step 2).
 
 ### 2. Discovery — when the page isn't in the curated index
 

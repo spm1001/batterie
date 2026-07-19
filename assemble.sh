@@ -45,6 +45,7 @@ bon:bon
 trousse:trousse
 mise:mise-en-space
 todoist-gtd:todoist-gtd
+sonnette:aboyeur
 "
 # garde-manger delisted 2026-06-10 (decommissioned per the estate audit;
 # Sameer confirmed). tafelmusik unvendored 2026-06-10 (too experimental to
@@ -159,6 +160,10 @@ print('yes' if d.get('mcpServers') else 'no')
     # Repo-shaped excludes are ROOT-ANCHORED (leading /): an unanchored
     # `mise/` matches at every depth and ate skills/mise/ — Desktop showed
     # "no skills" on 0.7.6. Only genuinely-anywhere patterns stay bare.
+    # /dist: build output, gitignored in source repos (aboyeur's tsc output)
+    # — absent from clean clones, present in working trees; local previews
+    # were vendoring it (2026-07-19). NB sonnette's SHIPPED bundle lives in
+    # sonnette/, deliberately not dist/, so this exclude can't eat it.
     # --checksum, not rsync's default size+mtime quick-check: a same-byte-size
     # version bump (e.g. 0.26.2→0.26.3) with an aligned mtime is otherwise
     # silently skipped — the bump never propagates, and the ratchet then
@@ -172,6 +177,7 @@ print('yes' if d.get('mcpServers') else 'no')
       --exclude /mise --exclude /mise-fetch --exclude /.mcp-workspace \
       --exclude /.mise --exclude /data --exclude /uploads \
       --exclude /.oauth-stash --exclude /.claude --exclude /.coverage \
+      --exclude /dist \
       --exclude .venv --exclude node_modules --exclude __pycache__ --exclude '*.pyc' \
       --exclude .pytest_cache --exclude .mypy_cache --exclude .ruff_cache \
       --exclude .hypothesis --exclude '*.db' --exclude token.json --exclude .env \

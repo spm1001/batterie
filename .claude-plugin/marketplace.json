@@ -64,6 +64,19 @@
         "todoist",
         "gtd"
       ]
+    },
+    {
+      "name": "sonnette",
+      "source": "./plugins/sonnette",
+      "description": "Conductor mesh connectivity \u2014 peer-to-peer channel between Claude sessions. Requires bun on the host.",
+      "category": "integration",
+      "homepage": "https://github.com/spm1001/aboyeur",
+      "keywords": [
+        "mesh",
+        "conductor",
+        "peer",
+        "channels"
+      ]
     }
   ]
 }

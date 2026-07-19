@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # ardoise.sh — Run Claude on a blank slate
 #
-# Creates a temporary HOME with auth + onboarding state but no config,
+# Creates an isolated HOME with auth + onboarding state but no config,
 # skills, hooks, or plugins. Two modes:
 #
 #   Interactive (default):  Opens Claude TUI as a fresh user would see it.
@@ -13,6 +13,18 @@
 #   ardoise.sh -p "prompt"                        # Print mode, one-shot
 #   ardoise.sh -p --max-turns 5 -- "prompt"       # Print mode with flags
 #   echo "prompt" | ardoise.sh -p --stdin         # Print mode, stdin
+#   ardoise.sh --home ~/sbx /path/to/dir          # Persistent HOME (multi-step)
+#   ardoise.sh --keep -p "prompt"                 # Temp HOME, printed, not deleted
+#
+# --home DIR : reuse (and keep) a named sandbox HOME across invocations — the
+#              recipe for multi-step tests (marketplace add -> install -> verify).
+#              Seeded once; reused as-is thereafter (accumulated state survives).
+# --keep     : temp HOME as usual, but skip the cleanup trap and print its path.
+#
+# Vertex: if CLAUDE_CODE_USE_VERTEX=1 in the caller's env, the Vertex config
+# (project, region, model ids) and gcloud ADC are passed through the isolation
+# wall, so ardoise works on (and bills to) a Vertex setup instead of silently
+# falling back to Anthropic-API credentials. Auto-detected; no flag needed.
 #
 # Cross-platform (Linux + macOS).
 
@@ -25,11 +37,25 @@ CLAUDE_ARGS=()
 PROMPT=""
 USE_STDIN=false
 START_DIR=""
+SANDBOX_HOME_ARG=""
+KEEP=false
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
         -p|--print)
             PRINT_MODE=true
+            shift
+            ;;
+        --home)
+            if [[ $# -lt 2 ]]; then
+                echo "Error: --home requires a directory path" >&2
+                exit 1
+            fi
+            SANDBOX_HOME_ARG="$2"
+            shift 2
+            ;;
+        --keep)
+            KEEP=true
             shift
             ;;
         --)
@@ -89,30 +115,71 @@ CLAUDE_BIN=$(command -v claude 2>/dev/null) || {
 
 CLAUDE_REAL=$(readlink -f "$CLAUDE_BIN")
 
+# ── Detect Vertex (before the env -i wall scrubs it) ─────────────────
+
+ON_VERTEX=false
+VERTEX_VARS=()
+if [[ -n "${CLAUDE_CODE_USE_VERTEX:-}" ]]; then
+    ON_VERTEX=true
+    for v in CLAUDE_CODE_USE_VERTEX ANTHROPIC_VERTEX_PROJECT_ID CLOUD_ML_REGION \
+             ANTHROPIC_MODEL ANTHROPIC_DEFAULT_OPUS_MODEL \
+             ANTHROPIC_DEFAULT_SONNET_MODEL ANTHROPIC_DEFAULT_HAIKU_MODEL; do
+        [[ -n "${!v:-}" ]] && VERTEX_VARS+=("$v=${!v}")
+    done
+    # Vertex auth is gcloud ADC. env -i + a fresh HOME hides the default
+    # ~/.config/gcloud path, so pin GOOGLE_APPLICATION_CREDENTIALS to the real ADC.
+    ADC="${GOOGLE_APPLICATION_CREDENTIALS:-$HOME/.config/gcloud/application_default_credentials.json}"
+    [[ -f "$ADC" ]] && VERTEX_VARS+=("GOOGLE_APPLICATION_CREDENTIALS=$ADC")
+fi
+
 # ── Find credentials ─────────────────────────────────────────────────
 
 REAL_CLAUDE_DIR="$HOME/.claude"
-if [[ ! -f "$REAL_CLAUDE_DIR/.credentials.json" ]]; then
-    echo "Error: No credentials at $REAL_CLAUDE_DIR/.credentials.json" >&2
-    echo "Run: claude login" >&2
+REAL_CREDS="$REAL_CLAUDE_DIR/.credentials.json"
+# Anthropic-API creds are required UNLESS we're on Vertex (which auths via ADC).
+if [[ "$ON_VERTEX" == false && ! -f "$REAL_CREDS" ]]; then
+    echo "Error: No credentials at $REAL_CREDS" >&2
+    echo "Run: claude login   (or set CLAUDE_CODE_USE_VERTEX=1 for a Vertex setup)" >&2
     exit 1
 fi
 
+# Real CC config: $HOME/.claude.json (home dir). Fall back to the legacy
+# ~/.claude/claude.json seen on some setups.
+REAL_CLAUDE_JSON=""
+for candidate in "$HOME/.claude.json" "$REAL_CLAUDE_DIR/claude.json"; do
+    [[ -f "$candidate" ]] && { REAL_CLAUDE_JSON="$candidate"; break; }
+done
+
 # ── Build isolated HOME ──────────────────────────────────────────────
 
-SANDBOX_HOME=$(mktemp -d)
-cleanup() { rm -rf "$SANDBOX_HOME"; }
-trap cleanup EXIT
+if [[ -n "$SANDBOX_HOME_ARG" ]]; then
+    # Persistent, named HOME — reused across invocations, never auto-deleted.
+    SANDBOX_HOME="$SANDBOX_HOME_ARG"
+    mkdir -p "$SANDBOX_HOME"
+else
+    SANDBOX_HOME=$(mktemp -d)
+    if [[ "$KEEP" == true ]]; then
+        echo "ardoise: sandbox HOME kept at $SANDBOX_HOME" >&2
+    else
+        trap 'rm -rf "$SANDBOX_HOME"' EXIT
+    fi
+fi
 
-mkdir -p "$SANDBOX_HOME/.claude"
+# Seed only a fresh sandbox. A reused --home that's already been seeded keeps
+# its accumulated state (installed plugins, added marketplaces) — that's the point.
+if [[ -e "$SANDBOX_HOME/.claude.json" || -f "$SANDBOX_HOME/.claude/.credentials.json" ]]; then
+    :  # already seeded — reuse as-is
+else
+    mkdir -p "$SANDBOX_HOME/.claude"
 
-# Auth
-cp "$REAL_CLAUDE_DIR/.credentials.json" "$SANDBOX_HOME/.claude/.credentials.json"
+    # Auth (Anthropic API): copy the creds file if present. On Vertex-only setups
+    # there's none, and ADC (passed through below) does the auth instead.
+    [[ -f "$REAL_CREDS" ]] && cp "$REAL_CREDS" "$SANDBOX_HOME/.claude/.credentials.json"
 
-# claude.json — copy real one (has onboarding state + feature flags), strip project data
-if [[ -f "$REAL_CLAUDE_DIR/claude.json" ]]; then
-    cp "$REAL_CLAUDE_DIR/claude.json" "$SANDBOX_HOME/.claude/claude.json"
-    python3 - "$SANDBOX_HOME/.claude/claude.json" "$START_DIR" << 'PYEOF'
+    # claude.json — copy real one (onboarding state + feature flags), strip project data
+    if [[ -n "$REAL_CLAUDE_JSON" ]]; then
+        cp "$REAL_CLAUDE_JSON" "$SANDBOX_HOME/.claude/claude.json"
+        python3 - "$SANDBOX_HOME/.claude/claude.json" "$START_DIR" << 'PYEOF'
 import json, sys
 with open(sys.argv[1]) as f:
     cfg = json.load(f)
@@ -140,8 +207,9 @@ with open(sys.argv[1], "w") as f:
     json.dump(cfg, f, indent=2)
 PYEOF
 
-    # Claude reads config from $HOME/.claude.json (symlink), not .claude/claude.json
-    ln -s "$SANDBOX_HOME/.claude/claude.json" "$SANDBOX_HOME/.claude.json"
+        # Claude reads config from $HOME/.claude.json (symlink), not .claude/claude.json
+        ln -s "$SANDBOX_HOME/.claude/claude.json" "$SANDBOX_HOME/.claude.json"
+    fi
 fi
 
 # ── Construct minimal PATH ───────────────────────────────────────────
@@ -164,6 +232,8 @@ ENV_VARS=(
     CLAUDE_CODE_DISABLE_AUTO_MEMORY=1
     ENABLE_CLAUDEAI_MCP_SERVERS=false
 )
+# Pass Vertex config + ADC through the isolation wall (auth only, like the creds copy).
+[[ ${#VERTEX_VARS[@]} -gt 0 ]] && ENV_VARS+=("${VERTEX_VARS[@]}")
 
 # ── Run ───────────────────────────────────────────────────────────────
 

@@ -38,7 +38,7 @@ Three mechanisms, all cross-platform (POSIX):
 
 | Mechanism | What it blocks |
 |-----------|---------------|
-| `env -i` | All inherited env vars including `CLAUDECODE=1` (nesting detection) |
+| `env -i` | All inherited env vars including `CLAUDECODE=1` (nesting detection) — except Vertex auth (project/region/ADC) when `CLAUDE_CODE_USE_VERTEX=1` |
 | `HOME=<tmpdir>` with stripped `claude.json` + credentials only | CLAUDE.md, settings.json, hooks, skills, plugins, MCP config |
 | `cd /tmp` (or chosen dir) | Project CLAUDE.md, git repo context, local `.claude/` directories |
 
@@ -82,6 +82,21 @@ Opens Claude's interactive TUI. You type commands yourself — `claude plugin in
 echo "Design a work tracker" | "$SCRIPT" -p --stdin --max-turns 1
 ```
 
+### Persistent HOME (multi-step tests)
+
+Default runs use a fresh temp HOME, deleted on exit. For a sequence that must share state across invocations — `plugin marketplace add` → `plugin install` → `-p` verify — use a named HOME:
+
+```bash
+"$SCRIPT" --home ~/ardoise-sbx ~/some/project         # seeded once, reused thereafter
+"$SCRIPT" --home ~/ardoise-sbx -p "verify it loaded"   # same HOME, accumulated state intact
+```
+
+`--home DIR` creates the dir if missing, seeds it once (auth + stripped config), and **never auto-deletes** it — so plugins/marketplaces added in one invocation survive to the next. `--keep` is the throwaway-but-inspect variant: a temp HOME that skips the cleanup trap and prints its path to stderr.
+
+### Vertex setups
+
+If the caller's environment has `CLAUDE_CODE_USE_VERTEX=1`, ardoise auto-detects it and passes the Vertex config (project, region, model ids) and gcloud ADC through the isolation wall — so it works on, and bills to, a Vertex setup. Without this the `env -i` scrub strips the Vertex config and either hard-fails (Vertex-only boxes have no `.credentials.json`) or silently falls back to Anthropic-API billing (dual-cred boxes). No flag needed.
+
 ### From Claude Code (OuterClaude calling InnerClaude)
 
 ```bash
@@ -122,4 +137,5 @@ Claude Code reads config from `$HOME/.claude.json` (a symlink in HOME root), not
 | Pass `--system-prompt` and assume isolation | CLAUDE.md still loads | Use ardoise.sh |
 | Use `--allowed-tools ""` for tool-free mode | Model burns turns trying tools | Pass `--tools ""` |
 | Mount the real HOME | Context leaks | Let the script handle HOME |
+| Fresh sandbox per step of a multi-step test | Loses marketplace/install state between calls | Use `--home DIR` to persist one sandbox |
 | Forget the `~/.claude.json` symlink | Onboarding wizard every time | Script handles this automatically |

@@ -1,9 +1,0 @@
-# Session-specific files
-.handoff
-
-# OS files
-.DS_Store
-
-# Editor files
-*.swp
-*~

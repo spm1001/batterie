@@ -1,8 +1,20 @@
 # trousse — Project Context
 
-Trousse is a **skill drawer** for Claude Code — 18 SKILL.md files that teach Claude specialized workflows (code review, diagramming, data analysis, etc.).
+Trousse is a **skill drawer** for Claude Code — a tight set of general-purpose SKILL.md files that teach Claude specialized workflows (code review, skill authoring, session-history parsing, context isolation).
 
 It does NOT own session lifecycle hooks or scripts. Those belong to [bon](https://github.com/spm1001/bon), which owns the full session protocol (hooks, handoffs, briefings, tactical tracking).
+
+## Skill homes — what belongs in trousse
+
+Public trousse is a **tight, general-purpose knife-roll**: skills a stranger on the internet would genuinely seek out. Public status is *earned*, not the default — most skills belong elsewhere. Before adding a skill here, run the home test:
+
+- **Would a random person, with no ITV/Sameer context, install and value this?** → trousse (public). The current four: `skill-forge`, `titans` (+ `/review`), `deglacer`, `ardoise`.
+- **ITV/measurement-flavoured — teammates want it, a public installer wouldn't?** → [`ITV/mit-commons`](https://github.com/ITV/mit-commons) (the `commons:` marketplace). Rename to a prosaic `mit-<thing>` — kitchen-metaphor names read as "the boss's toy" in a team space, and the `mit-` prefix is a commons invariant (picker namespacing).
+- **Sameer-specific — carries PII, or wired to his stack/machines?** → [`spm1001/trousse-personal`](https://github.com/spm1001/trousse-personal) (private; may hardcode freely).
+
+**"General-purpose" is not the bar** — plenty of generic skills (server checkups, codebase health) are things no stranger would seek; those went personal. The bar is stranger-*appeal*, because public status is an ongoing maintenance tax (genericise, de-brand, document for strangers) paid only when the reach is real. Anthropic's `knowledge-work-plugins` now covers the broad-utility ground (data, design, docs, marketing) — so trousse needn't be a wide drawer; mine those for ideas, adopt only on a clean drop-in.
+
+*(This rule drove the 2026-07 slim-down from 18 skills to 4 — bon `trousse-pijuha`.)*
 
 ## Versioning & releasing (suite-managed)
 
@@ -25,8 +37,8 @@ Two paths:
 
 | Path | Command | Skill names |
 |------|---------|-------------|
-| **Plugin** (recommended) | `claude plugin marketplace add spm1001/batterie` then `/plugin install trousse@batterie` | `/trousse:diagram` |
-| **Manual** | `git clone` → plugin auto-discovers | `/diagram` |
+| **Plugin** (recommended) | `claude plugin marketplace add spm1001/batterie` then `/plugin install trousse@batterie` | `/trousse:titans` |
+| **Manual** | `git clone` → plugin auto-discovers | `/titans` |
 
 The plugin system discovers skills from `skills/*/SKILL.md` — no hooks, no settings.json registration needed.
 
@@ -36,7 +48,7 @@ The plugin system discovers skills from `skills/*/SKILL.md` — no hooks, no set
 
 | Type | Trigger | Example |
 |------|---------|---------|
-| User-invocable | Slash command | `/diagram`, `/titans` |
+| User-invocable | Slash command | `/titans`, `/skill-forge` |
 | Alias | Slash command → delegates | `/review` → titans |
 
 ### Conventions
@@ -45,13 +57,11 @@ The plugin system discovers skills from `skills/*/SKILL.md` — no hooks, no set
 - `user-invocable: false` for skills loaded programmatically (companion skills)
 - Reference files live in `references/` subdirectory, linked from main SKILL.md
 
-### Current Skills (18)
+### Current Skills (4 + `review` alias)
 
-ardoise, consomme, deglacer, diagram, github-cleanup, google-devdocs, ia-presenter, mandoline, peer-review, picture, review, scaffold, screenshot, server-checkup, skill-forge, tamis, titans, toise
+ardoise, deglacer, review, skill-forge, titans
 
-### Commands (7)
-
-consomme, consomme-dashboard, consomme-explore, consomme-ingest, consomme-profile, consomme-sheets, consomme-validate
+(No commands — the `consomme-*` set moved to mit-commons with the consommé skill. See "Skill homes" above for where everything else went.)
 
 ### Titans Review
 

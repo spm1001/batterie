@@ -7,7 +7,7 @@ allowed-tools: ["Bash"]
 # Batterie Version
 
 !`python3 << 'PYEOF'
-import json, os, subprocess, shutil
+import json, os, re, subprocess, shutil
 
 # Default to the real plugins dir. BATTERIE_PLUGINS_DIR is a test seam; unset in normal use.
 PLUGINS = os.environ.get("BATTERIE_PLUGINS_DIR") or os.path.join(
@@ -19,13 +19,25 @@ def is_batterie_family(repo):
     # plugin renames still resolve — not by "contains the batterie plugin".
     return repo == "spm1001/batterie" or repo.startswith("spm1001/batterie-")
 
+def source_repo(info):
+    # Normalise a known_marketplaces.json entry to "owner/repo". Shapes seen in
+    # the wild: {"source":"github","repo":"o/r"} (shorthand add); {"source":"git",
+    # "url":"https://github.com/o/r.git"} (URL add — a normal, persistent shape;
+    # bds-mifubu); {"source":"directory","path":...} (local dev, no repo).
+    src = info.get("source") if isinstance(info, dict) else None
+    if not isinstance(src, dict):
+        return ""
+    if src.get("repo"):
+        return src["repo"]
+    m = re.search(r"github\.com[:/]([^/]+/[^/]+?)(?:\.git)?/*$", src.get("url") or "")
+    return m.group(1) if m else ""
+
 def family_marketplaces():
     try:
         reg = json.load(open(os.path.join(PLUGINS, "known_marketplaces.json")))
     except Exception:
         return {"batterie"}  # registry unreadable: fall back to the public name
-    fam = {name for name, info in reg.items()
-           if is_batterie_family((info.get("source") or {}).get("repo", ""))}
+    fam = {name for name, info in reg.items() if is_batterie_family(source_repo(info))}
     return fam or {"batterie"}
 
 try:
@@ -38,6 +50,14 @@ fam = family_marketplaces()
 mkt = lambda key: key.rsplit("@", 1)[1] if "@" in key else ""
 # full key -> user-scope entry, for batterie-family plugins only
 installed = {k: v[0] for k, v in plugins.items() if mkt(k) in fam and v}
+
+# Family-named marketplaces that didn't resolve = a discovery gap, never a
+# silent drop (bds-mifubu).
+suspicious = sorted({m for m in {mkt(k) for k in plugins}
+                     if (m == "batterie" or m.startswith("batterie-")) and m not in fam})
+if suspicious:
+    print(f"⚠️ WARNING: marketplace(s) {', '.join(suspicious)} look batterie-family but did not resolve from known_marketplaces.json — unrecognised source shape? Their plugins are missing from this report (bds-mifubu).")
+
 multi = len({mkt(k) for k in installed}) > 1
 base_names = {k.rsplit("@", 1)[0] for k in installed}
 

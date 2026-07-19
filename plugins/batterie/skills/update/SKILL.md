@@ -9,7 +9,7 @@ allowed-tools: ["Bash", "Read"]
 ## Currently installed (before update)
 
 !`python3 << 'PYEOF'
-import json, os, subprocess, shutil
+import json, os, re, subprocess, shutil
 
 # Default to the real plugins dir. BATTERIE_PLUGINS_DIR is a test seam (lets the
 # regression test point discovery at a fixture); unset in normal use.
@@ -25,25 +25,59 @@ def is_batterie_family(repo):
     # plugin renames. The pattern stays generic — no specific marketplace is named.
     return repo == "spm1001/batterie" or repo.startswith("spm1001/batterie-")
 
+def source_repo(info):
+    # Normalise a known_marketplaces.json entry to "owner/repo". Shapes seen in
+    # the wild: {"source":"github","repo":"o/r"} (shorthand add); {"source":"git",
+    # "url":"https://github.com/o/r.git"} (URL add — a normal, PERSISTENT shape:
+    # tube ran this way and every @batterie plugin silently vanished from this
+    # snapshot, bds-mifubu); {"source":"directory","path":...} (local dev, no repo).
+    src = info.get("source") if isinstance(info, dict) else None
+    if not isinstance(src, dict):
+        return ""
+    if src.get("repo"):
+        return src["repo"]
+    m = re.search(r"github\.com[:/]([^/]+/[^/]+?)(?:\.git)?/*$", src.get("url") or "")
+    return m.group(1) if m else ""
+
 def family_marketplaces():
-    # Read CC's marketplace-name -> source-repo registry. Fall back to the public
+    # Read CC's marketplace-name -> source registry. Fall back to the public
     # marketplace name if it can't be read, so single-marketplace users keep
     # working (only a private flavour would be missed, in that rare case).
     try:
         reg = json.load(open(os.path.join(PLUGINS, "known_marketplaces.json")))
     except Exception:
         return {"batterie"}
-    fam = {name for name, info in reg.items()
-           if is_batterie_family((info.get("source") or {}).get("repo", ""))}
+    fam = {name for name, info in reg.items() if is_batterie_family(source_repo(info))}
     return fam or {"batterie"}
 
-plugins = json.load(open(os.path.join(PLUGINS, "installed_plugins.json"))).get("plugins", {})
+try:
+    plugins = json.load(open(os.path.join(PLUGINS, "installed_plugins.json"))).get("plugins", {})
+except Exception as e:
+    # A failed read must never render like an empty install (bds-mifubu).
+    print(f"⚠️ SNAPSHOT FAILED: could not read installed_plugins.json ({e}).")
+    print("Do NOT treat this as 'nothing to update' — Read ~/.claude/plugins/installed_plugins.json directly and use it as the before-state.")
+    raise SystemExit(0)
+
 fam = family_marketplaces()
 mkt = lambda key: key.rsplit("@", 1)[1] if "@" in key else ""
 suite_plugins = {k: v[0] for k, v in plugins.items() if mkt(k) in fam and v}
 
+# A family-NAMED marketplace that didn't resolve as family means the discovery
+# above has a gap (an unrecognised source shape): its plugins would vanish from
+# this snapshot while remaining installed — the bds-mifubu failure. Warn, never
+# silently drop.
+suspicious = sorted({m for m in {mkt(k) for k in plugins}
+                     if (m == "batterie" or m.startswith("batterie-")) and m not in fam})
+if suspicious:
+    print(f"⚠️ SNAPSHOT WARNING: marketplace(s) {', '.join(suspicious)} carry installed plugins and family-style names but did not resolve as batterie-family — unrecognised source shape in known_marketplaces.json? Their plugins are MISSING below. Read that file and reconcile before trusting this snapshot.\n")
+
 if not suite_plugins:
-    print("No batterie plugins installed.")
+    if suspicious:
+        print("Snapshot unusable — do NOT treat as 'nothing to update'. Read ~/.claude/plugins/installed_plugins.json for the true before-state.")
+    elif os.path.isdir(os.path.join(PLUGINS, "cache", "batterie")):
+        print("⚠️ Registry lists no batterie plugins but a batterie plugin cache exists — possible silent registry drop (bds-wezubo). Verify before proceeding; `claude plugin install <name>@batterie` restores entries.")
+    else:
+        print("No batterie plugins installed.")
 else:
     markets = sorted({mkt(k) for k in suite_plugins})
     multi = len(markets) > 1
@@ -83,6 +117,8 @@ PYEOF`
 ## Your task
 
 Update every batterie plugin listed above. Follow these steps exactly:
+
+**Snapshot sanity gate:** if the snapshot above shows any ⚠️ line — or claims nothing is installed while batterie plugins are plainly active in this session — do not proceed from it. Read `~/.claude/plugins/installed_plugins.json` directly and use that as the before-state (and `known_marketplaces.json` to see what the marketplace list should have been). A false-empty snapshot otherwise turns the whole update into a silent no-op (bds-mifubu).
 
 ### 1. Refresh each batterie-family marketplace
 

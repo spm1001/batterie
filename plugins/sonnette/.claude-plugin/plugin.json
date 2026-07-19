@@ -1,0 +1,21 @@
+{
+  "name": "sonnette",
+  "version": "1.16.0",
+  "description": "Conductor mesh connectivity — peer-to-peer communication between Claude sessions",
+  "author": {
+    "name": "Sameer Modha",
+    "url": "https://github.com/spm1001"
+  },
+  "repository": "https://github.com/spm1001/aboyeur",
+  "license": "MIT",
+  "keywords": ["mesh", "conductor", "peer", "channels"],
+  "mcpServers": {
+    "sonnette": {
+      "command": "bash",
+      "args": [
+        "${CLAUDE_PLUGIN_ROOT}/sonnette/run.sh",
+        "${CLAUDE_PLUGIN_ROOT}/sonnette/conductor-channel.js"
+      ]
+    }
+  }
+}

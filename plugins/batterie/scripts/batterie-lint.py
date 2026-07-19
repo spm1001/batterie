@@ -46,6 +46,7 @@ REPO_NAMES = {
     "mise": "mise-en-space",
     "todoist-gtd": "todoist-gtd",
     "batterie": "batterie-de-savoir",
+    "sonnette": "aboyeur",
 }
 
 REQUIRED_PLUGIN_FIELDS = {"name", "version", "description"}

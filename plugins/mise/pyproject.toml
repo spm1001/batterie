@@ -6,15 +6,15 @@ readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     # MCP SDK with structured returns and tasks support
-    "mcp[cli]>=1.27.0,<2.0.0",
+    "mcp[cli]>=1.28.1,<2.0.0",
     # Google APIs (httpx + REST, OAuth via jeton)
     "httpx[http2]>=0.28.1",
     "orjson>=3.11.9",
     "jeton",
     # Form spec parsing
     "pyyaml>=6.0",
-    "regex>=2026.7.10",
-    "websockets>=16.1",
+    "regex>=2026.7.19",
+    "websockets>=16.1.1",
     # Image extraction (resize/validate, SVG→PNG). Core because it's cheap (~14M)
     # and image fetch should work in every flavour, including the embedded build.
     "pillow>=12.3.0",
@@ -45,8 +45,8 @@ macos = [
 dev = [
     "pytest>=9.1.1",
     "pytest-asyncio>=1.4.0",
-    "ruff>=0.15.21",
-    "mypy>=1.8.0",
+    "ruff>=0.15.22",
+    "mypy>=2.3.0",
     # Stubs for the core `markdown` dep so html_convert.markdown_to_html types
     # cleanly (markdown ships no py.typed).
     "types-Markdown>=3.5",
@@ -108,9 +108,9 @@ jeton = { git = "https://github.com/spm1001/jeton.git" }
 
 [dependency-groups]
 dev = [
-    "mypy>=1.19.1",
+    "mypy>=2.3.0",
     "pytest>=9.1.1",
     "pytest-asyncio>=1.4.0",
     "pytest-cov>=7.1.0",
-    "inline-snapshot>=0.34.2",
+    "inline-snapshot>=0.35.2",
 ]

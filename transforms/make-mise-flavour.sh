@@ -5,7 +5,7 @@
 #
 # Why a substitution transform (not a runtime env axis): mise's SessionStart hooks
 # carry hardcoded identity strings (keychain service, data-dir name, the
-# rules/<name>.md symlink target) and run in the session env, so an mcpServers.env
+# rules/<name>.md destination — a copy, not a symlink) and run in the session env, so an mcpServers.env
 # block can't reach them. Rewriting the vendored copy keeps the variant fully
 # self-contained and needs no change to mise itself.
 #
@@ -32,7 +32,7 @@ mkdir -p "$OUT"
 rsync -a --exclude '.venv' --exclude '__pycache__' --exclude '*.pyc' "$IN"/ "$OUT"/
 
 # 2. Identity-string substitutions (exact, bounded — see enumeration in bds-maluve).
-#    data-dir name + keychain service + rules-symlink target, across .py and hooks.
+#    data-dir name + keychain service + rules-shard destination, across .py and hooks.
 grep -rl --include='*.py' --include='*.sh' 'mise-batterie-de-savoir' "$OUT" | xargs -r sed -i "s|mise-batterie-de-savoir|${NAME}|g"
 grep -rl --include='*.py' --include='*.sh' 'mise-oauth-token'        "$OUT" | xargs -r sed -i "s|mise-oauth-token|${NAME}-oauth-token|g"
 grep -rl --include='*.sh'                   'rules/mise.md'          "$OUT" | xargs -r sed -i "s|rules/mise.md|rules/${NAME}.md|g"
@@ -121,7 +121,7 @@ scan() { # pattern, human label
 }
 scan "mise-oauth-token"          "keychain service"   # mise-home-oauth-token does NOT contain this
 scan "mise-batterie-de-savoir"   "data dir name"
-scan "rules/mise.md"             "rules symlink"
+scan "rules/mise.md"             "rules shard path"
 scan "413373784317"              "ITV client_id"
 scan "mit-workspace-mcp-server"  "ITV project"
 # plugin.json name/server must be the flavour, not 'mise'

@@ -425,7 +425,7 @@ if [ -n "${MISE_HOME_CRED:-}" ]; then
   cat > "$MH_SKILL/SKILL.md" <<'STUBEOF'
 ---
 name: batterie-suite
-description: The rest of the Batterie suite beyond mise-home — what else this Claude toolkit offers the planetmodha family, what each tool needs before it's worth installing, and the two commands that add it. Load when someone asks 'what else can you do', 'are there other tools', 'is there a plugin for that', 'how do I install X', 'can you track my to-dos', 'can you review my code', 'can you draw me a diagram', or wants a capability mise-home doesn't cover. mise-home ships alone in a private marketplace only because it carries the family Google login; everything else in the suite is public and free to add.
+description: Offers the planetmodha family the rest of the Batterie suite — load BEFORE suggesting or installing any Claude plugin on a family machine. Names the one tool that fits what they just asked for, says what it needs (an account, a CLI, an API token) before they commit, and gives the two commands that add it. Triggers on 'what else can you do', 'are there other tools', 'is there a plugin for that', 'how do I install X', 'can you track my to-dos', 'can you review my code', 'can you draw me a diagram'. (user)
 ---
 
 # The rest of the Batterie suite (planetmodha family)
@@ -433,6 +433,18 @@ description: The rest of the Batterie suite beyond mise-home — what else this 
 This is the planetmodha family install. **mise-home** lives in the private
 `batterie-home` marketplace only because it carries the family's Google login —
 **everything else in the suite is public** and free to add.
+
+## When to use
+
+- They ask for a capability mise-home doesn't cover — to-dos, code review, diagrams, data analysis.
+- They ask what else this Claude can do, or whether a plugin exists for something.
+- You're about to suggest installing anything: check here first for what it needs.
+
+## When not to use
+
+- **mise-home itself is misbehaving** — that's an auth or MCP problem, not a missing plugin. Nothing here helps.
+- They already have the tool installed and want to *use* it — go straight to its own skill.
+- They're on an ITV machine. This is the planetmodha family path; ITV colleagues have their own commons.
 
 ## Adding a tool
 
@@ -447,15 +459,15 @@ The marketplace only needs adding once; after that, install as many as they want
 
 - **trousse** — utility skills (diagrams, code review, data analysis). Works immediately, nothing to set up. Good default add.
 - **batterie** — keeps their plugins current (`/batterie:update`). Worth having.
-- **todoist-gtd** — Todoist with GTD coaching. Needs the `todoist` CLI *and* a Todoist account + API token. Only if they use Todoist.
-- **bon** — a power-user GTD work-tracker. Needs the `bon` CLI and a local store; most family won't want it. Don't set up unless they specifically ask (e.g. Isaac).
+- **todoist-gtd** — Todoist with GTD coaching. Needs the `todoist` CLI *and* a Todoist account + API token. Worth it if they already live in Todoist.
+- **bon** — a power-user GTD work-tracker. Needs the `bon` CLI and a local store. Suits someone who wants to track work across sessions (e.g. Isaac); ask before setting it up.
 
 ## How to offer it
 
-Don't force-install anything — offer, explain what each needs, let them choose.
-Name the one tool that fits what they just asked for rather than reciting the
-list, and say what it needs up front so nobody installs a tool that then wants
-an account they don't have.
+Name the one tool that fits what they just asked for, say what it needs up
+front, and let them choose. Offering beats installing: a tool that turns out to
+want an account they don't have is worse than no tool. One good suggestion lands
+better than the whole list.
 STUBEOF
   [ -s "$MH_SKILL/SKILL.md" ] || { echo "FAIL: family onboarding skill not written → $MH_SKILL/SKILL.md" >&2; exit 1; }
   echo "  OK family onboarding skill → mise-home/skills/batterie-suite"

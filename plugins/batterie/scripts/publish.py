@@ -75,6 +75,19 @@ def die(msg: str) -> "NoReturn":  # type: ignore[name-defined]
 
 # ---- pure logic (unit-tested) ------------------------------------------------
 
+def plugin_update_disposition(returncode: int, output: str) -> str:
+    """Classify the pull-phase `claude plugin update` result: 'ok' | 'skip' | 'fail'.
+
+    A publishing host needn't have the published plugin installed (tube
+    publishing passe, 2026-07-22: CLI present, plugin never installed), so
+    "not found" is a skip — the CLI reinstall must still run and the release
+    still ends green (bds-dicalu). Any other non-zero stays fatal.
+    """
+    if returncode == 0:
+        return "ok"
+    return "skip" if "not found" in output.lower() else "fail"
+
+
 def bump_version(version: str, level: str) -> str:
     """Compute the next semver. Pure — the heart of the testable surface."""
     parts = version.split(".")
@@ -423,8 +436,16 @@ def main() -> int:
         # (a separate concern); generalising only this line would be incoherent.
         checked(run(["claude", "plugin", "marketplace", "update", "batterie"],
                     dry=dry, capture=True), "marketplace update")
-        checked(run(["claude", "plugin", "update", f"{name}@batterie"],
-                    dry=dry, capture=True), "plugin update")
+        cp = run(["claude", "plugin", "update", f"{name}@batterie"],
+                 dry=dry, capture=True)
+        if cp is not None:
+            verdict = plugin_update_disposition(
+                cp.returncode, f"{cp.stdout or ''}{cp.stderr or ''}")
+            if verdict == "skip":
+                print(f"  note: {name} plugin not installed on this host — "
+                      f"plugin update skipped (CLI reinstall still runs)")
+            elif verdict == "fail":
+                checked(cp, "plugin update")
         if cli:
             binary, extras = cli
             # bds-zelobu / the weaning: reinstall from git+https (the artifact

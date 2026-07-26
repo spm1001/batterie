@@ -32,7 +32,6 @@ wait on a reply you can't hear.
 | **Repos** | `~/repos/` — git-controlled, never cloud-synced. Owner-bucketed: batterie tools in `~/repos/spm1001/`. |
 | **Config** | `~/.claude/` — git: `spm1001/.claude` |
 | **Work** | Google Drive (web) — no local mount |
-| **Capture** | `~/iCloud/Work Inbox/` — iOS quick capture |
 | **Sharing** | `~/scratch/` — Syncthing (Mac ↔ tube); `~/notes` is git-canonical via notes-sync. Taildrive retired 2026-07-07. |
 
 ## Overrides

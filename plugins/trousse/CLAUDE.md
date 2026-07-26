@@ -122,3 +122,12 @@ The handoff contract (`HANDOFF-CONTRACT.md`) lives in bon — it specifies bon's
 
 - **Before running jq on `~/.claude/projects/**/*.jsonl`** → load `/deglacer` first. The CC JSONL schema has dragons (triple-duty user entries, streaming-duplicated message IDs, version-dependent fields). Deglacer has the schema reference and `deglacer` CLI tool.
 - **Past session recall** → deglacer reads full transcripts.
+
+## README skill table is generated
+
+The Skills table in README.md (between `GENERATED:SKILLS` markers) is rendered from
+`skills/*/SKILL.md` frontmatter — never hand-edit it. After adding, removing or renaming
+a skill: `uv run --script ../batterie-de-savoir/scripts/render-skills.py .` from the repo
+root. CI re-checks it on every push (fetching the canonical script from batterie-de-savoir
+raw main), so a stale table fails the build. If a table one-liner reads badly, fix the
+SKILL.md description (skill-forge), not the table.

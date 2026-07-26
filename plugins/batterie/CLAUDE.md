@@ -17,6 +17,8 @@ Adding or changing a tool means touching exactly one file. The render script han
 
 To check for drift without writing: `uv run --script scripts/lint.py`
 
+Two adjacent guards (2026-07-26, bds-naceje): `lint.py` also fails if any registry slug lacks a hand-authored `docs/tools/<slug>.md` page (the generated index table links every slug — a missing page is a dead link on the live site). And every source repo's README skill table — including this repo's — is generated from `skills/*/SKILL.md` frontmatter by `scripts/render-skills.py` (canonical here; component repos' CI fetches it from raw main). Regenerate with `uv run --script scripts/render-skills.py <repo-root>`; see docs/MAINTAINING.md.
+
 ## What's generated vs authored
 
 | File | Status |

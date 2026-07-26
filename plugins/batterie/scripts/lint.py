@@ -102,8 +102,30 @@ def show_diff(name: str, expected: str, actual: str) -> None:
 # ---------------------------------------------------------------------------
 
 
+def check_tool_pages() -> list[str]:
+    """Every registry slug needs a docs/tools/<slug>.md page — the generated
+    brigade table in docs/index.md links tools/<slug> for every row, so a
+    missing page is a dead link on the live site (plongeur and todoist-gtd
+    shipped as 404s for weeks this way). Extra pages are fine: consomme.md is
+    a deliberate vocabulary-station page with no registry row."""
+    problems = []
+    tools_dir = render.ROOT / "docs" / "tools"
+    slugs = {t["slug"] for t in render.tools}
+    for slug in sorted(slugs):
+        if not (tools_dir / f"{slug}.md").is_file():
+            print(f"MISSING: docs/tools/{slug}.md — registry slug '{slug}' "
+                  f"is a dead link in the generated brigade table")
+            problems.append(f"tools/{slug}.md")
+    orphans = sorted(p.stem for p in tools_dir.glob("*.md") if p.stem not in slugs)
+    if orphans:
+        print(f"info: tool pages with no registry row (deliberate is fine): "
+              f"{', '.join(orphans)}")
+    return problems
+
+
 def main() -> None:
     stale: list[str] = []
+    stale.extend(check_tool_pages())
 
     for path, sections in EXPECTED.items():
         actual = extract_sections(path)
@@ -124,7 +146,8 @@ def main() -> None:
                 stale.append(f"{rel}:{marker_name}")
 
     if stale:
-        print(f"\n{len(stale)} stale section(s). Run: uv run --script scripts/render.py")
+        print(f"\n{len(stale)} problem(s). GENERATED drift: run scripts/render.py."
+              " MISSING tool pages are hand-authored — write them.")
         sys.exit(1)
     else:
         print("OK — all GENERATED sections are up to date.")

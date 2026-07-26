@@ -77,6 +77,19 @@
         "peer",
         "channels"
       ]
+    },
+    {
+      "name": "passe",
+      "source": "./plugins/passe",
+      "description": "Fast browser automation via Chrome DevTools Protocol \u2014 fetch pages, screenshots, forms, network capture. Auto-installs the passe CLI on first session.",
+      "category": "automation",
+      "homepage": "https://github.com/spm1001/passe",
+      "keywords": [
+        "browser",
+        "automation",
+        "cdp",
+        "chrome"
+      ]
     }
   ]
 }

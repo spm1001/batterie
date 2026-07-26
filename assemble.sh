@@ -46,13 +46,17 @@ trousse:trousse
 mise:mise-en-space
 todoist-gtd:todoist-gtd
 sonnette:aboyeur
+passe:passe
 "
 # garde-manger delisted 2026-06-10 (decommissioned per the estate audit;
 # Sameer confirmed). tafelmusik unvendored 2026-06-10 (too experimental to
 # publish; Sameer's call — source repo lives on, just not distributed).
 # passe delisted 2026-07-07 (bds-wobari via bds-mumise: browser infra, not a
-# knowledge plugin — the CLI installs standalone from spm1001/passe; source
-# repo lives on, just not distributed through the suite).
+# knowledge plugin — the CLI installs standalone from spm1001/passe), then
+# RELISTED 2026-07-26 (passe-mezigo, Sameer's call): the standalone-CLI
+# rationale left the guidance shard, skills and hooks with no rot-proof
+# install route — tube's shard died for a week via a Cowork-sandbox symlink.
+# The plugin route plus a hook-generated shard (passe df1dbbc) is durable.
 # De-registration is manual by design: the assembler never deletes a dest
 # dir for an unmapped plugin, so retiring one means removing it from this
 # list, marketplace.json, and plugins/ together.

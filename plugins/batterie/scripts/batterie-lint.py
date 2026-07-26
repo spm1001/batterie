@@ -72,6 +72,53 @@ def parse_frontmatter(path: Path) -> dict[str, str]:
     return fields
 
 
+def find_truncated_context_blocks(text: str) -> list[tuple[int, str]]:
+    """Find inner backticks that truncate !`...` dynamic-context blocks.
+
+    A dynamic-context block (!`command`) runs at skill load: the harness
+    takes everything between the opening backtick and the NEXT backtick as
+    the command. In a multi-line block, any backtick before the intended
+    terminator therefore cuts the command mid-token — the bds-dazaja bug,
+    which shipped broken for a week because every existing guard passed
+    (valid Markdown, valid embedded Python, complete frontmatter).
+
+    The intended terminator is taken to be the next line whose only
+    backtick sits at end-of-line (e.g. a PYEOF` heredoc closer). Returns
+    (line_number, message) pairs; empty list = clean.
+    """
+    lines = text.splitlines()
+    findings: list[tuple[int, str]] = []
+    i = 0
+    while i < len(lines):
+        stripped = lines[i].strip()
+        # Not an opener, or a single-line block (closes on its own line).
+        if not stripped.startswith("!`") or "`" in stripped[2:]:
+            i += 1
+            continue
+        term = None
+        for j in range(i + 1, len(lines)):
+            s = lines[j].rstrip()
+            if s.count("`") == 1 and s.endswith("`"):
+                term = j
+                break
+        if term is None:
+            findings.append(
+                (i + 1, "dynamic-context block opened here is never terminated")
+            )
+            break
+        for k in range(i + 1, term):
+            if "`" in lines[k]:
+                findings.append(
+                    (
+                        k + 1,
+                        "backtick inside dynamic-context block truncates "
+                        "the command here",
+                    )
+                )
+        i = term + 1
+    return findings
+
+
 def resolve_plugin_dir(plugin: dict, repo_root: Path) -> Path | None:
     """Resolve a marketplace plugin entry to its local SOURCE repo.
 
@@ -173,6 +220,11 @@ def lint_plugin(name: str, plugin_dir: Path) -> list[str]:
                     f"  WARN {name}/skills/{skill_dir.name}: SKILL.md missing 'allowed-tools'"
                 )
 
+            for ln, msg in find_truncated_context_blocks(skill_md.read_text()):
+                fails.append(
+                    f"{name}/skills/{skill_dir.name}: SKILL.md line {ln}: {msg}"
+                )
+
             # ── ALIGNMENT 1: Skill routing ────────────────────────
             # Directory name controls /plugin:skill invocation.
             # Frontmatter name: controls model-triggered matching.
@@ -196,6 +248,8 @@ def lint_plugin(name: str, plugin_dir: Path) -> list[str]:
                 fails.append(
                     f"{name}/commands/{cmd_file.name}: missing 'description'"
                 )
+            for ln, msg in find_truncated_context_blocks(cmd_file.read_text()):
+                fails.append(f"{name}/commands/{cmd_file.name}: line {ln}: {msg}")
 
     # ── LICENSE ────────────────────────────────────────────────────
     if not (plugin_root / "LICENSE").exists():

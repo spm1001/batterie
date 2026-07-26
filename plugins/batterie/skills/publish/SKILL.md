@@ -10,10 +10,13 @@ The dance — bump version → commit → push → assemble → pull — collaps
 command. The engine is `scripts/publish.py`; this skill is the safe wrapper:
 it previews with `--dry-run`, you confirm, then it runs for real.
 
-**Publishing runs from any host with the source repos (`~/repos`) and `gh`** —
-tube (the primary since the 2026-07 hezza turndown) or hezza while it lasts. On a
-machine without `~/repos` (the Mac) there's nothing to push from — use
-`/batterie:update` to pull instead.
+**Publishing is a capability, not a host list.** Any machine meeting three
+preconditions can publish: a clone of the source repo being published (plus
+this repo for the central bump), `gh` authenticated with `repo` + `workflow`
+scopes (`gh auth status`), and `uv` for the PEP 723 engine script. Check
+those rather than asking which machine you're on — host lists rot. If the
+clone is missing there's nothing to push from — use `/batterie:update` to
+pull instead, or clone first.
 
 ## This repo (publish target)
 

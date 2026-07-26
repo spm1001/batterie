@@ -15,7 +15,15 @@ All tools follow a professional kitchen metaphor. Suite: **Batterie de Savoir**.
 | Browser automation | **Passe** | The pass |
 | BigQuery analysis | **Consommé** | Clarification |
 | Multi-session orchestrator | **Aboyeur** | The caller |
-| Collaborative editing (MCP) | **Tafelmusik** | Table music |
+| Inter-session messaging (MCP) | **Sonnette** | The bell |
+| Mobile interface | **Guéridon** | The side table |
+| Natural-language BigQuery UI | **Plongeur** | The dishwasher |
+| Survey data transformation | **Mandoline** | The slicer |
+
+Sonnette rings both ways only in sessions launched with the channels flag
+(`--dangerously-load-development-channels`). Otherwise you are **send-only**:
+`send_message` and `mesh_peers` work, but inbound messages never arrive — don't
+wait on a reply you can't hear.
 
 ## Filesystem Zones
 

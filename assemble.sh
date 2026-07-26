@@ -79,8 +79,8 @@ OLD_SUITE_VERSION=$(git -C "$BATTERIE_DIR" show "HEAD:plugins/batterie/.claude-p
   | python3 -c "import json,sys; print(json.load(sys.stdin)['version'])" 2>/dev/null || echo "")
 
 # Stamp a vendored plugin.json's version to the suite version via a TARGETED
-# string edit — NOT json.dumps, which reformats every array (self.md
-# surgical-JSON note). Each plugin.json carries exactly one top-level
+# string edit — NOT json.dumps, which reformats every array it touches,
+# turning a one-field stamp into a whole-file diff. Each plugin.json carries exactly one top-level
 # "version"; the regex rewrites only that value, leaving the file byte-for-
 # byte elsewhere. Fails LOUD if the field isn't matched exactly once: a silent
 # no-op stamp would let a plugin ship at the wrong number.

@@ -408,41 +408,65 @@ if [ -n "${MISE_HOME_CRED:-}" ]; then
   # of the suite is public, so rather than mirror public content into a private
   # repo (which would drag along each plugin's CLI-auto-install + rules-injection
   # SessionStart hooks — per-session noise for tools family never asked for), we
-  # append a breadcrumb to mise-home's instruction shard. That shard auto-loads
-  # via ~/.claude/rules/, so a family member's Claude finds it IN CONTEXT and can
-  # add the public suite on request. "Ask a Claude" is the support model; this is
-  # the trail it follows. (Whole-suite mirror was built + rejected 2026-07-12 —
-  # the hook footprint made it heavier than the one command it saved.)
-  MH_SHARD="$HOME_OUT/plugins/mise-home/instructions.md"
-  if [ ! -f "$MH_SHARD" ]; then
-    echo "FAIL: mise-home/instructions.md not found — the transform should produce it (stub has nowhere to live)" >&2
-    exit 1
-  fi
-  cat >> "$MH_SHARD" <<'STUBEOF'
+  # ship the onboarding guide with the flavour. "Ask a Claude" is the support
+  # model; this is the trail it follows. (Whole-suite mirror was built + rejected
+  # 2026-07-12 — the hook footprint made it heavier than the one command it saved.)
+  #
+  # An ON-DEMAND SKILL, not an append to instructions.md (2026-07-26): that shard
+  # auto-loads via ~/.claude/rules/ in EVERY session on EVERY machine carrying
+  # mise-home — including Sameer's own ITV work sessions, where twenty lines of
+  # family install guidance is pure standing noise. A skill keeps the whole point
+  # of making it always-on (its description sits in the skill picker every
+  # session, so a family Claude still finds it unprompted and can offer) at one
+  # line of standing context instead of twenty. Do NOT move it back into
+  # instructions.md — the ratchet below fails the build if it returns.
+  MH_SKILL="$HOME_OUT/plugins/mise-home/skills/batterie-suite"
+  mkdir -p "$MH_SKILL"
+  cat > "$MH_SKILL/SKILL.md" <<'STUBEOF'
+---
+name: batterie-suite
+description: The rest of the Batterie suite beyond mise-home — what else this Claude toolkit offers the planetmodha family, what each tool needs before it's worth installing, and the two commands that add it. Load when someone asks 'what else can you do', 'are there other tools', 'is there a plugin for that', 'how do I install X', 'can you track my to-dos', 'can you review my code', 'can you draw me a diagram', or wants a capability mise-home doesn't cover. mise-home ships alone in a private marketplace only because it carries the family Google login; everything else in the suite is public and free to add.
+---
 
-## The rest of the Batterie suite (planetmodha family)
+# The rest of the Batterie suite (planetmodha family)
 
 This is the planetmodha family install. **mise-home** lives in the private
 `batterie-home` marketplace only because it carries the family's Google login —
 **everything else in the suite is public** and free to add.
 
-If the person you're helping wants more than mise-home, add the public
-marketplace and install what they want:
+## Adding a tool
 
 ```
 claude plugin marketplace add spm1001/batterie
 claude plugin install <name>@batterie
 ```
 
-What's there, and the honest per-tool guide:
+The marketplace only needs adding once; after that, install as many as they want.
+
+## What's there, and the honest per-tool guide
+
 - **trousse** — utility skills (diagrams, code review, data analysis). Works immediately, nothing to set up. Good default add.
 - **batterie** — keeps their plugins current (`/batterie:update`). Worth having.
 - **todoist-gtd** — Todoist with GTD coaching. Needs the `todoist` CLI *and* a Todoist account + API token. Only if they use Todoist.
 - **bon** — a power-user GTD work-tracker. Needs the `bon` CLI and a local store; most family won't want it. Don't set up unless they specifically ask (e.g. Isaac).
 
+## How to offer it
+
 Don't force-install anything — offer, explain what each needs, let them choose.
+Name the one tool that fits what they just asked for rather than reciting the
+list, and say what it needs up front so nobody installs a tool that then wants
+an account they don't have.
 STUBEOF
-  echo "  OK family stub appended → mise-home/instructions.md"
+  [ -s "$MH_SKILL/SKILL.md" ] || { echo "FAIL: family onboarding skill not written → $MH_SKILL/SKILL.md" >&2; exit 1; }
+  echo "  OK family onboarding skill → mise-home/skills/batterie-suite"
+
+  # Ratchet (2026-07-26): the guide must never return to the always-on shard.
+  # rules/*.md loads unconditionally in every session, so an append here is a
+  # standing-context regression on Sameer's work machine, not a cosmetic one.
+  if grep -q 'planetmodha family' "$HOME_OUT/plugins/mise-home/instructions.md" 2>/dev/null; then
+    echo "FAIL: family onboarding is back in mise-home/instructions.md — it belongs in skills/batterie-suite/ (always-on context regression)" >&2
+    exit 1
+  fi
 
   # marketplace.json is generated (a derived artifact of a derived artifact —
   # nothing hand-maintained to drift). NB the marketplace NAME sets the

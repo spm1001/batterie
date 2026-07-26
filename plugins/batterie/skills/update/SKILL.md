@@ -75,7 +75,7 @@ if not suite_plugins:
     if suspicious:
         print("Snapshot unusable — do NOT treat as 'nothing to update'. Read ~/.claude/plugins/installed_plugins.json for the true before-state.")
     elif os.path.isdir(os.path.join(PLUGINS, "cache", "batterie")):
-        print("⚠️ Registry lists no batterie plugins but a batterie plugin cache exists — possible silent registry drop (bds-wezubo). Verify before proceeding; `claude plugin install <name>@batterie` restores entries.")
+        print("⚠️ Registry lists no batterie plugins but a batterie plugin cache exists — possible silent registry drop (bds-wezubo). Verify before proceeding; 'claude plugin install <name>@batterie' restores entries.")
     else:
         print("No batterie plugins installed.")
 else:

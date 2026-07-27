@@ -91,8 +91,25 @@ fetch("1abc...", base_path="...")                          # Drive file
 fetch("https://docs.google.com/...", base_path="...")      # Drive URL
 fetch("18f3a4b...", base_path="...")                       # Gmail thread
 fetch("thread_id", attachment="budget.xlsx", base_path="...")  # Single attachment
+fetch("thread_id", attachment="report.pdf", raw=True, base_path="...")  # + the original bytes
 fetch("folder_id", base_path="...", recursive=True)        # Full folder tree (depth 5, 1000 items max)
 ```
+
+**`raw=True` gets you the actual file, not just its text.** A PDF or Office attachment is
+normally downloaded, converted to markdown, and the original *discarded* — so you can read the
+extraction and never the document itself. `raw=True` deposits the untouched bytes alongside, and
+they show up in `cues.files`. Two reasons to reach for it: you need to *see* the document (figures,
+layout, anything the text export loses), or you want to put a Gmail-only artefact into Drive —
+
+```python
+r = fetch("thread_id", attachment="report.pdf", raw=True, base_path="...")
+do(operation="create", doc_type="file", file_path=f"{r['path']}/report.pdf",
+   title="report.pdf", folder_id="1abc...", base_path="...")
+```
+
+That two-step is the whole gather-scattered-artefacts-into-one-folder workflow; pair it with
+`do(operation="copy")` for the things already in Drive. `raw=` needs `attachment=` and isn't
+available in remote mode (binary can't ride back inline).
 
 **Gmail URL gotcha:** Browser URLs contain web-format IDs (`FMfcgz...`), not API IDs. The MCP converts automatically, but conversion fails for self-sent emails (~2018+). If fetch errors on a Gmail URL, ask the user for the thread ID.
 
@@ -326,6 +343,7 @@ search("Q4 report", sources=["drive", "calendar"], base_path="...")
 | Operation | What it does | Key params |
 |-----------|-------------|------------|
 | `create` | New Doc/Sheet/Slides/plain file | `content`+`title` OR `source` |
+| `copy` | Duplicate file(s) into a folder, originals untouched — single or batch | `file_id` (str or list), `folder_id`, `title` |
 | `move` | Move file(s) between folders — single or batch | `file_id` (str or list), `folder_id` |
 | `rename` | Rename a file in-place | `file_id`, `title` |
 | `share` | Share file with people (confirm gate) | `file_id`, `to`, `confirm=True` |
@@ -427,7 +445,19 @@ do(operation="move", file_id="1abc...", folder_id="1xyz...")
 # Batch move — validates destination once, returns per-file summary
 do(operation="move", file_id=["1abc...", "1def...", "1ghi..."], folder_id="1xyz...")
 # Returns: {batch: true, total: 3, succeeded: 2, failed: 1, results: [...]}
+
+# Copy — duplicates, originals untouched. Batch returns source_id → copy_id.
+do(operation="copy", file_id=["1abc...", "1def..."], folder_id="1xyz...")
+do(operation="copy", file_id="1abc...", folder_id="1xyz...", title="01 — Evidence")
+# Returns: {batch: true, succeeded: 2, blocked: 0, results: [{source_id, copy_id, ...}]}
 ```
+
+**Copy vs move, and why the distinction bites.** `move` relocates the original — everyone
+else's links now point into your folder. `copy` is what a snapshot job wants: an evidence
+pack, a board pack, anything you're about to share access to in bulk. Keep the
+`source_id → copy_id` mapping the batch returns; a copy carries no trace of where it came
+from, and reconstructing that later is miserable. `blocked` (as distinct from `failed`)
+means the owner has restricted copying — ask them, don't retry.
 
 **Create:** Without `folder_id`, the doc lands in Drive root. Response includes `cues.folder` showing where it landed. Use `doc_type="file"` for plain files (markdown, SVG, JSON, YAML, etc.) — MIME type is inferred from the title extension. The file stays as-is in Drive, no conversion to Google format. Response includes `cues.plain_file` and `cues.mime_type`.
 

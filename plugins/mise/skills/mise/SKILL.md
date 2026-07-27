@@ -187,16 +187,72 @@ search(type="folder", sources=["drive"], base_path="...")    # List folders
 
 Type values: `folder`, `doc`, `spreadsheet` / `sheet`, `slides` / `presentation`, `pdf`, `image`, `video`, `form`. Type filter applies to Drive only — ignored for Gmail.
 
-### Triage Large Results
+### Search Returns Two Things: a `preview` and a Deposit
 
-When search returns 20+ results, don't read the full JSON. Filter first:
+**Read the counts before you read the results.** Every search writes *all* results to the deposited
+JSON and returns a **`preview` of the top 5 per source** — with the true totals alongside it in
+`drive_count` / `gmail_count`. Those two numbers are what tell you whether you are looking at the
+answer or at the first fifth of it.
 
-```bash
-jq '.drive_results[:5] | .[] | {name, id}' .mise/search--*.json
-jq '.drive_results[] | select(.name | test("framework"; "i"))' .mise/search--*.json
+```jsonc
+{
+  "path": ".mise/search--acme--2026-07-27T07-55-59.json",
+  "drive_count": 25,                            // ← the real number
+  "preview": { "drive": [ /* 5 items */ ] }     // ← what you are looking at
+}
 ```
 
-Rule of thumb: <10 results → just read. >15 → filter with jq first.
+*(This `preview` is unrelated to the `share` operation's confirm preview further down.)*
+
+When `count` exceeds what `preview` shows, `jq` the deposit — listing names is cheap:
+
+```bash
+jq -r '.drive_results[] | .name' .mise/search--*.json            # all names, one line each
+jq -r '.gmail_results[] | .subject' .mise/search--*.json
+jq '.drive_results[] | select(.name | test("PCA|debrief"; "i"))' .mise/search--*.json
+```
+
+**Ranking is not relevance to your question.** A supplier-name query ranks contracts, NDAs and press
+releases above the campaign reports you actually wanted — those sort to the bottom. Worked case: a
+vendor-name search returned `drive_count: 25`; the preview held five contracts; the post-campaign
+analyses sat at ranks 8 and 21–25. The preview was taken for the whole answer and the session
+reported "no such report exists" — then repeated the same mistake on a second vendor an hour later.
+
+**Two different numbers are hiding, and the response now names both.**
+
+- **`cues.drive_truncated`** — *fetched vs matched.* Fires when more files matched than were
+  returned. This is exact, not a guess: it comes from a live page token, so it can tell 25-of-25
+  from 25-of-1,292. **If it's there, an absence proves nothing** — raise `max_results` or narrow
+  the query before concluding anything isn't there. Gmail and calendar have their own
+  (`gmail_truncated`, `calendar_truncated`).
+- **`cues.preview_partial`** — *shown vs fetched.* Fires when the `preview` holds fewer items than
+  were actually retrieved, and names the deposit to read for the rest.
+
+Both can fire at once, and then there are three numbers: 5 shown, of 100 fetched, of more-than-that
+matched. You need all three to reason about what's missing.
+
+`max_results` is now honoured past 100 — search paginates internally, up to a 1,000-result guard.
+(Before suite 1.22, it silently capped at 100 no matter what you passed: `max_results=300` returned
+100, with nothing in the response saying so. That is what produced the worked case above.)
+
+**A null is only evidence once you have seen the full list.** Before telling anyone something doesn't
+exist, `jq` the names out of the deposit and check the count against your cap. One command separates
+"not there" from "not shown", and a second separates "not shown" from "never fetched".
+
+The same trap applies to hand-rolled Drive API queries: `pageSize` without a `nextPageToken` loop, and
+`orderBy: modifiedTime desc`, together mean an older matching file sorts below your cut and never
+appears.
+
+**Every word you add is a hard constraint — Drive full-text is AND, not OR.** A file must contain
+*all* your terms to match at all; one word the estate doesn't use returns **zero**, and zero reads
+exactly like "doesn't exist". Measured: `ViewersLogic` → 1,292 files; `ViewersLogic zqxjkbrtplm` → 0.
+Two consequences worth internalising:
+
+- **Search the noun people file under, not the concept.** A long descriptive query doesn't rank
+  badly, it *excludes*. If a search comes back suspiciously empty, drop terms rather than adding them.
+- **Synonyms need separate searches.** There is no way to OR alternatives in one query today, so an
+  old product name and its new one are two searches, not one. Harvest unfamiliar tokens out of the
+  first result set's filenames and re-query with those — that step alone rescues most stalled hunts.
 
 Gmail results carry a free `has_invite` flag (the thread contains a calendar invite). It costs no extra call, but it's only a flag — to know whether the meeting is still on, `fetch` the thread and read `cues.invite_state` (see "After Every Fetch"). Filter for invites with `jq '.gmail_results[] | select(.has_invite)'`.
 
@@ -394,7 +450,17 @@ do(operation="replace_text", file_id="1abc...", find="Q3", content="Q4", base_pa
 do(operation="replace_text", file_id="1abc...", find="DRAFT — ", content="", base_path="...")
 ```
 
-`replace_text` response includes `cues.occurrences_changed` — check it to confirm the replacement happened.
+`replace_text` response includes `cues.occurrences_changed`. A zero-match call now also
+carries `cues.warning` starting **`NO CHANGE`** — it is not a success, and no
+`restore_point` is returned, because nothing was written.
+
+**The commonest cause of a zero match is copying the find string out of a fetch.**
+`content.md` is a *rendering* of the document, not the document: `**bold**`, `` `code` ``,
+the `~~` on ticked checkboxes, and `{++suggested++}` spans are all formatting the Doc
+itself doesn't contain. Copy a sentence spanning one of those and the find can never
+match. Search the plain words instead — the warning names the marker it spotted. (A plain
+`.md` file or a sheet cell *does* hold those characters literally, so this applies to
+Google Docs only.)
 
 ### Sheet Creation
 
@@ -638,11 +704,16 @@ Both draft ops auto-append the user's Gmail signature (from their sendAs setting
 | Trusting short tokens (`PR`, `AI`) | API stricter than UI — false "not found" | Participants + date filters; confirm in Gmail UI |
 | Skip comments.md | Miss the real discussion | Check after every doc/sheet/slides fetch |
 | Ignore email_context | Miss the story behind the file | Follow the exploration loop |
-| Read full search JSON | Token waste on 35 results | Filter with jq first |
+| Reading the raw search JSON top to bottom | Token waste on 35 results | `jq` the fields you need — filter it, don't skip it |
+| Treating `preview` as the result set | Silently misses everything past rank 5 — the source of false "doesn't exist" claims | `cues.preview_partial` says when there's more; `jq` the deposit |
+| Declaring something absent from a preview | An unseen rank 8 reads exactly like a null | `jq -r '.drive_results[] \| .name'` before any "not found" |
+| Declaring something absent while `drive_truncated` is set | You searched a ceiling, not the estate | Raise `max_results` or narrow the query, then look again |
+| Adding words to a search that found nothing | Drive full-text is AND — more words match *fewer* files, often zero | Drop terms, not add them; try the house noun |
 | Stop after first search | Shallow understanding | Loop: new terms → new searches |
 | Omit base_path | Deposits vanish into server directory | Always pass it |
 | Overwrite a doc with images/tables | Content destroyed, not recoverable | Use `prepend`/`append`/`replace_text` |
-| `replace_text` without checking cues | Silent no-op if text not found | Check `cues.occurrences_changed > 0` |
+| `replace_text` without checking cues | No longer silent, but still a no-op | Read `cues.warning` for `NO CHANGE`, or `cues.occurrences_changed > 0` |
+| A find string copied from `content.md` | `**`, `` ` ``, `~~`, `{++` are rendering, not document text — can never match | Search the plain words; the `NO CHANGE` warning names the marker |
 | Share with `confirm=True` without preview | Bypasses user approval | Always call without confirm first, show preview, then confirm |
 | Archive/star one thread at a time | Slow — one tool call per thread | Pass `file_id` as a list for batch operations |
 | Looking for a `mark_read` operation | Doesn't exist | Use `label` with `label="UNREAD"`, `remove=True` |
@@ -673,7 +744,8 @@ This skill works when:
 - Drive searches use keywords, not Gmail operators
 - `comments.md` is checked after every doc/sheet/slides fetch
 - `email_context` hints are followed to source emails
-- Large results are filtered before reading
+- Large results are filtered before reading — with `jq` against the deposit, not by reading `preview` and stopping
+- `drive_count` / `gmail_count` are checked before any "I couldn't find it" is reported to the user
 - Research tasks follow the exploration loop, not single-search-and-stop
 - Triage uses batch operations, not one-thread-at-a-time
 - `label` is used for mark_read/unread/unstar rather than seeking separate operations

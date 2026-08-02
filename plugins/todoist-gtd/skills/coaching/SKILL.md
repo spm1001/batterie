@@ -319,10 +319,10 @@ Three parts: **Clarify, Check Lists, Calendar.**
 
 ### Weekly Review (~45-60 mins)
 
-Three phases: **Get Current, Get Clear, Get Creative** (Peake's ordering — catch up with reality before cleaning the system).
+Three phases: **Get Clear, Get Current, Get Creative** (Allen's canonical labels).
 
-1. **Get Current** — Mind sweep all capture points, process every inbox to zero
-2. **Get Clear** — Review all projects, next actions, waiting-fors, calendar
+1. **Get Clear** — Mind sweep all capture points, process every inbox to zero
+2. **Get Current** — Review all projects, next actions, waiting-fors, calendar
 3. **Get Creative** — Review someday/maybe, notice what's missing, generate ideas
 
 **For the full review checklists:** See [references/GTD_METHODOLOGY.md](references/GTD_METHODOLOGY.md#stage-4-reflect)

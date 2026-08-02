@@ -22,16 +22,15 @@ Full picture: `spm1001/batterie-de-savoir` → `CLAUDE.md` "Versioning conventio
 ## Quick Commands
 
 ```bash
-todoist doctor          # Check setup
+todoist doctor          # Check setup + deps + auth + network
 todoist auth --status   # Check auth
 todoist projects        # List projects
 todoist version         # Show version
-todoist doctor          # Check setup + deps + auth + network
 ```
 
 ## Code Conventions
 
-- Python 3.9+, no type stubs required
+- Python 3.11+ (`requires-python` in pyproject.toml is the enforcement point)
 - Keep dependencies minimal (see pyproject.toml)
 - Error messages go to stderr, data to stdout
 - JSON output for machine consumption

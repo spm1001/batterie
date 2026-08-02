@@ -20,7 +20,7 @@ todoist auth --status     # Check authentication status
 
 **Setup:** Run `todoist auth` for instructions — it prints the URL to get your API token from Todoist's developer settings. Then run `todoist auth --token YOUR_TOKEN` to store it.
 
-Token is stored in macOS Keychain (if available) or in `~/.claude/plugins/data/todoist-gtd-batterie-de-savoir/token` on Linux.
+Token is stored in macOS Keychain (if available) or in `~/.claude/plugins/data/todoist-gtd-batterie/token` on Linux (older installs' locations are migrated there on first read).
 
 If auth fails, prompt user to run `todoist auth` or re-run `todoist auth --token` with a fresh token.
 
@@ -130,6 +130,28 @@ todoist tasks --project "@Wait" --older-than 3m    # 3 months
 todoist tasks --project "@Work" --include-section-name
 ```
 
+## Moving, Sections, and Ordering
+
+```bash
+# Move a task OUT of its section (to the project root)
+todoist update <task-id> --no-section
+
+# Move to another project (always lands at the project root, section cleared)
+todoist update <task-id> --project "Target Project"
+
+# Set one task's position among its siblings (1 = top)
+todoist update <task-id> --order 3
+
+# Arrange a queue: order becomes the sequence given (first = top)
+todoist reorder <id1> <id2> <id3>
+```
+
+**Three rules that save confusion:**
+
+1. **Moving a task resets its order to 1.** If you move and want a specific position, move first, then set `--order` (a single `update` call with both does this in the right sequence for you — but a `reorder` of the whole queue after the moves is the most reliable arrangement).
+2. **`reorder` only touches the tasks you list.** Unlisted siblings keep their old order values and may interleave. For a full arrangement (e.g. a dispatch queue), list every task in the container.
+3. **There is no "remove from section" field in the API.** `--no-section` works by moving the task to its own project's root — that is the supported mechanism, not a workaround.
+
 ## Data Model
 
 **Task objects are complete.** The CLI returns tasks with comments inline:
@@ -151,8 +173,12 @@ todoist tasks --project "@Work" --include-section-name
 | Task title | `content` field |
 | Notes/details | `description` field |
 | Due dates | `due` object |
+| Creation time | `created_at` field |
+| Position among siblings | `order` field (1 = top) |
 | Attachments | `comments[].attachment` |
 | Progress notes | `comments[].content` |
+
+**There is no `added_at` key.** The Todoist API's `added_at` value is loaded into `created_at` by the SDK — `created_at` is always populated and is the field staleness checks (`--older-than`, `--created-before`) run on. Beware: `jq '.added_at'` on a task returns `null` for the *missing* key, which reads exactly like an empty value — probe with `has("added_at")` before concluding a field is unpopulated.
 
 ### Forwarded Emails Pattern
 
@@ -186,7 +212,7 @@ todoist tasks --label "waiting-for"  # Works if label exists
 
 ### Cross-Workspace Limitation
 
-**Moving tasks between personal and shared projects fails.** The `move_task` API cannot move tasks across workspace boundaries (personal account ↔ MIT shared workspace).
+**Moving tasks between personal and shared projects fails.** The `move_task` API cannot move tasks across workspace boundaries (personal account ↔ a team workspace).
 
 **Workaround:** Complete the task in the source project, then recreate it in the target project. History is preserved in both locations.
 

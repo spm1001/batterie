@@ -1,7 +1,7 @@
 {
   "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
   "name": "batterie",
-  "description": "Kitchen tools for knowledge work \u2014 plugins for GTD tracking, session lifecycle, Google Workspace, browser automation, and more",
+  "description": "Kitchen tools for knowledge work — plugins for GTD tracking, session lifecycle, Google Workspace, browser automation, and more",
   "owner": {
     "name": "Sameer Modha",
     "email": "sameer@modha.dev"
@@ -10,7 +10,7 @@
     {
       "name": "batterie",
       "source": "./plugins/batterie",
-      "description": "Suite-level utilities \u2014 cross-plugin updates and maintenance.",
+      "description": "Suite-level utilities — cross-plugin updates and maintenance.",
       "category": "productivity",
       "homepage": "https://github.com/spm1001/batterie",
       "keywords": [
@@ -22,7 +22,7 @@
     {
       "name": "bon",
       "source": "./plugins/bon",
-      "description": "GTD-native work tracker \u2014 outcomes, actions, tactical steps. Includes session lifecycle (/open, /close).",
+      "description": "GTD-native work tracker — outcomes, actions, tactical steps. Includes session lifecycle (/open, /close).",
       "category": "productivity",
       "homepage": "https://github.com/spm1001/bon",
       "keywords": [
@@ -33,7 +33,7 @@
     {
       "name": "trousse",
       "source": "./plugins/trousse",
-      "description": "Utility skills \u2014 code review, diagrams, screenshots, data analysis, architecture review, and more.",
+      "description": "Utility skills — code review, diagrams, screenshots, data analysis, architecture review, and more.",
       "category": "workflow",
       "homepage": "https://github.com/spm1001/trousse",
       "keywords": [
@@ -45,7 +45,7 @@
     {
       "name": "mise",
       "source": "./plugins/mise",
-      "description": "Google Workspace MCP \u2014 search Drive, fetch Gmail, act on documents. Requires Google OAuth.",
+      "description": "Google Workspace MCP — search Drive, fetch Gmail, act on documents. Requires Google OAuth.",
       "category": "integration",
       "homepage": "https://github.com/spm1001/mise-en-space",
       "keywords": [
@@ -55,11 +55,11 @@
       ]
     },
     {
-      "name": "todoist-gtd",
-      "source": "./plugins/todoist-gtd",
-      "description": "Todoist with GTD coaching \u2014 outcomes, weekly review, pattern detection.",
+      "name": "accomplis",
+      "source": "./plugins/accomplis",
+      "description": "Todoist with GTD coaching — outcomes, weekly review, pattern detection.",
       "category": "productivity",
-      "homepage": "https://github.com/spm1001/todoist-gtd",
+      "homepage": "https://github.com/spm1001/accomplis",
       "keywords": [
         "todoist",
         "gtd"
@@ -68,7 +68,7 @@
     {
       "name": "sonnette",
       "source": "./plugins/sonnette",
-      "description": "Conductor mesh connectivity \u2014 peer-to-peer channel between Claude sessions. Requires bun on the host.",
+      "description": "Conductor mesh connectivity — peer-to-peer channel between Claude sessions. Requires bun on the host.",
       "category": "integration",
       "homepage": "https://github.com/spm1001/aboyeur",
       "keywords": [
@@ -81,7 +81,7 @@
     {
       "name": "passe",
       "source": "./plugins/passe",
-      "description": "Fast browser automation via Chrome DevTools Protocol \u2014 fetch pages, screenshots, forms, network capture. Auto-installs the passe CLI on first session.",
+      "description": "Fast browser automation via Chrome DevTools Protocol — fetch pages, screenshots, forms, network capture. Auto-installs the passe CLI on first session.",
       "category": "automation",
       "homepage": "https://github.com/spm1001/passe",
       "keywords": [

@@ -33,9 +33,9 @@ David Allen's definition: "Any desired result that requires more than one action
 A business initiative or workstream, often involving multiple people.
 
 **Examples:**
-- "The data platform project"
-- "The migration project"
-- "The market expansion project"
+- "The clean-room project"
+- "The panel migration project"
+- "The OzTAM expansion project"
 
 **In Todoist:** Often represented as a project with kanban sections (To Do, Doing, Done).
 

@@ -18,7 +18,7 @@ Not to be confused with **batterie-de-savoir** — the two are a **source/artifa
 | bon | bon |
 | trousse | trousse |
 | mise | mise-en-space |
-| todoist-gtd | todoist-gtd |
+| accomplis | accomplis |
 | sonnette | aboyeur |
 
 Retired from distribution: garde-manger (decommissioned 2026-06-03), tafelmusik (unvendored 2026-06-10 — too experimental to publish; the source repo lives on), passe (delisted 2026-07-07, `bds-wobari` — browser infra, not a knowledge plugin; the CLI installs standalone from spm1001/passe and the source repo lives on).

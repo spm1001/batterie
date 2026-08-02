@@ -227,18 +227,18 @@ The daily review is orientation, not deep processing. If it takes 30+ minutes, y
 
 ### Weekly Review (~45-60 minutes)
 
-The most important GTD habit. Three phases: **Get Current, Get Clear, Get Creative.**
+The most important GTD habit. Three phases: **Get Clear, Get Current, Get Creative.**
 
-(Robert Peake, NAA: "Get Current before getting Clear." Reflection first — creativity follows clarity.)
+(Robert Peake's caution, NAA: reflection is the point — don't let processing the system crowd out actually reviewing it. Creativity follows clarity.)
 
-#### Phase 1: Get Current
+#### Phase 1: Get Clear
 
-Process all inboxes. Catch up with reality.
+Process all inboxes to zero.
 
 1. **Mind sweep** — systematically sweep all capture points: physical inbox, email, Todoist inbox, cloud drives, messaging apps, voice memos, meeting notes, your own head
 2. **Clarify** — process every inbox to zero. For each item: "What is it? Is it actionable? What's the next action?"
 
-#### Phase 2: Get Clear
+#### Phase 2: Get Current
 
 Review all lists. Update the system to match reality.
 

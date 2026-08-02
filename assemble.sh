@@ -44,7 +44,7 @@ batterie:batterie-de-savoir
 bon:bon
 trousse:trousse
 mise:mise-en-space
-todoist-gtd:todoist-gtd
+accomplis:accomplis
 sonnette:aboyeur
 passe:passe
 "
@@ -463,7 +463,7 @@ The marketplace only needs adding once; after that, install as many as they want
 
 - **trousse** — utility skills (diagrams, code review, data analysis). Works immediately, nothing to set up. Good default add.
 - **batterie** — keeps their plugins current (`/batterie:update`). Worth having.
-- **todoist-gtd** — Todoist with GTD coaching. Needs the `todoist` CLI *and* a Todoist account + API token. Worth it if they already live in Todoist.
+- **accomplis** — Todoist with GTD coaching. Needs the `accomplis` CLI *and* a Todoist account + API token. Worth it if they already live in Todoist.
 - **bon** — a power-user GTD work-tracker. Needs the `bon` CLI and a local store. Suits someone who wants to track work across sessions (e.g. Isaac); ask before setting it up.
 
 ## How to offer it
@@ -518,7 +518,7 @@ PYEOF
 
 Private Claude plugin marketplace for the planetmodha estate. Carries ONLY
 `mise-home` — the planetmodha-credentialled flavour of mise. Family members
-get everything else (bon, trousse, todoist-gtd, batterie) from the PUBLIC
+get everything else (bon, trousse, accomplis, batterie) from the PUBLIC
 marketplace `spm1001/batterie`; `/batterie:update` spans both automatically
 (it matches marketplaces by source repo: `spm1001/batterie` or
 `spm1001/batterie-*`).

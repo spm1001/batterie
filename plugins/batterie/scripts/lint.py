@@ -105,7 +105,7 @@ def show_diff(name: str, expected: str, actual: str) -> None:
 def check_tool_pages() -> list[str]:
     """Every registry slug needs a docs/tools/<slug>.md page — the generated
     brigade table in docs/index.md links tools/<slug> for every row, so a
-    missing page is a dead link on the live site (plongeur and todoist-gtd
+    missing page is a dead link on the live site (plongeur and accomplis
     shipped as 404s for weeks this way). Extra pages are fine: consomme.md is
     a deliberate vocabulary-station page with no registry row."""
     problems = []

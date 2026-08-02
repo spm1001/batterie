@@ -1,0 +1,30 @@
+{
+  "name": "accomplis",
+  "version": "1.28.0",
+  "description": "Todoist CLI with GTD coaching \u2014 outcomes, weekly review, pattern detection",
+  "author": {
+    "name": "Sameer Modha",
+    "url": "https://github.com/spm1001"
+  },
+  "repository": "https://github.com/spm1001/accomplis",
+  "license": "MIT",
+  "keywords": [
+    "todoist",
+    "gtd",
+    "productivity",
+    "coaching"
+  ],
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/ensure-accomplis.sh"
+          }
+        ]
+      }
+    ]
+  }
+}

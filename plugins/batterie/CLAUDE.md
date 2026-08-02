@@ -36,7 +36,7 @@ Tool pages are hand-authored by design. The registry holds one-liners; tool page
 
 **This is the canonical description of how the suite is versioned and released.** Component repos carry a thin pointer back here; this section (plus `.bon/understanding.md`) is the full picture.
 
-**One version number across the whole suite.** Since 2026-06-28 (suite 1.2.2) every published plugin — `batterie`, `bon`, `trousse`, `mise`, `todoist-gtd` — carries the *same* version. The earlier "Debian model" (independent per-plugin numbers under a headline suite number) is **dead**: the suite is operated as a unit — the assembler re-vendors it whole daily, and `/batterie:update` pulls every plugin in one go — so per-plugin granularity was never consumed, only confusing.
+**One version number across the whole suite.** Since 2026-06-28 (suite 1.2.2) every published plugin — `batterie`, `bon`, `trousse`, `mise`, `accomplis` — carries the *same* version. The earlier "Debian model" (independent per-plugin numbers under a headline suite number) is **dead**: the suite is operated as a unit — the assembler re-vendors it whole daily, and `/batterie:update` pulls every plugin in one go — so per-plugin granularity was never consumed, only confusing.
 
 **Source of truth: the `batterie` plugin's `plugin.json` version (this repo) IS the suite version.** You never hand-edit it to release — `/batterie:publish` bumps it centrally (below).
 
@@ -44,7 +44,7 @@ Tool pages are hand-authored by design. The registry holds one-liners; tool page
 
 - **A source repo's own `plugin.json` version is local-dev-only** — hatchling reads it for the CLI `--version` footnote (below), but it's irrelevant to what ships. **Do NOT hand-bump a source `plugin.json` to "release"** — the stamp overwrites it. `/batterie:publish` is the only lever.
 - **The ratchet is suite-level.** If a plugin's vendored *content* changed but the *suite* version didn't bump, the assembler **quarantines** that plugin (keeps it at its last-good version) rather than shipping an unversioned change. So any vendored-content edit needs a suite bump to actually ship — see the GOTCHA below.
-- `pyproject.toml` still uses `dynamic = ["version"]` reading `.claude-plugin/plugin.json` via a hatchling regex — never a hardcoded version. Repos on this pattern: **bon, mise-en-space, passe, trousse, todoist-gtd**. A new tool with a `pyproject.toml` follows the same pattern.
+- `pyproject.toml` still uses `dynamic = ["version"]` reading `.claude-plugin/plugin.json` via a hatchling regex — never a hardcoded version. Repos on this pattern: **bon, mise-en-space, passe, trousse, accomplis**. A new tool with a `pyproject.toml` follows the same pattern.
 
 **Releasing: `/batterie:publish` from the edited repo's working tree.** It bumps the suite version centrally (this repo's `plugin.json`), commits, pushes, triggers `assemble.yml`, watches it green, and pulls this machine current. Editing a *non*-`batterie` source repo makes it a **2-repo push** (the content repo + the central suite bump). Never run `assemble.sh` locally — assembling is CI's job. (Engine: `scripts/publish.py`.)
 
@@ -52,7 +52,7 @@ Tool pages are hand-authored by design. The registry holds one-liners; tool page
 
 ### The CLIs keep their own numbers (lazy convergence)
 
-The plugin version is one number; the **CLIs** (`bon` / `passe` / `todoist --version`) are NOT stamped to it. A CLI's `--version` reads *the suite release that last **changed** that CLI* — `publish.py` lazy-stamps only the source repo being published (japoca, 2026-07-06). So CLIs converge toward the suite number over normal releases with no multi-repo dance every release (the dance the 2026-06-28 scope decision explicitly rejected). What a Claude should know:
+The plugin version is one number; the **CLIs** (`bon` / `passe` / `accomplis --version`) are NOT stamped to it. A CLI's `--version` reads *the suite release that last **changed** that CLI* — `publish.py` lazy-stamps only the source repo being published (japoca, 2026-07-06). So CLIs converge toward the suite number over normal releases with no multi-repo dance every release (the dance the 2026-06-28 scope decision explicitly rejected). What a Claude should know:
 
 - `/batterie:version` shows the suite number as headline, each CLI's own `--version` as a **footnote** — a CLI number *below* the suite number is expected, not drift.
 - **Session hooks are install-if-missing only** — no version-drift check at session start (that produced a false reinstall every session). They install a *missing* CLI and report the version that actually landed.

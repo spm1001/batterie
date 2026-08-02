@@ -44,7 +44,7 @@ from pathlib import Path
 
 REPO_NAMES = {
     "mise": "mise-en-space",
-    "todoist-gtd": "todoist-gtd",
+    "accomplis": "accomplis",
     "batterie": "batterie-de-savoir",
     "sonnette": "aboyeur",
 }

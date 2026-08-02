@@ -98,7 +98,7 @@ else:
 
     # CLI version check — keyed by plugin base-name (a CLI's source repo is the
     # same whichever marketplace shipped the plugin).
-    cli_tools = {"bon": "bon", "todoist-gtd": "todoist"}
+    cli_tools = {"bon": "bon", "accomplis": "accomplis"}
     print("\nCLI tool versions:")
     for plugin_name, cli_name in cli_tools.items():
         if plugin_name in base_names:
@@ -175,7 +175,7 @@ Two batterie plugins ship CLI tools installed via `uv tool install`:
 | Plugin | CLI binary | Package | Source repo | Extras |
 |--------|-----------|---------|-------------|--------|
 | bon | `bon` | `bon` | `spm1001/bon` | `[dolt]` |
-| todoist-gtd | `todoist` | `todoist-gtd` | `spm1001/todoist-gtd` | |
+| accomplis | `accomplis` | `accomplis` | `spm1001/accomplis` | |
 
 (passe left the suite 2026-07-07 — its CLI installs standalone and its shard/tunnel live in `spm1001/passe-partout`; this skill no longer manages it.)
 
@@ -187,7 +187,7 @@ For each CLI in the table:
    ```
    cat ~/.local/share/uv/tools/<plugin>/lib/python*/site-packages/*.dist-info/direct_url.json
    ```
-   (the dist-info dir uses the package name with underscores, e.g. `todoist_gtd-…`; the glob handles it).
+   (the dist-info dir uses the package name with underscores, e.g. `accomplis-…`; the glob handles it).
 2. **Origin commit:** `git ls-remote https://github.com/<source-repo> HEAD`.
 3. Decide:
    - `commit_id` **equals** origin HEAD → current, skip (report "up to date").

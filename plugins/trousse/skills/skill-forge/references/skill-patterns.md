@@ -342,5 +342,5 @@ Is this a mandatory checkpoint with pass/fail?
 
 **Hybrid patterns are valid.** Many skills combine elements:
 - skill-forge: Gate (checklist) + Process (6 steps)
-- todoist-gtd: Fluency (CLI) + Coaching (outcomes)
+- accomplis: Fluency (CLI) + Coaching (outcomes)
 - systematic-debugging: Process (phases) + Gate (verification)

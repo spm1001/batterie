@@ -135,9 +135,9 @@ This skill works when:
 
 ## Real Examples
 
-### todoist-gtd
+### accomplis
 
-**CLI:** `todoist` (Python, ~/Repos/todoist-gtd)
+**CLI:** `accomplis` (Python, ~/repos/spm1001/accomplis)
 **Pattern:** CLI provides Todoist API access; skill provides GTD semantics
 
 Key additions skill provides:

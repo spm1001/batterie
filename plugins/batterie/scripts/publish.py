@@ -64,7 +64,7 @@ SUITE_REPO_DEFAULT = Path(__file__).resolve().parent.parent
 CLI_REPOS = {
     "bon": ("bon", "[dolt]"),
     "passe": ("passe", ""),
-    "todoist-gtd": ("todoist", ""),
+    "accomplis": ("accomplis", ""),
 }
 
 

@@ -37,7 +37,7 @@ if ! command -v todoist &>/dev/null; then
     fi
 fi
 
-# Check 3: API token (env var, macOS Keychain, or file)
+# Check 2: API token (env var, macOS Keychain, or file)
 HAS_TOKEN=false
 if [ -n "${TODOIST_API_KEY:-}" ]; then
     HAS_TOKEN=true
@@ -45,7 +45,10 @@ elif command -v security &>/dev/null && security find-generic-password -s "todoi
     HAS_TOKEN=true
 elif [ -f "$HOME/.todoist-token" ]; then
     HAS_TOKEN=true
+elif [ -f "$HOME/.claude/plugins/data/todoist-gtd-batterie/token" ]; then
+    HAS_TOKEN=true
 elif [ -f "$HOME/.claude/plugins/data/todoist-gtd-batterie-de-savoir/token" ]; then
+    # Pre-cutover dir name — token_store migrates it on first CLI read
     HAS_TOKEN=true
 fi
 if [ "$HAS_TOKEN" = false ]; then

@@ -15,26 +15,20 @@ Patterns that undermine stated intentions. When detected, surface with questions
 
 **Philosophy:** Support intentions, not enforce rules. The goal is conscious choice, not compliance.
 
-## Freedom to Be Curious
+## Is the System Working?
 
-**Target:** 7/10
+The test of a GTD system isn't tidy lists — it's headroom. Can the user sit down to explore an idea without a nagging sense that something is falling through the cracks? Overcommitted and reactive means the system needs attention, however clean it looks.
 
-Primary metric for whether the GTD system is working. Low score = overcommitted, reactive, no space for exploration.
+**Weekly review prompt:** "Did you have space for exploratory thinking this week? What's one thing you could decline?"
 
-**Measured by:**
-- Time in exploratory thinking vs reactive execution
-- Number of "shoulds" declined this week
-- Presence of unscheduled thinking time in calendar
-- Quality of sleep (proxy for mental load)
-
-**Weekly review prompt:** "What's your curiosity freedom score this week? What's one thing you could decline?"
+(Some users keep a personal metric for this — if they mention one, use theirs.)
 
 ## Weekly Review Orchestration
 
 "Weekly review" triggers a **three-phase workflow:**
 
 ### Phase 1: Filing
-Process and file from cleanup zones. Check project CLAUDE.md for zone paths and Drive structure.
+Process and file from cleanup zones (downloads, desktop, drive inboxes — check project instructions for the user's zone paths).
 - Clear digital clutter before strategic reflection
 - **Clarify before organizing** — read content, extract actions, THEN move files
 
@@ -47,7 +41,7 @@ This skill (todoist-gtd):
 
 ### Phase 3: Pattern Reflection
 Still this skill, using patterns above:
-- Check freedom score
+- Check headroom ("Is the System Working?" above)
 - Surface any detected patterns (overcommitment, scope creep, etc.)
 - Ask: "What's one thing you could decline this week?"
 
@@ -62,19 +56,20 @@ When processing @Claude or any inbox project:
    todoist tasks --project "@Claude"
 
 2. For EACH item, check .comments[] then decide:
-   - arc: Create issue, complete task
+   - track: File in the work tracker, complete task
    - skip: Complete task (context-lost or not actionable)
    - move: Update task to different project/section
    - do now: Handle immediately, complete task
 
 3. Execute:
    - done <id>                           # Complete
-   - update <id> --project "@Ping"       # Move to project
-   - update <id> --section "Now"         # Move to section
+   - update <id> --project "CONTEXT"     # Move to project
+   - update <id> --section "SECTION"     # Move to section
+   - update <id> --no-section            # Move out of a section
    - update <id> --content "better name" # Rename
 
 4. Report summary
-   "Processed X items: Y arc'd, Z moved, W skipped"
+   "Processed X items: Y tracked, Z moved, W skipped"
 ```
 
 ### Reading Comments
@@ -92,10 +87,10 @@ Comments are inline on each task as `.comments[]`. Look for:
 
 | Signal | Likely Disposition |
 |--------|-------------------|
-| Has attachments in `.comments[]` | Worth investigating — arc or do |
+| Has attachments in `.comments[]` | Worth investigating — track or do |
 | Empty comments array | Probably quick capture — skip or do |
-| Clear next action | Do now or move to @Work |
-| Complex/multi-step | Arc it |
+| Clear next action | Do now or move to the work context |
+| Complex/multi-step | Track it |
 
 ## When to Invoke Patterns
 
@@ -115,7 +110,7 @@ Comments are inline on each task as `.comments[]`. Look for:
 - Solving problems that could build others' capability
 - Execution without reflecting on whether it matters
 
-## Bulk Action Intake (Sublime Loop)
+## Bulk Action Intake (Editor Loop)
 
 When extracting actions from meeting notes, documents, or other sources:
 
@@ -127,32 +122,18 @@ When extracting actions from meeting notes, documents, or other sources:
    - NAME to TASK (context)
    - Another person to do something
 
-   ## Ping
-   - Quick follow-up item
-   - Another quick item
+   ## Agenda
+   - Quick follow-up item to raise with someone
 
    ## Work
    - Actual work task
    ```
 
-2. **Open for user review:**
-   ```bash
-   open -a "Sublime Text" /tmp/extracted-actions.md
-   ```
+2. **Open for user review** in their editor (`open -e file.md` on macOS, `xdg-open` on Linux, or whatever they use).
 
-3. **User edits** — Fix names (Claude had "Susie", should be "Susan Takpi"), delete stale items, clarify vague actions
+3. **User edits** — Fix names (Claude guessed a first name, user knows the full one), delete stale items, clarify vague actions
 
-4. **Process edited file** — Parse and add to Todoist:
-   ```bash
-   # Waiting For items → @Wait project
-   todoist add "NAME to TASK" --project "@Wait"
-
-   # Ping items → @Ping project
-   todoist add "Quick item" --project "@Ping"
-
-   # Work items → @Work project
-   todoist add "Work task" --project "@Work"
-   ```
+4. **Process edited file** — Parse and add to Todoist, one `todoist add` per line, routed to the user's discovered context projects (waiting-fors to their waiting project, agenda items to their agenda project, and so on)
 
 ### Why This Works
 

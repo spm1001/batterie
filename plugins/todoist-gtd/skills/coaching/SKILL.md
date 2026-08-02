@@ -2,10 +2,11 @@
 name: coaching
 description: >
   MANDATORY gate BEFORE any Todoist operation — orchestrates GTD semantics the CLI alone can't
-  provide (outcomes are sections not tasks, workspace vs personal filtering, horizon alignment).
-  Invoke FIRST for weekly review, outcome coaching, and pattern detection. Triggers on 'clean up
-  outcomes', 'team priorities', 'is this a good outcome', 'weekly review', 'am I overcommitting',
-  'check my patterns', 'should I take this on', 'scope creep', 'freedom score'. (user)
+  provide (discovering each user's structure, outcome vs activity language, workspace vs personal
+  filtering, horizon alignment). Invoke FIRST for weekly review, outcome coaching, and pattern
+  detection. Triggers on 'clean up outcomes', 'team priorities', 'is this a good outcome',
+  'weekly review', 'am I overcommitting', 'check my patterns', 'should I take this on',
+  'scope creep', 'reorder my queue'. (user)
 allowed-tools: ["Bash(todoist:*)", Read, AskUserQuestion]
 ---
 
@@ -91,19 +92,25 @@ Regardless of how each user names their projects, look for this structure:
 | Areas of Focus | Sections in an areas project | Look for "Areas of Focus", "Responsibilities", or similar |
 | Reference | Projects for reference material | Varies by user |
 
-### Outcomes Are Sections (Not Tasks!)
+### Where Outcomes Live: Discover, Don't Assume
 
-This is the most critical structural insight:
+Outcomes commonly live as **sections in an outcomes project** — but not always, and the same user may use different layouts in different projects. Discover per project by reading what the sections *are*:
 
 ```
-Desired Outcomes Q2 (project)
-  +-- Built team capacity for... (section = outcome)
-  |     +-- [tasks under this section]
-  +-- Established new measurement... (section = outcome)
-  +-- Secured commitment to... (section = outcome)
+Desired Outcomes (project)                    Projects - Toolmaking (project)
+  +-- Built team capacity for... (section)      +-- Someday (section = status lane)
+  |     +-- [tasks under it]                    +-- [outcomes as TASKS at root]
+  +-- Established new... (section)
+  = sections ARE outcomes                       = sections are STATUS LANES,
+    → query with `sections`                       outcomes are tasks → query with `tasks`
 ```
 
-**Why it matters:** Outcomes are SECTIONS. Query with `sections`, not `tasks`.
+**The discrimination test:** list a project's sections and read their names.
+- Names like past-tense achievements ("Built...", "Secured...") → **sections are outcomes**
+- Names like status lanes (Someday, Now/Later, To Do/Doing/Done) → **outcomes are tasks**, sections are workflow states
+- No sections at all → it's a flat context or task list
+
+Record what you find and use it for the rest of the session rather than re-deriving. When coaching a new user, the sections-as-outcomes layout is the pattern to *recommend* — but read before you write.
 
 ### Workspace vs Personal Projects
 
@@ -135,16 +142,16 @@ todoist tasks --project "Shared Project" --team
 todoist tasks --project "Shared Project" --assignee "Full Name"
 ```
 
-### GTD Contexts Are Projects
+### GTD Contexts Are Usually Projects
 
-**GTD contexts (like @Wait, @Work, @Someday) are PROJECTS, not labels.** Query with `--project`, not `--label`.
+**GTD contexts (Waiting For, Work, Someday…) are usually PROJECTS, not labels.** Query with `--project`, not `--label` (unless the user genuinely uses labels).
 
 ```bash
-todoist tasks --project "@Wait"        # Correct
-todoist tasks --label "waiting-for"    # Wrong (unless user uses labels)
+todoist tasks --project "@Wait"           # if their contexts use an @ prefix
+todoist tasks --project "& Waiting For"   # if they use an & prefix, or plain names
 ```
 
-Discover the user's context projects by listing all projects and looking for the @ prefix pattern or similar naming convention.
+**The prefix is a per-user convention, not a rule** — `@`, `&`, emoji, or none at all. Even one user's convention changes over time. Discover it fresh: list all projects and look for the short, action-situation names (Work, Home, Waiting, Someday, Agendas) clustered under a common prefix.
 
 ## GTD Methodology
 
@@ -245,17 +252,19 @@ todoist tasks --project "@Work" --include-section-name  # Tasks with section con
 2. What does success look like? (Vision of done)
 3. Which area of focus does it serve?
 
-**Outcome goes in:** A section in the user's outcomes project
-**Tasks go under:** That outcome section
+**Outcome goes:** wherever this user's outcomes live — discover first (see "Where Outcomes Live" above), then match their layout.
 
 ```bash
-# DON'T create outcome as a task
-todoist add "Build team documentation"  # WRONG
-
-# DO create as section in the outcomes project
+# In a sections-as-outcomes project:
 todoist add-section "Built team capacity through documentation" \
-  --project "Desired Outcomes Q2"  # CORRECT (use actual project name)
+  --project "OUTCOMES_PROJECT"
+
+# In a tasks-as-outcomes project (sections are status lanes):
+todoist add "Built team capacity through documentation" \
+  --project "OUTCOMES_PROJECT"
 ```
+
+Either way, **write it as an achievement, not an activity** — that's the part that doesn't vary by user.
 
 ### Writing Next Actions (GTD Style)
 
@@ -292,7 +301,7 @@ When delegating an outcome:
 
 | Bad Practice | Why Wrong | Better |
 |--------------|-----------|--------|
-| Creating outcome as task | Confuses structure | Use `add-section` |
+| Guessing where outcomes go | Mismatches the user's layout | Discover first, then match it |
 | Tier 3 project as outcome | Inflates outcome count | Challenge: "Activity or achievement?" |
 | Completing without reflection | Loses learning | Prompt for resolution notes |
 | Joint ownership | No clear driver, item drifts | One owner per outcome |
@@ -310,10 +319,10 @@ Three parts: **Clarify, Check Lists, Calendar.**
 
 ### Weekly Review (~45-60 mins)
 
-Three phases: **Get Clear, Get Current, Get Creative.**
+Three phases: **Get Current, Get Clear, Get Creative** (Peake's ordering — catch up with reality before cleaning the system).
 
-1. **Get Clear** — Mind sweep all capture points, clarify everything to zero
-2. **Get Current** — Review all projects, next actions, waiting-fors, calendar
+1. **Get Current** — Mind sweep all capture points, process every inbox to zero
+2. **Get Clear** — Review all projects, next actions, waiting-fors, calendar
 3. **Get Creative** — Review someday/maybe, notice what's missing, generate ideas
 
 **For the full review checklists:** See [references/GTD_METHODOLOGY.md](references/GTD_METHODOLOGY.md#stage-4-reflect)
@@ -375,6 +384,8 @@ See [references/PATTERNS.md](references/PATTERNS.md#inbox-triage-workflow) for t
 | Rename task | `todoist update "<task-id>" --content "new name"` |
 | Move to project | `todoist update "<task-id>" --project "PROJECT"` |
 | Move to section | `todoist update "<task-id>" --section "SECTION"` |
+| Move OUT of section | `todoist update "<task-id>" --no-section` |
+| Arrange a queue | `todoist reorder <id1> <id2> <id3>` (order = sequence given) |
 
 **Note:** Replace `OUTCOMES_PROJECT`, `PROJECT`, `SECTION` with the user's actual project/section names discovered via `todoist projects` and `todoist sections`.
 
@@ -382,8 +393,8 @@ See [references/PATTERNS.md](references/PATTERNS.md#inbox-triage-workflow) for t
 
 **The CLI is plumbing. This skill is meaning.**
 
-- Outcomes are SECTIONS, not tasks
-- Discover structure dynamically — never assume project names
+- Discover structure dynamically — never assume project names, prefixes, or where outcomes live
+- Outcomes are usually sections, sometimes tasks — read the sections to tell which
 - "Project" means different things in different contexts
 - Challenge activity language -> frame as achievement
 - Surface patterns, not just data

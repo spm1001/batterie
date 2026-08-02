@@ -9,18 +9,18 @@ Disambiguate terms that have multiple meanings in the user's context.
 The Todoist concept of a project - a container for tasks and sections.
 
 **Examples:**
-- `Desired Outcomes Q4` (contains outcome sections)
-- `@Work` (contains Now/Later sections)
-- `HH:Lift` (kanban-style project)
+- An outcomes project (contains outcome sections)
+- A work context project (may contain Now/Later sections)
+- A kanban-style delivery project (To Do/Doing/Done sections)
 
-**MCP:** `find_projects()`, `projectId` parameter
+**CLI:** `todoist projects`, `--project` / `--project-id` flags
 
 ### 2. GTD Project (Tier 3 - Multi-Step Outcome)
 
 David Allen's definition: "Any desired result that requires more than one action step."
 
 **Examples:**
-- "Complete the Panel+ documentation"
+- "Complete the product documentation"
 - "Set up automated reporting"
 - "Hire data scientist"
 
@@ -33,9 +33,9 @@ David Allen's definition: "Any desired result that requires more than one action
 A business initiative or workstream, often involving multiple people.
 
 **Examples:**
-- "The clean rooms project"
-- "The LDC migration project"
-- "The BARB expansion project"
+- "The data platform project"
+- "The migration project"
+- "The market expansion project"
 
 **In Todoist:** Often represented as a project with kanban sections (To Do, Doing, Done).
 
@@ -51,7 +51,7 @@ A strategic achievement that contributes to Team Priorities AND provides growth 
 - Has success criteria
 - Finite (can be completed)
 
-**In Todoist:** A SECTION in `Desired Outcomes Q4` or `Desired Outcomes H1`.
+**In Todoist:** Usually a SECTION in the user's outcomes project — but discover their layout first (see SKILL.md "Where Outcomes Live").
 
 ### 2. Generic Result
 
@@ -70,7 +70,7 @@ Quarterly strategic focus for the team. Set by leadership.
 - "Build self-serve capabilities"
 - "Strengthen supplier relationships"
 
-**In Todoist:** Team account (not accessible via MCP). Referenced in personal account via outcome links.
+**In Todoist:** Often in a team workspace, or outside Todoist entirely. Referenced from personal outcomes via links or naming.
 
 ### 2. Task Priority (P1-P4)
 
@@ -85,12 +85,13 @@ Todoist's built-in priority levels.
 
 ## "Section" (Todoist-Specific)
 
-A subdivision within a Todoist project.
+A subdivision within a Todoist project. What a section *means* depends on the project:
 
-**In the user's structure:**
-- In `Desired Outcomes Q4`: Sections ARE outcomes
-- In `@Work`: Sections are Now/Later
-- In kanban projects: Sections are To Do/Doing/Done
+- In an outcomes project: sections ARE outcomes
+- In a context project: sections are often priority lanes (Now/Later)
+- In kanban projects: sections are workflow states (To Do/Doing/Done)
+
+Read the section names to tell which layout you're looking at.
 
 ## Areas of Focus (AoF)
 
@@ -101,9 +102,7 @@ GTD concept: Ongoing areas of responsibility with no completion date.
 - "Stakeholder Influencing"
 - "Team Development"
 
-**In Todoist:**
-- Sections within `Areas of Focus` project
-- Also used as prefixes for outcome folders in Google Drive
+**In Todoist:** Typically sections within an areas project.
 
 **Different from outcomes:** Areas are infinite, outcomes are finite.
 
@@ -111,9 +110,9 @@ GTD concept: Ongoing areas of responsibility with no completion date.
 
 | Tier | Name | Scope | Managed By | In Todoist |
 |------|------|-------|------------|------------|
-| 1 | Team Priorities | Team quarterly focus | Leadership | Team account |
-| 2 | Individual Outcomes | Personal achievements | the user | Sections in `Desired Outcomes` |
-| 3 | Projects & Actions | Execution | the user | Tasks under outcome sections |
+| 1 | Team Priorities | Team quarterly focus | Leadership | Team workspace, or outside Todoist |
+| 2 | Individual Outcomes | Personal achievements | the user | The user's outcomes project |
+| 3 | Projects & Actions | Execution | the user | Tasks under outcomes |
 
 ## Quick Disambiguation
 

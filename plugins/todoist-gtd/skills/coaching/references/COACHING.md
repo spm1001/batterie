@@ -16,14 +16,16 @@ When reviewing or crafting an outcome, check:
 
 ## Strong Outcome Examples
 
+(Illustrative — an imaginary TV-measurement team in the Australian market.)
+
 | Outcome | Why It Works |
 |---------|--------------|
-| "Secured exec commitment to the cross-team data sharing agreement" | Clear achievement, binary (secured or not) |
-| "Generated first automated monthly report using the new methodology" | Specific, measurable, "first" gives it edge |
-| "Delivered thought-provoking session at the industry conference" | Past tense, includes qualitative aspiration |
+| "Secured network commitment to progressive OzTAM data sharing" | Clear achievement, binary (secured or not) |
+| "Generated first cross-network lift report using a consistent control methodology" | Specific, measurable, "first" gives it edge |
+| "Delivered thought-provoking session at the Melbourne measurement summit" | Past tense, includes qualitative aspiration |
 | "Rehearsed and presented at least one client-facing debrief which gets good client feedback" | Built-in success criteria (good feedback) |
-| "Hired new data scientist for the team" | Unambiguous end state |
-| "Halved the time to set up and spin down the reporting pipeline" | Measurable improvement, clear target |
+| "Hired new data scientist for the measurement team" | Unambiguous end state |
+| "Halved the time to set up and spin down a geo-lift experiment" | Measurable improvement, clear target |
 
 ## Before → After Transformations
 
@@ -31,12 +33,12 @@ Common upgrades from activity language to outcome language:
 
 | ❌ Activity-Focused | ✓ Outcome-Focused | Why Better |
 |---------------------|-------------------|------------|
-| "Write trade press article" | "Trade press published our perspective, generating industry discussion" | Focus on impact, not deliverable |
-| "Complete the technical documentation" | "Documentation enables any team member to run the product without guidance" | States the PURPOSE |
-| "Complete documentation for all product repos" | "New team members can onboard to any product within a day using self-serve docs" | Success as capability enabled |
+| "Write Mediaweek article" | "Mediaweek published our take on outcome measurement, generating industry discussion" | Focus on impact, not deliverable |
+| "Complete SpotLift technical documentation" | "SpotLift documentation enables any analyst to run the product without guidance" | States the PURPOSE |
+| "Complete documentation for all product repos" | "New analysts can onboard to any product within a day using self-serve docs" | Success as capability enabled |
 | "Made sure all remaining scopes billed by year end" | "All Q4 revenue recognised on time with zero billing disputes" | Outcome not process |
-| "Attend industry conference" | "Established our voice in the industry's methodology discussions" | Result of attending, not attendance |
-| "Build the collection script" | "Completed the collection pilot at scale" | Achievement, not artifact |
+| "Attend the OzTAM methodology conference" | "Established our network's voice in OzTAM methodology discussions" | Result of attending, not attendance |
+| "Build the reach-curve collection script" | "Completed the reach-curve collection pilot at scale" | Achievement, not artifact |
 
 **The transformation pattern:** Shift from WHAT YOU'RE DOING to WHAT'S DIFFERENT WHEN IT'S DONE.
 
@@ -74,11 +76,11 @@ Common upgrades from activity language to outcome language:
 
 ### Pattern 5: Outcome Without Completion Criteria
 
-**User says:** "Improve the reporting product's performance"
+**User says:** "Improve SpotLift performance"
 
 **Challenge:** How will you know when it's improved enough? What's the success indicator?
 
-**Better:** "The reporting product delivers insights within 24 hours (down from 72)"
+**Better:** "SpotLift delivers insights within 24 hours of broadcast (down from 72)"
 
 ## Coaching Questions
 

@@ -40,6 +40,16 @@ grep -rl --include='*.sh'                   'rules/mise.md'          "$OUT" | xa
 # reference must follow or the flavour's skill can't call its own tools — its
 # allowed-tools glob would still point at the WORK server (mise-timepu). Only the
 # skill's SKILL.md carries it today; *.py included so a future reference is caught.
+#
+# TWO forms, because the harness prefixes by INSTALL METHOD, not by server alone
+# (measured across four plugin MCP servers, 2026-08-03, mise-soheka): a plugin
+# install yields `mcp__plugin_<plugin>_<serverkey>__<tool>` — hyphens preserved,
+# no sanitisation — while a bare MCP server yields `mcp__<serverkey>__<tool>`.
+# Both are legitimate, so both are rewritten. The two seds are order-independent:
+# neither output string contains the other's search pattern (`mcp__plugin_…` does
+# not contain `mcp__mise__`, and `mcp__plugin_mise-home_mise-home__` does not
+# either), so this cannot double-apply whichever way round they run.
+grep -rl --include='*.md' --include='*.py' 'mcp__plugin_mise_mise__' "$OUT" | xargs -r sed -i "s|mcp__plugin_mise_mise__|mcp__plugin_${NAME}_${NAME}__|g"
 grep -rl --include='*.md' --include='*.py' 'mcp__mise__'             "$OUT" | xargs -r sed -i "s|mcp__mise__|mcp__${NAME}__|g"
 
 # 3. plugin.json + mcp-local.json: structured edits (name + rekey mcpServers).
@@ -150,6 +160,13 @@ SKILL="$OUT/skills/mise/SKILL.md"
 if [ -f "$SKILL" ]; then
   if grep -q 'mcp__mise__' "$SKILL"; then
     echo "  ✗ skill still references mcp__mise__ (should be mcp__${NAME}__) — its tools won't be allowed"; FAIL=1
+  fi
+  # The plugin-install form needs its own check: `mcp__plugin_mise_mise__` does
+  # NOT contain the substring `mcp__mise__`, so the assert above cannot see a
+  # leftover here. This is the form a real plugin session actually exposes, so an
+  # un-rewritten one is the more costly of the two misses.
+  if grep -q 'mcp__plugin_mise_mise__' "$SKILL"; then
+    echo "  ✗ skill still references mcp__plugin_mise_mise__ (should be mcp__plugin_${NAME}_${NAME}__) — its tools won't be allowed"; FAIL=1
   fi
   _ident=$(python3 -c "import json; print(json.load(open('$OUT/.claude-plugin/plugin.json'))['identity'])")
   if ! grep -qF "$_ident" "$SKILL"; then

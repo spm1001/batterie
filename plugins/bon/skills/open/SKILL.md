@@ -143,6 +143,11 @@ Then **draw-down** before touching code.
 - One active tactical per session (CWD) — different worktrees can run in parallel
 - Two CWDs cannot claim the same action
 - Context-switch: `bon wait <id> "reason"` (clears tactical — re-plan on return)
+- Parking work that's waiting on a scheduled event, not on a blocker: `bon work --release`
+  keeps the steps and your position, hands the claim back so the session can draw down
+  something else, and stops the step being injected into every prompt. `bon work <id>`
+  resumes at the same step, no `--force`. Reach for this over `--clear` (discards) or
+  `bon wait` (silently discards) whenever the progress is worth keeping.
 
 ### UserPromptSubmit Hook
 
@@ -163,12 +168,41 @@ A hook injects the current tactical step into every prompt. When you see a `<use
 
 **The test:** Could a Claude with zero context execute this from the brief alone?
 
-### Use `bon new --json` by default
+### Use JSON stdin by default — for `bon new` **and** `bon edit`
 
 **When creating outcomes or actions with `--how`, or with more than 3 numbered steps
 in `--what`, use `bon new --json` — not flags.** Flags with backslash continuations
 look like they work but produce quoting errors on special characters (quotes, backticks,
 parentheses in technical content). JSON stdin eliminates this entire class of failure.
+
+**`bon edit` reads JSON the same way**, and it matters more there, because an edit
+rewrites content that already exists. Pipe an object with only the keys you want
+changed — everything else is left alone:
+
+```bash
+printf '%s' '{"how": "Redis locks. Do not touch auth middleware."}' | bon edit bon-zovili
+```
+
+Brief fields work nested under `"brief"` or flat at the top level; an unrecognised key
+is an error rather than a silent no-op. `"how": ""` clears the field. Appending to an
+existing field is a read-modify-write — and note the stdin collision the shell-escaping
+section below describes, so read the current value with `python3 -c`, never a heredoc:
+
+```bash
+bon show bon-zovili --json | python3 -c '
+import json, subprocess, sys
+how = json.load(sys.stdin)["brief"]["how"] + "\n\nUPDATE: ..."
+subprocess.run(["bon", "edit", "bon-zovili", "--how", how], check=True)'
+```
+
+That `subprocess.run` with an argument **list** is the belt-and-braces form for
+scripted edits: no shell is involved, so quotes and backticks cannot be reinterpreted
+by anything. Read the field back and assert it matches — intent to encode is not
+execution of encoding.
+
+**Repairing a closing note:** `bon done ID --note` refuses to overwrite a note that's
+already there, so a note mangled by shell quoting used to be permanent. `bon edit ID
+--note "..."` is the way back (done items only; `--note ""` clears).
 
 **The rule:** Pipe JSON to `bon new` for all real work. Flags are only for quick
 throwaway stubs: `bon new "Fix typo" --why w --what x --done d -q`
@@ -263,12 +297,15 @@ bon unwait ID                # Clear waiting
 bon work ID                  # Init tactical from --what
 bon work ID "step1" "step2"  # Init with explicit steps
 bon work --status            # Current tactical state
-bon work --clear             # Clear without completing
+bon work --release           # Hand back the claim, KEEP the progress (resume with `bon work ID`)
+bon work --clear             # Clear without completing (discards the progress)
 bon step                     # Advance to next step
 bon step --skip "reason"     # Skip current step
 bon step --no-complete       # Final step: don't auto-complete
-bon edit ID --title/--why/--how/--what/--done/--order  # Edit fields
+bon edit ID --title/--why/--how/--what/--done/--note/--order  # Edit fields
+printf '%s' '{"how":"..."}' | bon edit ID    # JSON stdin — only the keys present change
 bon edit ID --how ""         # Clear how field
+bon edit ID --note "..."     # Repair a closing note (done items only)
 bon edit ID --parent NEW     # Move action to another outcome ('none' = standalone)
 bon convert ID               # Action → outcome, or outcome → standalone action
 bon convert ID --outcome P   # Outcome → action under P (demote + re-home in one move)

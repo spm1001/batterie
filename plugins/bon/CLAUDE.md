@@ -4,7 +4,7 @@ Guidance for working on bon (the codebase, not with bon).
 
 ## What This Is
 
-Bon is a lightweight work tracker for Claude-human collaboration. JSONL default, optional Dolt backend, Git-tracked. 23 commands (incl. cross-repo `bon move`, Dolt `bon register`, and `someday`/`unsomeday` parking), ~3200 LOC core (+700 optional Dolt module), 602 tests (14 are opt-in Dolt integration via BON_DOLT_TEST=1).
+Bon is a lightweight work tracker for Claude-human collaboration. JSONL default, optional Dolt backend, Git-tracked. 23 commands (incl. cross-repo `bon move`, Dolt `bon register`, and `someday`/`unsomeday` parking), ~3200 LOC core (+700 optional Dolt module), 647 tests (14 are opt-in Dolt integration via BON_DOLT_TEST=1).
 
 ## Versioning & releasing (suite-managed)
 
@@ -184,6 +184,27 @@ EOF
 bon new "Quick fix" --why w --what x --done d -q   # Flags (stubs only)
 ```
 
+### `bon edit` Input Modes (bon-cefisu)
+
+Same auto-detection, same reason — flag quoting mangles briefs carrying quotes,
+backticks or `$`, and a mangled field looks exactly like an edited one.
+
+1. **JSON stdin (default for piped input)**: No edit flag + stdin piped → reads JSON.
+2. **Flags**: any of `--title/--outcome/--why/--how/--what/--done/--note/--order`.
+3. **Explicit `--json`**: forces the stdin path; an empty stdin errors here rather
+   than falling through.
+
+Only keys **present** in the JSON are applied. Brief subfields are accepted nested
+under `brief` *or* flat at the top level, because Claude's prior is the flat form and
+a silently-dropped key would print `Updated` having changed nothing. An unknown key is
+a hard error for the same reason. `edit_args_from_stdin()` overlays the parsed JSON
+onto `args`, so exactly one apply path runs whichever way the edit arrived — add new
+editable fields to `EDIT_TOP_KEYS`/`EDIT_BRIEF_KEYS` **and** `edit_flags_given()`.
+
+`--note` writes `done_note` and requires the item to be done. It exists because
+`cmd_done` refuses to overwrite an existing note (cli.py, the `Already done` branch),
+which made a shell-mangled closing note permanent.
+
 ## Gotchas
 
 | Gotcha | Fix |
@@ -197,6 +218,8 @@ bon new "Quick fix" --why w --what x --done d -q   # Flags (stubs only)
 | Interactive mode untested | Test with `input=` parameter |
 | Mixed-case IDs (bon-huHida) | Pre-lowercase legacy. IDs are immutable — don't try to rename |
 | Changing schema fields | bon-read.sh reads items.jsonl directly with jq |
+| Releasing a tactical claim | `bon work --release` keeps steps+current and sets `tactical.released`; `--clear` discards. `_tactical_is_active()` in storage.py is the single gate — released is not active, so it can't block, inject, or read as orphaned. The two raw-JSONL readers (`scripts/bon-read.sh`, `hooks/bon-tactical.sh`) each need the check independently; they bypass storage.py |
+| Adding a nested tactical key | Put it INSIDE the tactical object, not beside it as an item column. `tactical` round-trips as one opaque JSON value, so a nested key survives a write by an older client — where a new top-level column is stripped by the fixed `_ITEM_COLUMNS` list (the someday-decay lesson, one level deeper) |
 | Tactical lookup ignoring session | Always pass `session=os.getcwd()` to `find_active_tactical()`. Omitting it returns only unscoped (legacy) tacticals. |
 | Stale global install after code changes | `uv tool install` reuses a cached *build* of the local source, and `uv cache clean bon` does **not** clear it. Since bon's version is dynamic from `plugin.json` (hatchling regex-read), a bump touching only `plugin.json`/CLAUDE.md leaves `src/` byte-identical, so the old wheel is reused and the version never moves (verified 2026-06-17). Force a real rebuild with `--no-cache`: `uv tool install ~/repos/spm1001/bon --force --reinstall --no-cache --with pymysql` |
 | Calling `items_path()` in Dolt mode | Raises `BonError`. Check `_get_backend()` first, or use `load_items()`/`save_items()` which dispatch automatically. |

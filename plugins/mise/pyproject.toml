@@ -14,14 +14,14 @@ dependencies = [
     # Form spec parsing
     "pyyaml>=6.0",
     "regex>=2026.7.19",
-    "websockets>=16.1.1",
+    "websockets>=17.0.1",
     # Image extraction (resize/validate, SVG→PNG). Core because it's cheap (~14M)
     # and image fetch should work in every flavour, including the embedded build.
     "pillow>=12.3.0",
     # Markdown→HTML for email draft bodies (GFM tables + bold). Core because
     # draft/reply_draft are remote-safe ops and must render in the slim build —
     # pure-Python, tiny (~250K), no compiled deps. See html_convert.markdown_to_html.
-    "markdown>=3.5",
+    "markdown>=3.10.3",
 ]
 
 [project.scripts]
@@ -36,7 +36,7 @@ mise = "cli:main"
 # The plugin spawns with `uv run --extra extraction`, so plugin/Cowork stay full;
 # Cornichon's vendor.sh installs plain core and gets the slim runtime.
 extraction = [
-    "markitdown[pdf]>=0.1.6",
+    "markitdown[pdf]>=0.1.7",
     "pdf2image>=1.17.0",
 ]
 macos = [
@@ -45,7 +45,7 @@ macos = [
 dev = [
     "pytest>=9.1.1",
     "pytest-asyncio>=1.4.0",
-    "ruff>=0.16.0",
+    "ruff>=0.16.1",
     "mypy>=2.3.0",
     # Stubs for the core `markdown` dep so html_convert.markdown_to_html types
     # cleanly (markdown ships no py.typed).

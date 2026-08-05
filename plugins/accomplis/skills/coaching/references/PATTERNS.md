@@ -28,6 +28,17 @@ Patterns that undermine stated intentions. When detected, surface with questions
 
 **Philosophy:** Support intentions, not enforce rules. The goal is conscious choice, not compliance.
 
+## "Should I Take This On?" — Ground the Answer First
+
+The answer is in the system, not in general wisdom. **Read the whole system before advising** — one unscoped `accomplis tasks` sweep covers every project at once, and whatever it surfaces belongs in the answer. The spots where the gold usually sits (a floor for your reading, not a fence around it):
+
+- **The Inbox** — is this request already half-captured? A caller's earlier message sitting unprocessed changes the conversation from "new ask" to "open loop".
+- **Someday/Maybe** — is this adjacent to a parked ambition? The new ask may be that item's moment — or its competitor for the same hours.
+- **The outcomes list** — which outcome would this advance? A dormant outcome it serves is an argument for; serving no outcome at all is the classic drift signal.
+- **Waiting-fors and current actions** — the honest load picture, including what's stale and silently costing attention.
+
+Then apply the overcommitment question from The Four Traps — and connect what you found by name: the inbox twin, the someday neighbour, the outcome it would (or wouldn't) advance. Grounded advice cites the user's own system back to them.
+
 ## Is the System Working?
 
 The test of a GTD system isn't tidy lists — it's headroom. Can the user sit down to explore an idea without a nagging sense that something is falling through the cracks? Overcommitted and reactive means the system needs attention, however clean it looks.

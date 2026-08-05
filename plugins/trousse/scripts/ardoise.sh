@@ -21,6 +21,13 @@
 #              Seeded once; reused as-is thereafter (accumulated state survives).
 # --keep     : temp HOME as usual, but skip the cleanup trap and print its path.
 #
+# Punching named holes in the isolation wall (the Vertex passthrough pattern,
+# generalised — for eval harnesses that must hand the inner Claude a fixture):
+# --env KEY=VAL      : pass one env var through env -i (repeatable).
+# --path-prepend DIR : prepend DIR to the inner PATH (repeatable) — e.g. a
+#                      directory holding a fixture shim binary. The inner PATH
+#                      is otherwise rebuilt minimal; caller's PATH never leaks.
+#
 # Vertex: if CLAUDE_CODE_USE_VERTEX=1 in the caller's env, the Vertex config
 # (project, region, model ids) and gcloud ADC are passed through the isolation
 # wall, so ardoise works on (and bills to) a Vertex setup instead of silently
@@ -39,6 +46,8 @@ USE_STDIN=false
 START_DIR=""
 SANDBOX_HOME_ARG=""
 KEEP=false
+EXTRA_ENV=()
+PATH_PREPENDS=()
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -58,6 +67,26 @@ while [[ $# -gt 0 ]]; do
             KEEP=true
             shift
             ;;
+        --env)
+            if [[ $# -lt 2 || "$2" != *=* ]]; then
+                echo "Error: --env requires KEY=VAL" >&2
+                exit 1
+            fi
+            EXTRA_ENV+=("$2")
+            shift 2
+            ;;
+        --path-prepend)
+            if [[ $# -lt 2 ]]; then
+                echo "Error: --path-prepend requires a directory path" >&2
+                exit 1
+            fi
+            if [[ ! -d "$2" ]]; then
+                echo "Error: --path-prepend directory does not exist: $2" >&2
+                exit 1
+            fi
+            PATH_PREPENDS+=("$(cd "$2" && pwd)")
+            shift 2
+            ;;
         --)
             shift
             PROMPT="${1:-}"
@@ -68,7 +97,7 @@ while [[ $# -gt 0 ]]; do
             USE_STDIN=true
             shift
             ;;
-        --max-turns|--output-format|--system-prompt|--tools|--model)
+        --max-turns|--output-format|--system-prompt|--tools|--model|--allowed-tools|--allowedTools|--append-system-prompt|--permission-mode)
             if [[ $# -lt 2 ]]; then
                 echo "Error: $1 requires a value" >&2
                 exit 1
@@ -222,6 +251,14 @@ if [[ "$SYMLINK_DIR" != "$CLAUDE_DIR" ]]; then
     CLEAN_PATH="${SYMLINK_DIR}:${CLEAN_PATH}"
 fi
 
+# Caller-requested prepends go first, in the order given (last flag wins the
+# front slot by iterating in reverse).
+if [[ ${#PATH_PREPENDS[@]} -gt 0 ]]; then
+    for ((i=${#PATH_PREPENDS[@]}-1; i>=0; i--)); do
+        CLEAN_PATH="${PATH_PREPENDS[$i]}:${CLEAN_PATH}"
+    done
+fi
+
 # ── Env vars ──────────────────────────────────────────────────────────
 
 ENV_VARS=(
@@ -234,6 +271,8 @@ ENV_VARS=(
 )
 # Pass Vertex config + ADC through the isolation wall (auth only, like the creds copy).
 [[ ${#VERTEX_VARS[@]} -gt 0 ]] && ENV_VARS+=("${VERTEX_VARS[@]}")
+# Caller-requested --env passthroughs (explicit, named holes only).
+[[ ${#EXTRA_ENV[@]} -gt 0 ]] && ENV_VARS+=("${EXTRA_ENV[@]}")
 
 # ── Run ───────────────────────────────────────────────────────────────
 
@@ -248,8 +287,10 @@ if [[ "$PRINT_MODE" == true ]]; then
         env -i "${ENV_VARS[@]}" TERM="${TERM:-dumb}" \
             bash -c 'cd /tmp && exec "$@"' _ "${CMD_PARTS[@]}"
     else
+        # "--" ends claude's option parsing: variadic flags (--allowed-tools,
+        # --tools) would otherwise swallow the positional prompt.
         env -i "${ENV_VARS[@]}" TERM="${TERM:-dumb}" \
-            bash -c 'cd /tmp && exec "$@"' _ "${CMD_PARTS[@]}" "$PROMPT"
+            bash -c 'cd /tmp && exec "$@"' _ "${CMD_PARTS[@]}" -- "$PROMPT"
     fi
 else
     # Interactive mode: claude TUI, real TERM, chosen CWD

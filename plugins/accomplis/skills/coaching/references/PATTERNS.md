@@ -2,6 +2,19 @@
 
 Behavioral patterns to detect and strategic reflection for weekly review.
 
+## Structural Detectors (Run Before Coaching Language)
+
+Structure comes first in the review order (see SKILL.md) because coaching words on a structurally broken board wastes the polish. Detectors proven in live reviews:
+
+| Detector | What to do |
+|---|---|
+| **Sync automations and mirrors** | Before diagnosing duplication as mess, check for systemd timers, launchd agents, and cron jobs that deliberately twin tasks between boards. Edits go to the canonical side — the automation's own description usually names it. |
+| **Staleness hides in titles** | Dates written into card titles rot silently ("by June 4th" in bold, two months gone). Sweep titles for date strings against today, not just `--older-than` on creation dates. |
+| **Cross-board delegation audit** | Every delegation on a lead's board needs a counterpart on the delegate's board. Complementary slices are fine; absent counterparts are the finding. |
+| **Team read-across test** | A cold reader attempts to reconstruct team strategy from the boards alone, then reports what was legible and what wasn't. Live finds: an empty Vision project, no tier marks anywhere, and a strategic theme that existed in card mass but no section named. |
+| **Emergent conventions reveal appetite** | Two people independently bolding their biggies means the team wants a highlight tier — codify it (p1) rather than letting folk conventions drift. |
+| **Same diseases, every layer** | Altitude-mixing recurs at team scale (a 57-card Goals board hiding a literal next action). The per-board patterns apply at any horizon — run them on Goals and Vision boards too. |
+
 ## The Four Traps
 
 Patterns that undermine stated intentions. When detected, surface with questions — not judgment.
@@ -34,10 +47,11 @@ Process and file from cleanup zones (downloads, desktop, drive inboxes — check
 
 ### Phase 2: Outcomes Review
 This skill (accomplis):
+- Run the review order: structure → altitude → language → arc → tier (see SKILL.md)
 - Check outcome health (stale, orphaned, activity-language)
 - Review against Team Priorities
-- Target: 3-5 active Tier 2 outcomes
-- Surface: "You have N outcomes. The target is 3-5. Which ones are actually Tier 3 projects?"
+- Target: 3-5 outcomes in the highlighted review tier (the full inventory can healthily hold 20-30)
+- Surface: "Which of these are real multi-step commitments, and which 3-5 form your review tier?"
 
 ### Phase 3: Pattern Reflection
 Still this skill, using patterns above:
@@ -198,7 +212,7 @@ Pattern detection is more powerful when combined with data:
 
 | Pattern | Todoist Signal |
 |---------|---------------|
-| Overcommitment | 5+ active outcomes, all P1 |
+| Overcommitment | 6+ cards marked p1 — the review tier has lost its selectivity |
 | Scope Creep | Outcome task count growing significantly |
 | Execution Without Reflection | Tasks completed but outcomes unchanged |
 | Hero Mode | Many tasks assigned to user that could be delegated |

@@ -310,11 +310,13 @@ When delegating an outcome:
 
 ### Completing vs Deleting Tasks
 
-**ALWAYS complete, NEVER delete** (unless truly erroneous).
+**Always complete, never delete** (unless truly erroneous).
 
 - Completed tasks preserve history for future planning
 - Duplicates should be completed with a note
 - Obsolete items should be completed (still counts as "resolved")
+
+**This governs your recommendations, not just your tool calls.** In review prose, the phrase to reach for is "complete it with a note" — for duplicates, dead items and drifted somedays alike. A user who hears "kill it" or "write it off" deletes history the system was preserving; completion resolves the item and keeps the record.
 
 ### Anti-Patterns
 
@@ -359,6 +361,9 @@ Surface these concerns when analysing data:
 **Strategic gaps:**
 - Outcome has no tasks -> "Stuck, deprioritized, or needs rescoping?"
 - No outcomes in an area of focus -> "Dormant area — intentional?"
+
+**"Should I take this on?":**
+- Ground the answer in the whole system before advising — one unscoped `accomplis tasks` sweep covers every project, and whatever it surfaces belongs in the answer. Connect what you find by name: the **Inbox** twin (is this ask already half-captured?), the **Someday** neighbour (adjacent parked ambition — its moment, or its competitor), the **outcome** it would or wouldn't advance, and the honest load picture in waiting-fors and actions. Full method: [references/PATTERNS.md](references/PATTERNS.md).
 
 **Staleness:**
 - Outcome unchanged 4+ weeks -> "Stuck, deprioritized, or needs rescoping?"

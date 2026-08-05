@@ -11,6 +11,25 @@ PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-}"
 FIXED=""
 ISSUES=""
 
+# --- Install the rules shard (the coaching-skill routing gate) ---------------
+# THE SHARD IS REWRITTEN FROM HERE EVERY SESSION START (temp+mv, mise pattern).
+# Editing ~/.claude/rules/accomplis.md by hand is a no-op that survives only
+# until the next session start — fix instructions.md in the source repo.
+# Copy, NOT symlink: the plugin root can be an ephemeral temp dir (Desktop
+# stages under /var/folders, which macOS purges) — a symlink there dangles.
+HOOK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+_SHARD_SRC="$(dirname "$HOOK_DIR")/instructions.md"
+if [ -f "$_SHARD_SRC" ]; then
+    mkdir -p "$HOME/.claude/rules"
+    RULES_DEST="$HOME/.claude/rules/accomplis.md"
+    # temp+mv: a stale entry may be a symlink from an older install, and cp-ing
+    # source over a symlink-to-source errors ("same file"). mv -f replaces the
+    # entry atomically whatever it was, never following it.
+    _tmp="$(mktemp "${RULES_DEST}.XXXXXX")" \
+        && cat "$_SHARD_SRC" > "$_tmp" \
+        && mv -f "$_tmp" "$RULES_DEST"
+fi
+
 # Capture auto-update output so failures are diagnosable, not silent (bon-babuse / bon-mavemi).
 UPDATE_LOG="$HOME/.cache/accomplis/auto-update.log"
 mkdir -p "$(dirname "$UPDATE_LOG")" 2>/dev/null

@@ -20,7 +20,7 @@ accomplis auth --status     # Check authentication status
 
 **Setup:** Run `accomplis auth` for instructions — it prints the URL to get your API token from Todoist's developer settings. Then run `accomplis auth --token YOUR_TOKEN` to store it.
 
-Token is stored in macOS Keychain (if available) or in `~/.claude/plugins/data/todoist-gtd-batterie/token` on Linux (older installs' locations are migrated there on first read).
+Token is stored in macOS Keychain (if available) or in `~/.claude/plugins/data/accomplis-batterie/token` on Linux (older installs' locations are migrated there on first read).
 
 If auth fails, prompt user to run `accomplis auth` or re-run `accomplis auth --token` with a fresh token.
 
@@ -39,6 +39,9 @@ When CLI commands fail, use these patterns:
 | `Rate limited` | Too many requests | Wait 30s and retry |
 | `Task not found` | Bad task ID | Verify ID with user |
 | `Cannot move between workspaces` | API limitation | Suggest complete + recreate |
+| 502/503 (server wobble) | Todoist transient | Retry after ~15s — then read back (below) |
+
+**5xx wobbles mid-sweep need read-back verification.** Todoist 502/503s happen under load, and parallel writes fail unevenly — three of four writes once failed silently while the fourth succeeded. After any failed or partially-failed sweep: retry after ~15s, then **read back everything the sweep touched** before reporting done. A write you didn't verify is a write you can't claim.
 
 **When to escalate to user:**
 - Auth errors (they need to act)
@@ -56,7 +59,9 @@ When CLI commands fail, use these patterns:
 
 ## Query Patterns
 
-**All commands return JSON.** Parse with jq or read directly.
+**All commands return JSON on stdout.** Parse with jq or read directly.
+
+**Info lines go to stderr.** Lines like "Showing 23 of 68 tasks…" are stderr, not stdout — so `accomplis tasks … 2>&1 | jq` breaks on the mixed stream. Pipe stdout only; read stderr separately when you want the counts.
 
 ### Get Account Overview
 ```bash
@@ -115,7 +120,8 @@ accomplis tasks --label "areas-of-focus"
 # Filter by project name (not just ID)
 accomplis tasks --project "@Wait"
 
-# Filter by assignee name (requires --project)
+# Filter by assignee (requires --project; accepts name, email, or the
+# numeric id that `accomplis collaborators` emits)
 accomplis tasks --project "Areas of Focus" --section-id "<id>" --assignee "Alex"
 
 # Filter by creation date (for staleness checks)
@@ -151,6 +157,15 @@ accomplis reorder <id1> <id2> <id3>
 1. **Moving a task resets its order to 1.** If you move and want a specific position, move first, then set `--order` (a single `update` call with both does this in the right sequence for you — but a `reorder` of the whole queue after the moves is the most reliable arrangement).
 2. **`reorder` only touches the tasks you list.** Unlisted siblings keep their old order values and may interleave. For a full arrangement (e.g. a dispatch queue), list every task in the container.
 3. **There is no "remove from section" field in the API.** `--no-section` works by moving the task to its own project's root — that is the supported mechanism, not a workaround.
+
+## Completing with a Closing Note
+
+```bash
+# Record why/how it closed, then complete — one call
+accomplis done <task-id> --note "Resolved by vendor patch; monitoring dashboard confirms"
+```
+
+`--note` **appends** to the task's description (existing description is preserved) before completing, so the reasoning survives into the completed-task history. On older CLI versions without the flag, the equivalent pattern is `accomplis update <id> --description "…" && accomplis done <id>` — but note that form **overwrites** the description rather than appending.
 
 ## Data Model
 

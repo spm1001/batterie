@@ -211,6 +211,25 @@ When creating or coaching on outcomes, use this framework:
 | Attend conference | Established voice in industry discussions |
 | Complete audit | Audit trail catches anomalies before users notice |
 
+### Canon vs House: Which Rule Are You Applying?
+
+Two layers, and coaching goes wrong when they're conflated — say which one you're invoking:
+
+- **Allen (canon):** a Project is ANY desired result requiring more than one action step. The list is a complete inventory — 20-30 in flight is normal, and dull projects are still projects. Never "demote" a dull-but-real multi-step commitment off the list. Desirable FRAMING applies to everything; that's writing discipline, not tier privilege.
+- **House (the two-tier design):** within the full visible inventory, a highlighted 3-5 are the *delegated outcomes* — the review tier, typically marked **p1** in Todoist (or whatever marking the user's team has adopted — discover it). THOSE, read side by side across a team, should add up to team strategy.
+
+**The "3-5 outcomes" target applies to the highlighted tier ONLY.** Applying it to the whole inventory is a category error — it pressures people to delete real commitments instead of marking priorities.
+
+### Review Order: Structure → Altitude → Language → Arc → Tier
+
+Coaching words before fixing structure wastes the polish. Run a board review in this order:
+
+1. **Structure** — Check for sync automations and mirrors BEFORE diagnosing duplication as mess (`systemctl --user list-units | grep -iE 'todoist|sync'`, launchd agents, cron — one user had a systemd timer deliberately twinning team-assigned tasks into a personal project; edits go to the canonical side, which the automation's own description usually names). Then twin boards, duplication across horizon layers, orphaned/unassigned cards.
+2. **Altitude** — Census every card: outcome / project / next action / raw capture / already-done. Complete the done, demote the actions, fold the captures (a calendar invite is a date, not a commitment).
+3. **Language** — Two-axis coaching per card (see [references/COACHING.md](references/COACHING.md)).
+4. **Arc** — Read the whole board back as a personal narrative; name the card that doesn't fit.
+5. **Tier** — Mark the highlighted handful (p1).
+
 **For the full GTD methodology** (5 stages, clarify decision tree, setup guidance, review cadences): See [references/GTD_METHODOLOGY.md](references/GTD_METHODOLOGY.md)
 
 **For detailed coaching patterns and examples:** See [references/COACHING.md](references/COACHING.md)
@@ -334,8 +353,8 @@ Three phases: **Get Clear, Get Current, Get Creative** (Allen's canonical labels
 Surface these concerns when analysing data:
 
 **Overcommitment:**
-- 5+ active outcomes -> "Can you really advance all of these?"
-- All outcomes high priority -> "If everything is critical, nothing is focused"
+- 5+ outcomes in the highlighted review tier -> "Can you really advance all of these?" (the full inventory can hold 20-30 — see Canon vs House above)
+- All outcomes high priority -> "If everything is critical, nothing is focused — which 3-5 are the review tier?"
 
 **Strategic gaps:**
 - Outcome has no tasks -> "Stuck, deprioritized, or needs rescoping?"

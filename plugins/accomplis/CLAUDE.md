@@ -19,6 +19,10 @@ accomplis ships as part of the **Batterie de Savoir** suite, which carries **one
 
 Full picture: `spm1001/batterie-de-savoir` → `CLAUDE.md` "Versioning convention" + `.bon/understanding.md`.
 
+## Evals
+
+`evals/coaching/` measures the coaching skill against blank-slate Claudes — smevals harness, fixture-shim Todoist, bare-vs-skill configs across models; its README carries design, first-campaign results and caveats. Like `docs/`, `evals/` is **not vendored**: edits ship without a suite bump. Run artefacts (`runs*/`) are gitignored and machine-local.
+
 ## Quick Commands
 
 ```bash

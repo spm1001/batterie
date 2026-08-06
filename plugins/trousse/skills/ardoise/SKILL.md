@@ -93,6 +93,17 @@ Default runs use a fresh temp HOME, deleted on exit. For a sequence that must sh
 
 `--home DIR` creates the dir if missing, seeds it once (auth + stripped config), and **never auto-deletes** it — so plugins/marketplaces added in one invocation survive to the next. `--keep` is the throwaway-but-inspect variant: a temp HOME that skips the cleanup trap and prints its path to stderr.
 
+### Named holes in the wall (eval harnesses)
+
+`env -i` rebuilds the inner environment from scratch, so a fixture shim and its env contract need explicit pass-through — the Vertex passthrough pattern, generalised:
+
+```bash
+"$SCRIPT" -p --env "MY_FIXTURE=/path/world.json" --env "MY_LOG=$RUN_DIR/calls.log" \
+    --path-prepend /path/to/shim-bin -- "prompt"
+```
+
+`--env KEY=VAL` (repeatable) passes one variable through the wall. `--path-prepend DIR` (repeatable) puts a directory first on the inner PATH, so a shim binary shadows nothing the caller leaks — the inner PATH stays minimal otherwise. Print mode terminates claude's option parsing with `--` before the prompt, so variadic flags (`--allowed-tools`, `--tools`) cannot swallow it. The boundary holds as ever: these punch *context* holes; the wall is not a security boundary, and an inner model can still read the host filesystem — one eval run demonstrably did (2026-08-05).
+
 ### Vertex setups
 
 If the caller's environment has `CLAUDE_CODE_USE_VERTEX=1`, ardoise auto-detects it and passes the Vertex config (project, region, model ids) and gcloud ADC through the isolation wall — so it works on, and bills to, a Vertex setup. Without this the `env -i` scrub strips the Vertex config and either hard-fails (Vertex-only boxes have no `.credentials.json`) or silently falls back to Anthropic-API billing (dual-cred boxes). No flag needed.

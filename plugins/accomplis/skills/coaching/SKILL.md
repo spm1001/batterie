@@ -216,7 +216,7 @@ When creating or coaching on outcomes, use this framework:
 Two layers, and coaching goes wrong when they're conflated — say which one you're invoking:
 
 - **Allen (canon):** a Project is ANY desired result requiring more than one action step. The list is a complete inventory — 20-30 in flight is normal, and dull projects are still projects. Never "demote" a dull-but-real multi-step commitment off the list. Desirable FRAMING applies to everything; that's writing discipline, not tier privilege.
-- **House (the two-tier design):** within the full visible inventory, a highlighted 3-5 are the *delegated outcomes* — the review tier, typically marked **p1** in Todoist (or whatever marking the user's team has adopted — discover it). THOSE, read side by side across a team, should add up to team strategy.
+- **House (the two-tier design):** within the full visible inventory, a highlighted 3-5 are the *delegated outcomes* — the review tier, typically marked **p1** in Todoist (or whatever marking the user's team has adopted — discover it). THOSE, read side by side across a team, should add up to team strategy. NB the API and CLI invert the app's scale: the UI's P1 is `--priority 4`, and unmarked is `1`.
 
 **The "3-5 outcomes" target applies to the highlighted tier ONLY.** Applying it to the whole inventory is a category error — it pressures people to delete real commitments instead of marking priorities.
 

@@ -74,14 +74,14 @@ Quarterly strategic focus for the team. Set by leadership.
 
 ### 2. Task Priority (P1-P4)
 
-Todoist's built-in priority levels.
+Todoist's built-in priority levels. **The API and CLI invert the app's scale** — the UI's P1 is `--priority 4`; an unmarked task is API `1`.
 
-| Level | Meaning |
-|-------|---------|
-| P1 | Highest - critical quarterly focus |
-| P2 | High - active work |
-| P3 | Medium - important but not urgent |
-| P4 | Lowest - someday/maybe |
+| UI Level | API / CLI value | Meaning |
+|----------|-----------------|---------|
+| P1 | 4 | Highest - critical quarterly focus |
+| P2 | 3 | High - active work |
+| P3 | 2 | Medium - important but not urgent |
+| P4 | 1 | Default / unmarked |
 
 ## "Section" (Todoist-Specific)
 

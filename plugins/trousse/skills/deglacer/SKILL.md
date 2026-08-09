@@ -84,14 +84,22 @@ It ships separately from deglacer — check before reaching for it:
 
 ```bash
 command -v deja || echo "not installed"   # single binary; releases at the repo above
-deja your search terms here                # that's the whole interface
+deja distinctive terms                     # 2-3 rare terms, not the whole question
 ```
+
+**Measured routing** (13-task bench, banc/session-search, 2026-08-09 — private estate eval):
+
+- **Default: deja with 2–3 distinctive terms** — ranked, ~12 results, ~2s warm; 85% recall on the bench. Whole-question queries dropped that to 64% (AND-matching cliff).
+- **Backstop when deja returns nothing or absence must be proven:** `rg -li -F 'fragment' ~/.claude/projects -g '*.jsonl'` — 100% recall on the bench (it sees raw bytes deja's tokeniser can miss, e.g. dotted versions like `25.12.5`), but ~120 unranked files per query.
+- **`deglacer --find fragment`** — only worth it inside its window (the 200 most-recently-modified sessions); short substrings only.
+- **hit@1 was 8–15% for every tool** — treat any result list as a candidate set to skim, never as an oracle.
 
 ### Quirks that matter
 
-- **Bare queries only — every argument is a search term.** `deja --help` searches for the literal string `--help`. No flags, no subcommands.
+- **Query with a few distinctive terms, not the whole question.** Multi-word queries are AND-matched (filler words dropped; double-quoted phrases mean contiguous text), so a six-content-word question routinely matches zero sessions — the tool itself says "try fewer words". Two or three rare terms is the sweet spot; `--re PATTERN` for regex.
+- **`deja --help` is not help — it searches for the literal string `--help`.** Real flags and subcommands do exist: `--since 30d`, `--project`, `--limit N`, `--json`, and `version`, `show <id>`, `blame <path>`, `resume <id>`, `stats`, `doctor` among others. The repo README is the full surface.
 - **It auto-indexes on every run.** Warm runs answer in ~2 seconds; the first run after weeks of inactivity re-indexes the backlog and can take minutes. Don't pipe it through `head` (SIGPIPE kills it mid-index) — redirect to a file and read that.
-- **Results are top-ranked sessions, NOT an exhaustive list** — roughly 15 sessions, recency-weighted. A session containing your term can be absent when the term is common across your history (measured: a 3-week-old session with 3 matches lost every slot to fresher, denser hits). Absence from results is not absence from history: re-probe with a rarer, more distinctive term before concluding something was never discussed.
+- **Results are capped (default ~15 sessions) and recency-weighted, NOT exhaustive.** A session containing your term can be absent when the term is common across your history (measured: a 3-week-old session with 3 matches lost every slot to fresher, denser hits). Absence from results is not absence from history: re-probe with a rarer term or raise `--limit` before concluding something was never discussed.
 - **Echo hits.** It indexes tool results as well as prose, so a session that *quotes* old content (reading a handoff, grepping a transcript) matches alongside the original. Use the date column to tell originals from echoes.
 
 ### From deja result to deglacer
@@ -100,7 +108,7 @@ deja your search terms here                # that's the whole interface
 [claude] owner/repo · Jul 19 · 511191c5-458 — 12 matches
 ```
 
-The third field is a session-id prefix. Resolve it to a file and hand it to deglacer:
+The third field is a session-id prefix. `deja show <id>` prints the conversation directly; for schema-aware extraction (tool calls, thinking, token usage, timelines), resolve to the file and hand it to deglacer:
 
 ```bash
 deglacer --summary ~/.claude/projects/*/511191c5-458*.jsonl

@@ -4,9 +4,10 @@ description: >
   MANDATORY gate BEFORE running jq on any .jsonl under ~/.claude/ or reading past CC sessions.
   Invoke FIRST when introspecting conversations, searching session history, parsing transcripts,
   or building tools that read ~/.claude/projects/ data. Provides the CC JSONL schema reference
-  and `deglacer` CLI tool — prevents the 54-attempt fumble pattern where Claudes guess
+  and `deglacer` CLI tool, plus routing to `deja` ranked content search — prevents the
+  54-attempt fumble pattern where Claudes guess
   at field names. Triggers on 'what happened last session', 'find when we discussed',
-  'parse session', 'read conversation', 'session history', 'token usage', 'deglacer'.
+  'parse session', 'read conversation', 'session history', 'token usage', 'deglacer', 'deja'.
   Do NOT use for git history (use git log) or your own current-session context. (user)
 allowed-tools: [Bash, Read, Grep, Glob]
 ---
@@ -71,6 +72,38 @@ deglacer --since 2026-03-25             # sessions since a date
 deglacer --with-tools --last 10 SESSION.jsonl    # recent turns with tools
 deglacer --with-tools --with-thinking --json ...  # everything, structured
 deglacer --summary --last 5 SESSION.jsonl         # quick recap of recent turns
+```
+
+---
+
+## deja — Ranked Content Search (optional companion)
+
+[deja](https://github.com/vshulcz/deja-vu) is a third-party single-binary search engine (MIT, Go — no LLM, no embeddings) that maintains a local BM25 index over **all** CC sessions. It is the right tool for "find when we discussed X" across months of history: `deglacer --find` substring-scans recent sessions only; deja ranks the whole estate.
+
+It ships separately from deglacer — check before reaching for it:
+
+```bash
+command -v deja || echo "not installed"   # single binary; releases at the repo above
+deja your search terms here                # that's the whole interface
+```
+
+### Quirks that matter
+
+- **Bare queries only — every argument is a search term.** `deja --help` searches for the literal string `--help`. No flags, no subcommands.
+- **It auto-indexes on every run.** Warm runs answer in ~2 seconds; the first run after weeks of inactivity re-indexes the backlog and can take minutes. Don't pipe it through `head` (SIGPIPE kills it mid-index) — redirect to a file and read that.
+- **Results are top-ranked sessions, NOT an exhaustive list** — roughly 15 sessions, recency-weighted. A session containing your term can be absent when the term is common across your history (measured: a 3-week-old session with 3 matches lost every slot to fresher, denser hits). Absence from results is not absence from history: re-probe with a rarer, more distinctive term before concluding something was never discussed.
+- **Echo hits.** It indexes tool results as well as prose, so a session that *quotes* old content (reading a handoff, grepping a transcript) matches alongside the original. Use the date column to tell originals from echoes.
+
+### From deja result to deglacer
+
+```
+[claude] owner/repo · Jul 19 · 511191c5-458 — 12 matches
+```
+
+The third field is a session-id prefix. Resolve it to a file and hand it to deglacer:
+
+```bash
+deglacer --summary ~/.claude/projects/*/511191c5-458*.jsonl
 ```
 
 ---
@@ -281,7 +314,8 @@ jq -c 'select(.type == "assistant") | .message.usage
 
 **Find sessions mentioning a term:**
 ```bash
-# Prefer: deglacer --find "term"
+# Prefer: deja term (ranked, all history — see the deja section) when installed
+# Else:   deglacer --find "term" (substring, recent sessions)
 # Raw jq fallback:
 for f in ~/.claude/projects/*/*.jsonl; do
   if jq -e 'select(.type == "user" and (.message.content | type) == "string"
@@ -306,3 +340,4 @@ done
 | Assume content is string | Assistant content is always array; user content varies | Check type before accessing |
 | `2>/dev/null` on everything | Hides real errors | Understand the schema, don't hedge |
 | Guess at field names | 39% of jq-on-.claude commands are schema discovery | Read this reference |
+| Treat deja's list as exhaustive | Top-K, recency-weighted — common terms rank-cut older sessions | Re-probe with a rarer term before claiming absence |

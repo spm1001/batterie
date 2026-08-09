@@ -230,6 +230,76 @@ def find_run_id(baseline: set[str], *, attempts: int = 15, delay: float = 2.0,
     return None
 
 
+def commit_and_push_suite(*, suite_repo: Path, commit_repo: Path, is_suite: bool,
+                          add_flag: str, level: str, name: str,
+                          user_message: str | None, changelog_msg: str,
+                          dry: bool, attempts: int = 3) -> str:
+    """Write the suite bump + changelog entry, commit, push — and when a twin
+    publish wins the push race, recompute on the twin's base and go again
+    (bds-zofino). Returns the version that actually shipped.
+
+    Two publishes racing used to mint the SAME next-version: the loser's
+    ad-hoc rebase then resolved the changelog ours-wins and the winner's
+    entry vanished (2026-07-26, both lanes computed 1.22.6). Recompute-on-
+    reject makes the collision structurally impossible rather than mergeable
+    — two publishes become two sequential versions with two stacked entries,
+    and prepend_changelog's duplicate guard backstops. Recovery is
+    reset --soft to the fetched upstream plus restoring ONLY the two suite
+    files from the twin's HEAD, so an is_suite content commit survives
+    staged. Claim-first (bump before content) was rejected: it inverts the
+    content-first ordering that makes the safe half-failure (bds-kodoli)."""
+    suite_pj = suite_repo / ".claude-plugin" / "plugin.json"
+    changelog = suite_repo / "CHANGELOG.md"
+    pj_rel = str(suite_pj.relative_to(suite_repo))
+    cl_rel = str(changelog.relative_to(suite_repo))
+    for attempt in range(attempts):
+        suite_text = suite_pj.read_text()
+        version = bump_version(json.loads(suite_text)["version"], level)
+        message = user_message or f"chore({name}): publish suite {version}"
+        bump_msg = (f"chore(batterie): bump suite version to {version}"
+                    + ("" if is_suite else f" (carrying {name})"))
+        new_changelog = prepend_changelog(
+            changelog.read_text(), version,
+            datetime.date.today().isoformat(), changelog_msg)
+        if attempt:
+            print(f"  recomputed: suite -> {version} (twin publish won the race)")
+        if dry:
+            print(f"  DRY  write suite version {version} into {suite_pj}")
+            print(f"  DRY  prepend [{version}] entry to {changelog}")
+        else:
+            suite_pj.write_text(replace_version(suite_text, version))
+            changelog.write_text(new_changelog)
+        if is_suite:
+            checked(run(["git", "-C", str(commit_repo), "add", add_flag], dry=dry),
+                    "git add")
+            checked(run(["git", "-C", str(commit_repo), "commit", "-m", message],
+                        dry=dry, capture=True), "git commit")
+            pushed = run(["git", "-C", str(commit_repo), "push"], dry=dry, capture=True)
+        else:
+            checked(run(["git", "-C", str(suite_repo), "commit", "-m", bump_msg,
+                         "--", pj_rel, cl_rel], dry=dry, capture=True),
+                    "git commit (suite bump)")
+            pushed = run(["git", "-C", str(suite_repo), "push"], dry=dry, capture=True)
+        if pushed is None or pushed.returncode == 0:  # dry run, or it landed
+            return version
+        # Push rejected. A twin RACE means upstream moved under us; anything
+        # else (auth, network) dies loud with the push's own stderr.
+        subprocess.run(["git", "-C", str(suite_repo), "fetch", "-q"],
+                       text=True, capture_output=True, check=False)
+        behind = subprocess.run(
+            ["git", "-C", str(suite_repo), "rev-list", "--count", "HEAD..@{u}"],
+            text=True, capture_output=True, check=False)
+        if behind.returncode != 0 or (behind.stdout or "0").strip() == "0":
+            checked(pushed, "git push (suite)")
+        print("  note: suite push raced a twin publish — recovering (bds-zofino)")
+        checked(run(["git", "-C", str(suite_repo), "reset", "--soft", "@{u}"],
+                    capture=True), "race recovery (reset)")
+        checked(run(["git", "-C", str(suite_repo), "checkout", "HEAD", "--",
+                     pj_rel, cl_rel], capture=True), "race recovery (restore)")
+    die(f"suite push lost the race {attempts} times running — "
+        "check for a publish storm before retrying")
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(
         description="One-command shard release: bump, push, assemble, pull.")
@@ -289,8 +359,6 @@ def main() -> int:
     is_suite = (repo == suite_repo)
 
     message = args.message or f"chore({name}): publish suite {suite_new}"
-    suite_bump_msg = (f"chore(batterie): bump suite version to {suite_new}"
-                      + ("" if is_suite else f" (carrying {name})"))
 
     # Suite CHANGELOG (bds-mawitu): one canonical changelog in the suite repo,
     # maintained here at publish time so a shipped plugin's changelog can never
@@ -305,7 +373,9 @@ def main() -> int:
     changelog_msg = args.changelog or message
     changelog_date = datetime.date.today().isoformat()
     # Fail early on a same-version double-publish rather than after the push.
-    new_changelog = prepend_changelog(
+    # Validation only — commit_and_push_suite re-derives at push time, so a
+    # race recompute always prepends against the changelog as it then stands.
+    prepend_changelog(
         changelog_path.read_text(), suite_new, changelog_date, changelog_msg)
 
     print(f"Publish {name}: suite {suite_current} -> {suite_new}  ({args.level})")
@@ -353,19 +423,14 @@ def main() -> int:
     # --- PUSH ---
     print("\n[push]")
     if is_suite:
-        # One repo: the suite bump IS this repo's plugin.json; add_flag stages it
-        # together with the content change in a single commit (bds-fifuko: -u by
-        # default so untracked WIP is excluded; -A under --all).
-        if dry:
-            print(f"  DRY  write suite version {suite_new} into {suite_pj_path}")
-            print(f"  DRY  prepend [{suite_new}] entry to {changelog_path}")
-        else:
-            suite_pj_path.write_text(replace_version(suite_text, suite_new))
-            changelog_path.write_text(new_changelog)
-        checked(run(["git", "-C", str(repo), "add", add_flag], dry=dry), "git add")
-        checked(run(["git", "-C", str(repo), "commit", "-m", message], dry=dry,
-                    capture=True), "git commit")
-        checked(run(["git", "-C", str(repo), "push"], dry=dry, capture=True), "git push")
+        # One repo: the suite bump IS this repo's plugin.json; the helper stages
+        # content + bump in a single commit (bds-fifuko: -u by default so
+        # untracked WIP is excluded; -A under --all) and recovers from a
+        # twin-publish push race by recomputing on the twin's base (bds-zofino).
+        shipped = commit_and_push_suite(
+            suite_repo=suite_repo, commit_repo=repo, is_suite=True,
+            add_flag=add_flag, level=args.level, name=name,
+            user_message=args.message, changelog_msg=changelog_msg, dry=dry)
     else:
         # Two repos, content FIRST (bds-kodoli): if the suite bump (b) then
         # fails, the assembler quarantines the drifted content — a loud, caught
@@ -420,23 +485,31 @@ def main() -> int:
                 checked(run(["git", "-C", str(repo), "push"], dry=dry, capture=True), "git push (content)")
             else:
                 print(f"  (no pending content in {repo.name} — suite bump only)")
-        # (b) suite repo — TARGETED plugin.json-only commit (git commit -- PATH
-        # commits that path's worktree state, ignoring any other staged/dirty
-        # files in the suite repo; never -A here).
-        suite_rel = str(suite_pj_path.relative_to(suite_repo))
-        changelog_rel = str(changelog_path.relative_to(suite_repo))
-        if dry:
-            print(f"  DRY  write suite version {suite_new} into {suite_pj_path}")
-            print(f"  DRY  prepend [{suite_new}] entry to {changelog_path}")
-        else:
-            suite_pj_path.write_text(replace_version(suite_text, suite_new))
-            changelog_path.write_text(new_changelog)
-        # TARGETED path-list (never -A in the suite repo — bds-fifuko): the bump
-        # AND the changelog entry, and nothing else the suite repo's tree carries.
-        checked(run(["git", "-C", str(suite_repo), "commit", "-m", suite_bump_msg,
-                     "--", suite_rel, changelog_rel], dry=dry, capture=True),
-                "git commit (suite bump)")
-        checked(run(["git", "-C", str(suite_repo), "push"], dry=dry, capture=True), "git push (suite)")
+        # (b) suite repo — TARGETED plugin.json+CHANGELOG commit via the helper
+        # (git commit -- PATH commits those paths' worktree state, ignoring any
+        # other staged/dirty files; never -A here — bds-fifuko), with
+        # twin-publish race recovery (bds-zofino).
+        shipped = commit_and_push_suite(
+            suite_repo=suite_repo, commit_repo=suite_repo, is_suite=False,
+            add_flag=add_flag, level=args.level, name=name,
+            user_message=args.message, changelog_msg=changelog_msg, dry=dry)
+        # A race recompute leaves the content repo's lazy stamp (a0) one
+        # version behind the release that actually carries it. Cosmetic — the
+        # assembler stamps the vendored copy regardless — but the CLI
+        # --version footnote should stay truthful, so re-stamp and push.
+        if not dry and shipped != suite_new and content_pj.exists():
+            pj_text = content_pj.read_text()
+            if json.loads(pj_text).get("version") != shipped:
+                content_pj.write_text(replace_version(pj_text, shipped))
+                checked(run(["git", "-C", str(repo), "commit", "-m",
+                             f"chore({name}): re-stamp to suite {shipped} (publish race)",
+                             "--", str(content_pj.relative_to(repo))], capture=True),
+                        "git commit (re-stamp)")
+                checked(run(["git", "-C", str(repo), "push"], capture=True),
+                        "git push (re-stamp)")
+
+    if shipped != suite_new:
+        print(f"  (shipped as suite {shipped} — a twin publish took {suite_new})")
 
     print("\n[assemble]")
     # Snapshot the runs that already exist BEFORE triggering — the identity

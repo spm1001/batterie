@@ -41,7 +41,6 @@ Exit codes:
 """
 
 import argparse
-import calendar
 import datetime
 import json
 import re
@@ -166,29 +165,50 @@ def checked(cp: subprocess.CompletedProcess | None, what: str) -> subprocess.Com
     return cp
 
 
-def find_run_id(after_epoch: float, *, attempts: int = 15, delay: float = 2.0) -> str | None:
-    """Find the workflow_dispatch run we just triggered. The run takes a few
-    seconds to register, so poll briefly for a dispatch run created after our
-    trigger timestamp."""
+def list_dispatch_runs() -> list[dict] | None:
+    """The newest workflow_dispatch runs for the assemble workflow, straight
+    from GitHub's ledger. None on a gh failure (caller decides how loud)."""
+    cp = subprocess.run(
+        ["gh", "-R", BATTERIE_REMOTE, "run", "list",
+         "--workflow", WORKFLOW, "--event", "workflow_dispatch",
+         "--limit", "5", "--json", "databaseId,createdAt,status"],
+        text=True, capture_output=True, check=False,
+    )
+    if cp.returncode != 0:
+        return None
+    return json.loads(cp.stdout or "[]")
+
+
+def pick_dispatched_run(runs: list[dict], baseline: set[str]) -> str | None:
+    """Pick OUR dispatch out of a run listing: the EARLIEST-created run that
+    did not exist when the baseline was snapshotted just before dispatching.
+
+    Identity by novelty against GitHub's own ledger, not by timestamp
+    (bds-gebaza): the old fence — newest run within a 30s backward grace of a
+    local clock — watched a stranger's run created 26s before our dispatch
+    and reported its green as ours. A baseline ID set involves no clocks, so
+    skew can neither admit a foreign run nor reject our own. Earliest-first
+    because a fresh run LATER than ours is someone else's dispatch racing us:
+    ours registered first."""
+    fresh = [r for r in runs if str(r["databaseId"]) not in baseline]
+    if not fresh:
+        return None
+    # ISO-8601 UTC sorts lexicographically — no strptime, and the old
+    # timegm-vs-mktime BST hazard retires along with the parsing.
+    return str(min(fresh, key=lambda r: r["createdAt"])["databaseId"])
+
+
+def find_run_id(baseline: set[str], *, attempts: int = 15, delay: float = 2.0,
+                list_runs=list_dispatch_runs) -> str | None:
+    """Find the run OUR dispatch created. It takes a few seconds to register,
+    so poll — and accept only a run absent from the pre-dispatch baseline.
+    A pre-existing run, green or not, can never satisfy the wait."""
     for _ in range(attempts):
-        cp = subprocess.run(
-            ["gh", "-R", BATTERIE_REMOTE, "run", "list",
-             "--workflow", WORKFLOW, "--event", "workflow_dispatch",
-             "--limit", "5", "--json", "databaseId,createdAt,status"],
-            text=True, capture_output=True, check=False,
-        )
-        if cp.returncode == 0:
-            for r in sorted(json.loads(cp.stdout or "[]"),
-                            key=lambda r: r["createdAt"], reverse=True):
-                # timegm, NOT mktime: createdAt is UTC ("Z"), and mktime reads
-                # the struct as LOCAL time — correct on a UTC box (hezza),
-                # ~3600s early on a BST one (tube), where every run then fails
-                # the freshness gate and the watch dies (seen 2x, 2026-07-06).
-                created = calendar.timegm(time.strptime(
-                    r["createdAt"], "%Y-%m-%dT%H:%M:%SZ"))
-                # 30s grace: trigger->register lag plus clock skew.
-                if created >= after_epoch - 30:
-                    return str(r["databaseId"])
+        runs = list_runs()
+        if runs:
+            picked = pick_dispatched_run(runs, baseline)
+            if picked:
+                return picked
         time.sleep(delay)
     return None
 
@@ -216,7 +236,9 @@ def main() -> int:
                     help="repo holding the suite version, the bump target "
                          "(default: this script's own repo; override for tests)")
     ap.add_argument("--no-wait", action="store_true",
-                    help="trigger assemble but don't watch the run to green")
+                    help="trigger assemble but don't watch the run to green "
+                         "(also skips the pull — an unwatched publish can't "
+                         "confirm what shipped; bds-gebaza)")
     ap.add_argument("--no-pull", action="store_true",
                     help="push only; don't bring this machine current")
     ap.add_argument("--all", action="store_true",
@@ -278,7 +300,13 @@ def main() -> int:
     print(f"  commit:  {message!r}")
     print(f"  changelog: [{suite_new}] {changelog_msg!r}  → {changelog_path}")
     print(f"  wait:    {'no' if args.no_wait else 'watch to green'}")
-    print(f"  pull:    {'no' if args.no_pull else ('this machine' + (f' + reinstall {cli[0]}' if cli else ''))}")
+    if args.no_pull:
+        pull_desc = "no"
+    elif args.no_wait:
+        pull_desc = "no (--no-wait can't confirm green; /batterie:update after)"
+    else:
+        pull_desc = "this machine" + (f" + reinstall {cli[0]}" if cli else "")
+    print(f"  pull:    {pull_desc}")
 
     # What would be committed in the CONTENT repo. bds-fifuko: default stages
     # tracked modifications only (git add -u), so an untracked scratch/WIP file
@@ -394,7 +422,16 @@ def main() -> int:
         checked(run(["git", "-C", str(suite_repo), "push"], dry=dry, capture=True), "git push (suite)")
 
     print("\n[assemble]")
-    trigger_epoch = time.time()
+    # Snapshot the runs that already exist BEFORE triggering — the identity
+    # fence for the watch (bds-gebaza). Taken only when something will watch;
+    # a failure here dies BEFORE the dispatch, while nothing is in flight.
+    baseline: set[str] = set()
+    if not dry and not args.no_wait:
+        baseline_runs = list_dispatch_runs()
+        if baseline_runs is None:
+            die("couldn't list existing assemble runs to fence the dispatch — "
+                "fix gh/network and retry (nothing was dispatched)")
+        baseline = {str(r["databaseId"]) for r in baseline_runs}
     checked(run(["gh", "-R", BATTERIE_REMOTE, "workflow", "run", WORKFLOW],
                 dry=dry, capture=True), "workflow dispatch")
 
@@ -405,7 +442,7 @@ def main() -> int:
         print("  DRY  poll for the dispatched run, then: gh run watch <id> --exit-status")
     else:
         print("  waiting for the run to register...")
-        run_id = find_run_id(trigger_epoch)
+        run_id = find_run_id(baseline)
         if not run_id:
             die("triggered, but couldn't find the run to watch — check the "
                 f"Actions tab for {BATTERIE_REMOTE}")
@@ -424,6 +461,12 @@ def main() -> int:
     # --- PULL (this machine) ---
     if args.no_pull:
         print("\n[pull] skipped (--no-pull). When ready: /batterie:update")
+    elif args.no_wait:
+        # bds-gebaza (4): the pull is only meaningful AFTER our own run went
+        # green — under --no-wait we never learn that, and pulling now would
+        # race the assemble and reinstall the PREVIOUS version.
+        print("\n[pull] skipped (--no-wait: assemble outcome unknown; a pull "
+              "now would race it). When the run is green: /batterie:update")
     else:
         print("\n[pull] bringing this machine current")
         # Deliberately pinned to the public "batterie" marketplace — NOT the same
@@ -467,7 +510,7 @@ def main() -> int:
                         dry=dry, capture=True), f"reinstall {binary}")
 
     print("\nDone." + ("  (dry run — nothing changed)" if dry else ""))
-    if not dry and not args.no_pull:
+    if not dry and not args.no_pull and not args.no_wait:
         print("Restart Claude Code (/exit then claude) to activate hook/skill "
               "changes — SessionStart hooks only fire on a full restart. "
               "(CLI reinstall is already live.)")

@@ -111,8 +111,9 @@ Then it pulls this machine current for the published plugin (marketplace update
 → plugin update → CLI reinstall from source with `--no-cache` if this repo
 ships a CLI).
 
-Escape hatches if asked: `--no-wait` (trigger, don't watch), `--no-pull` (push
-only), `-m "msg"` (commit message).
+Escape hatches if asked: `--no-wait` (trigger, don't watch — also skips the
+pull, since an unwatched publish can't confirm what shipped), `--no-pull`
+(push only), `-m "msg"` (commit message).
 
 ### 5. Report + restart
 

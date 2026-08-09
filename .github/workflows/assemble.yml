@@ -114,7 +114,28 @@ jobs:
               commit -m "Reassemble — $(date +%Y-%m-%d)
 
           $(grep -E ' (OK|SKIP|QUARANTINE) ' /tmp/assemble.log)"
-          git push origin main
+          # bds-zofino: two publishes dispatch two assembles seconds apart,
+          # and the loser's push used to red the run falsely (2026-07-26,
+          # runs 30221858818/30221859322 — created 1s apart, loser failed
+          # HERE while the winner had already shipped both payloads). On
+          # reject: an identical tree means the twin already shipped this —
+          # green, nothing to do; a different tree means ours vendored newer
+          # content — re-seat our whole-tree snapshot on the twin's commit
+          # (a tree commit can't conflict) and push once more. A second
+          # reject stays red: that's a real fault, not a race.
+          if ! git push origin main; then
+            git fetch origin
+            if [ "$(git rev-parse 'HEAD^{tree}')" = "$(git rev-parse 'origin/main^{tree}')" ]; then
+              echo "Push raced a twin assemble with an IDENTICAL tree — already shipped, nothing to do."
+            else
+              echo "Push raced a twin assemble — re-seating our newer tree on its commit."
+              git reset --soft origin/main
+              git -c user.name="github-actions[bot]" \
+                  -c user.email="github-actions[bot]@users.noreply.github.com" \
+                  commit -m "Reassemble (race recovery) — $(date +%Y-%m-%d)"
+              git push origin main
+            fi
+          fi
 
       - name: Publish private batterie-home (bds-susugu)
         id: home

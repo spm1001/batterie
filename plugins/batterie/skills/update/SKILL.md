@@ -130,6 +130,8 @@ claude plugin marketplace update <marketplace>
 
 In the common single-marketplace case there's just one — `batterie` — so this is a single `claude plugin marketplace update batterie`. Refreshing pulls the latest index so plugin updates can see new versions; without it, `claude plugin update` compares against a stale index.
 
+**If this fails with "corrupted installLocation (…) — expected a path inside <this config dir>":** nothing is corrupted. The session is running under a secondary `CLAUDE_CONFIG_DIR` that shares the primary's plugins tree (e.g. a symlinked `plugins/`), and CC's prefix check can't see through the alias. The error itself names the owner — the path above `/plugins/marketplaces/` — so rerun this step and step 2's commands with `CLAUDE_CONFIG_DIR=<that dir>`. Do **not** follow the error's remove-and-re-add advice: on a shared tree it forks the plugin state (bds-nawidu).
+
 ### 2. Update each plugin from its own marketplace
 
 For each plugin shown above, update it by its **full `<name>@<marketplace>` key** — the marketplace suffix is part of the listing (e.g. `<plugin>@<marketplace>`):

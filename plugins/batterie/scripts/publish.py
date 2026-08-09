@@ -43,6 +43,7 @@ Exit codes:
 import argparse
 import datetime
 import json
+import os
 import re
 import shlex
 import subprocess
@@ -85,6 +86,22 @@ def plugin_update_disposition(returncode: int, output: str) -> str:
     if returncode == 0:
         return "ok"
     return "skip" if "not found" in output.lower() else "fail"
+
+
+def owning_config_dir(output: str) -> str | None:
+    """From CC's 'corrupted installLocation' refusal, the config dir that owns
+    the marketplace clone — the error echoes the recorded path back, and what
+    sits above its /plugins/marketplaces/ IS the owner (bds-nawidu).
+
+    CC ≥2.1.226 string-compares the registry's installLocation against the
+    ACTIVE config dir, so a secondary config dir sharing the primary's plugins
+    tree (tube: ~/.claude-commis/plugins is a symlink into ~/.claude) reads a
+    correct shared registry as corrupt. One registry, two prefixes — no string
+    can satisfy both dirs, so the cure is rerunning the op under the owner."""
+    m = re.search(r"corrupted installLocation \((.+?)/plugins/marketplaces/", output)
+    if not m:
+        return None
+    return m.group(1) or None
 
 
 def bump_version(version: str, level: str) -> str:
@@ -141,7 +158,7 @@ def prepend_changelog(text: str, version: str, date: str, message: str) -> str:
 # ---- side effects ------------------------------------------------------------
 
 def run(cmd: list[str], *, cwd: Path | None = None, dry: bool = False,
-        capture: bool = False) -> subprocess.CompletedProcess | None:
+        capture: bool = False, env: dict | None = None) -> subprocess.CompletedProcess | None:
     """Echo then run. In dry mode, echo with a DRY marker and don't execute."""
     shown = " ".join(shlex.quote(c) for c in cmd)
     if dry:
@@ -150,7 +167,7 @@ def run(cmd: list[str], *, cwd: Path | None = None, dry: bool = False,
     print(f"  $    {shown}")
     return subprocess.run(
         cmd, cwd=cwd, text=True,
-        capture_output=capture, check=False,
+        capture_output=capture, check=False, env=env,
     )
 
 
@@ -477,10 +494,26 @@ def main() -> int:
         # (BATTERIE_REMOTE) and pulls that same plugin back from that marketplace.
         # Publishing to a private flavour would be a different remote + workflow
         # (a separate concern); generalising only this line would be incoherent.
-        checked(run(["claude", "plugin", "marketplace", "update", "batterie"],
-                    dry=dry, capture=True), "marketplace update")
-        cp = run(["claude", "plugin", "update", f"{name}@batterie"],
+        # bds-nawidu: a secondary config dir that shares the primary's plugins
+        # tree fails every marketplace op on a prefix check. The error names
+        # the owning dir — parse it, retry once under it, and let the plugin
+        # update reuse the override. Fires only on that refusal; everywhere
+        # else the env passes through untouched.
+        claude_env = None
+        cp = run(["claude", "plugin", "marketplace", "update", "batterie"],
                  dry=dry, capture=True)
+        if cp is not None and cp.returncode != 0:
+            owner = owning_config_dir(f"{cp.stdout or ''}{cp.stderr or ''}")
+            if owner:
+                print(f"  note: plugin registry owned by {owner} (shared "
+                      f"plugins tree) — retrying claude calls with "
+                      f"CLAUDE_CONFIG_DIR={owner}")
+                claude_env = {**os.environ, "CLAUDE_CONFIG_DIR": owner}
+                cp = run(["claude", "plugin", "marketplace", "update", "batterie"],
+                         dry=dry, capture=True, env=claude_env)
+        checked(cp, "marketplace update")
+        cp = run(["claude", "plugin", "update", f"{name}@batterie"],
+                 dry=dry, capture=True, env=claude_env)
         if cp is not None:
             verdict = plugin_update_disposition(
                 cp.returncode, f"{cp.stdout or ''}{cp.stderr or ''}")

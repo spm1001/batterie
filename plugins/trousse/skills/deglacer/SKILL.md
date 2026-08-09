@@ -255,7 +255,7 @@ The `user` type serves three purposes. Discriminate with:
 | Write/Edit | `content, filePath, originalFile, structuredPatch, type` |
 | Read | `file, type` |
 | Agent | `agentId, agentType, content, prompt, status, totalDurationMs, totalTokens, totalToolUseCount, usage` |
-| Error | Bare string: `"User rejected tool use"` |
+| Error | Bare string — **wording drifts by CC version**: older sessions say `"User rejected tool use"`, current ones `"The user doesn't want to proceed with this tool use. The tool use was rejected…"` (both live in the corpus, the new form now the majority). Count rejections by `toolUseResult` being a *string*, or match a stable substring (`rejected` / `doesn't want to proceed`) — never the full documented sentence. |
 
 ### Token Counting
 
@@ -348,4 +348,5 @@ done
 | Assume content is string | Assistant content is always array; user content varies | Check type before accessing |
 | `2>/dev/null` on everything | Hides real errors | Understand the schema, don't hedge |
 | Guess at field names | 39% of jq-on-.claude commands are schema discovery | Read this reference |
+| Grep with a space after the colon (`"skill": "x"`) | CC serializes JSONL **compact** — `"skill":"x"` — so the spaced pattern is a false zero that reads like absence | jq on the parsed field, or match the compact form |
 | Treat deja's list as exhaustive | Top-K, recency-weighted — common terms rank-cut older sessions | Re-probe with a rarer term before claiming absence |

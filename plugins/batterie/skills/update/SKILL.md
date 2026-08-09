@@ -192,7 +192,7 @@ For each CLI in the table:
 3. Decide:
    - `commit_id` **equals** origin HEAD → current, skip (report "up to date").
    - `commit_id` **differs**, or the CLI is **not in PATH** → reinstall **from git** (command below).
-   - `direct_url.json` has **no `commit_id`** (a `file://` URL — this machine deliberately installs from a local working tree, e.g. hezza) → reinstall from that same working-tree path. **Provenance is sticky:** never switch a machine's install source just because a `~/repos` clone happens to exist or not — a clone present for editing must not silently become the operational install (bds-zojide).
+   - `direct_url.json` has **no `commit_id`** (a `file://` URL — this machine deliberately installs from a local working tree) → reinstall from that same working-tree path. **Provenance is sticky:** never switch a machine's install source just because a `~/repos` clone happens to exist or not — a clone present for editing must not silently become the operational install (bds-zojide).
 4. Reinstall commands — `--no-cache` is load-bearing: uv reuses a cached *build* of the source and `uv cache clean` does NOT clear it, so a src-light change silently reinstalls the old wheel (bds-vanuta; verified 2026-06-17):
    - **Git** (the default): `uv tool install "<pkg>[<extras>] @ git+https://github.com/<source-repo>" --force --reinstall --no-cache` — PEP 508 form, extras go **before** the `@`.
    - **Working-tree** (only when step 3 says provenance is a local dir): `uv tool install "~/repos/<source-repo>[<extras>]" --force --reinstall --no-cache`.

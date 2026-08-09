@@ -8,7 +8,7 @@ It does NOT own session lifecycle hooks or scripts. Those belong to [bon](https:
 
 Public trousse is a **tight, general-purpose knife-roll**: skills a stranger on the internet would genuinely seek out. Public status is *earned*, not the default — most skills belong elsewhere. Before adding a skill here, run the home test:
 
-- **Would a random person, with no ITV/Sameer context, install and value this?** → trousse (public). The current four: `skill-forge`, `titans` (+ `/review`), `deglacer`, `ardoise`.
+- **Would a random person, with no ITV/Sameer context, install and value this?** → trousse (public). The current five: `skill-forge`, `titans` (+ `/review`), `deglacer`, `ardoise`, `hublot`.
 - **ITV/measurement-flavoured — teammates want it, a public installer wouldn't?** → [`ITV/mit-commons`](https://github.com/ITV/mit-commons) (the `commons:` marketplace). Rename to a prosaic `mit-<thing>` — kitchen-metaphor names read as "the boss's toy" in a team space, and the `mit-` prefix is a commons invariant (picker namespacing).
 - **Sameer-specific — carries PII, or wired to his stack/machines?** → [`spm1001/trousse-personal`](https://github.com/spm1001/trousse-personal) (private; may hardcode freely).
 
@@ -57,9 +57,9 @@ The plugin system discovers skills from `skills/*/SKILL.md` — no hooks, no set
 - `user-invocable: false` for skills loaded programmatically (companion skills)
 - Reference files live in `references/` subdirectory, linked from main SKILL.md
 
-### Current Skills (4 + `review` alias)
+### Current Skills (5 + `review` alias)
 
-ardoise, deglacer, review, skill-forge, titans
+ardoise, deglacer, hublot, review, skill-forge, titans
 
 (No commands — the `consomme-*` set moved to mit-commons with the consommé skill. See "Skill homes" above for where everything else went.)
 

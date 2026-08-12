@@ -245,10 +245,18 @@ uv run --all-extras python scripts/smoke_stdio.py   # drive the WORKING TREE ove
 Integration tests require `-m integration` flag and real credentials.
 
 **The count IS printed — it is just at the bottom of a long scroll.** `uv run --all-extras python
--m pytest` ends with `2331 passed, 100 deselected in 24.05s` (count as of 2026-08-09 morning — it moved five times that morning) as the last line of ~92, because
+-m pytest` ends with `2447 passed, 100 deselected in 36.29s` (count as of 2026-08-12 evening) as the last line of ~92, because
 `addopts` in `pyproject.toml` carries `-q` (which suppresses the *per-test* lines, not the summary)
 plus a ~85-line coverage table that pushes the summary off the top of a truncated view.
 `-m 'not integration'` is baked in too, hence the 100 deselected.
+
+**Unit tests run hermetically — a green may not use the machine's token.** `tests/unit/conftest.py`
+autouse-points `MISE_TOKEN_PATH` at an absent file, so every unit test stands where CI stands
+(no ambient credential, identity unresolved). This exists because a dev-token-dependent green kept
+CI red for sixteen runs across three publishes, invisibly (2026-08-09→12, mise-wahane's close note).
+Tests of the credential machinery itself (`test_token_store`, `test_http_client`, `test_search`'s
+source defaults) state their env explicitly with module fixtures; follow that pattern, never
+delete the conftest pin to make a test pass.
 
 **This paragraph said the opposite until 2026-08-04, and the correction is the lesson.** It read
 "pytest prints no `N passed` summary line here", told readers the run's evidence was its exit code,
@@ -326,6 +334,8 @@ uv run python -m auth --code URL_OR_CODE  # Exchange code from headless flow
 `credentials.json` (OAuth client config, not secret) ships with the repo. The OAuth client lives in ITV's `mit-workspace-mcp-server` GCP project with **User type: Internal** — any `@itv.com` Workspace account can authenticate without verification or a test-user list. Token auto-refreshes; `clear_service_cache` handles revoked refresh tokens. Maintainer can also fetch credentials from GCP Secret Manager as fallback.
 
 Token storage: macOS Keychain (`mise-oauth-token`) is the source of truth. `~/.claude/plugins/data/mise-batterie-de-savoir/token.json` is the persistent fallback (auto-created since 2026-05). The plugin-staging-dir token path is ephemeral on Cowork and should never be relied on.
+
+**Ambient mode (service accounts — mise-wasagu):** `MISE_CREDENTIALS=ambient` makes mise mint credentials via `google.auth.default()` — Cloud Run metadata server, workload identity, and `GOOGLE_APPLICATION_CREDENTIALS` all resolve through that one call (loader: `adapters/ambient.py`). Explicit opt-in ONLY, never a fallback — a missing token keeps teaching `setup_oauth`, and setting it beside `MISE_TOKEN_PATH` is an error, not a precedence. The scope tier is fixed per deployment (`MISE_SCOPES=readonly` for never-writing consumers) and is Drive-family only: search defaults to `['drive']` and refuses explicit gmail/people/calendar with the reason; `draft`/`reply_draft`/`archive`/`star`/`label`/`respond`/`setup_oauth` refuse via a dispatch gate — a service account has no mailbox or personal calendar. NB service accounts also own zero Drive storage (Google's 2025 enforcement): SA writes only land in Shared Drives (teaching error: mise-finupa).
 
 ## How to Add a New Content Type
 

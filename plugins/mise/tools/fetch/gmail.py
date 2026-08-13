@@ -17,7 +17,7 @@ from models import FetchResult, FetchError, InviteState, MiseError, ErrorKind
 from validation import is_gmail_api_id, diagnose_fetch_404
 from workspace import get_deposit_folder, write_content, write_manifest, write_image, write_raw
 
-from .common import _build_cues, _deposit_pdf_thumbnails
+from .common import _build_cues, _deposit_pdf_thumbnails, pdf_page_fidelity
 from .gmail_attachments import (
     MAX_EAGER_ATTACHMENTS,
     _download_attachment_bytes,
@@ -394,6 +394,7 @@ def fetch_attachment(
     attachment_name: str,
     base_path: Path | None = None,
     raw: bool = False,
+    thumbnails: bool = True,
 ) -> FetchResult | FetchError:
     """
     Fetch a single named attachment from a Gmail thread.
@@ -438,7 +439,7 @@ def fetch_attachment(
     # application/octet-stream (Outlook/Exchange ships CSV/JSON/XML this way).
     mime_type = _resolve_attachment_mime(target_att.mime_type, target_att.filename)
     category = classify_attachment(mime_type)
-    content_bytes: bytes | None
+    content_bytes: bytes | None = None
     warnings: list[str] = []
     if mime_type != target_att.mime_type:
         warnings.append(
@@ -552,16 +553,18 @@ def fetch_attachment(
         pdf_result = convert_pdf_content(file_bytes=content_bytes, file_id=thread_id)
 
         # Render thumbnails (own folder, no collision risk)
-        try:
-            pdf_result.thumbnails = render_pdf_pages(file_bytes=content_bytes)
-        except Exception as e:
-            pdf_result.warnings.append(f"Thumbnail rendering failed: {e}")
+        if thumbnails:
+            try:
+                pdf_result.thumbnails = render_pdf_pages(file_bytes=content_bytes)
+            except Exception as e:
+                pdf_result.warnings.append(f"Thumbnail rendering failed: {e}")
 
         folder = get_deposit_folder("pdf", title, thread_id, base_path=base_path)
         content_path = write_content(folder, pdf_result.content)
 
         # Deposit thumbnails via shared helper
         thumb_extras = _deposit_pdf_thumbnails(folder, pdf_result)
+        fidelity_extras = pdf_page_fidelity(pdf_result)  # mutates warnings pre-merge
 
         # Before _build_cues so the raw filename lands in cues.files.
         raw_extras = _deposit_raw(folder, content_bytes, attachment_name) if raw else {}
@@ -573,6 +576,7 @@ def fetch_attachment(
             "extraction_method": pdf_result.method,
             "char_count": pdf_result.char_count,
             **thumb_extras,
+            **fidelity_extras,
         }
         if raw_extras.get("raw_file"):
             extra["raw_file"] = raw_extras["raw_file"]

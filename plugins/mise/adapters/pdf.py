@@ -24,6 +24,7 @@ except ImportError:  # slim/embedded build — PDF text falls back to Drive conv
 from adapters.conversion import convert_via_drive
 from extractors.text_quality import looks_like_flattened_tables
 from adapters.drive import download_file, download_file_to_temp, get_file_size, STREAMING_THRESHOLD_BYTES
+from adapters.pdf_info import count_pdf_pages
 
 log = logging.getLogger(__name__)
 
@@ -74,6 +75,7 @@ class PdfConversionResult:
     char_count: int
     warnings: list[str] = field(default_factory=list)
     thumbnails: PdfThumbnailResult | None = None
+    pdf_pages: int | None = None  # poppler ground truth; None = unknown (mise-wujoga)
 
 
 def convert_pdf_content(
@@ -103,6 +105,7 @@ def convert_pdf_content(
     if file_bytes is not None and file_path is not None:
         raise ValueError("Cannot provide both file_bytes and file_path")
 
+    pdf_pages = count_pdf_pages(file_bytes=file_bytes, file_path=file_path)
     warnings: list[str] = []
 
     # 1. Try markitdown first (fast path) — absent in the slim/embedded build,
@@ -138,6 +141,7 @@ def convert_pdf_content(
                 method="markitdown",
                 char_count=char_count,
                 warnings=warnings,
+                pdf_pages=pdf_pages,
             )
 
     # 3. Markitdown failed or produced flattened tables — fall back to Drive
@@ -164,12 +168,14 @@ def convert_pdf_content(
         method="drive",
         char_count=len(conversion_result.content.strip()),
         warnings=warnings,
+        pdf_pages=pdf_pages,
     )
 
 
 def fetch_and_convert_pdf(
     file_id: str,
     min_chars_threshold: int = DEFAULT_MIN_CHARS_THRESHOLD,
+    thumbnails: bool = True,
 ) -> PdfConversionResult:
     """
     Download PDF from Drive and extract content.
@@ -180,6 +186,7 @@ def fetch_and_convert_pdf(
     Args:
         file_id: Drive file ID
         min_chars_threshold: Minimum chars to consider markitdown successful
+        thumbnails: False skips page-thumbnail rendering entirely (mise-giwawa)
 
     Returns:
         PdfConversionResult with content and extraction method used
@@ -189,7 +196,7 @@ def fetch_and_convert_pdf(
 
     if file_size > STREAMING_THRESHOLD_BYTES:
         # Large file: stream to temp, extract from path
-        return _fetch_and_convert_pdf_large(file_id, min_chars_threshold)
+        return _fetch_and_convert_pdf_large(file_id, min_chars_threshold, thumbnails=thumbnails)
     else:
         # Small file: load into memory
         pdf_bytes = download_file(file_id)
@@ -198,16 +205,18 @@ def fetch_and_convert_pdf(
             file_id=file_id,
             min_chars_threshold=min_chars_threshold,
         )
-        try:
-            result.thumbnails = render_pdf_pages(file_bytes=pdf_bytes)
-        except Exception as e:
-            result.warnings.append(f"Thumbnail rendering failed: {e}")
+        if thumbnails:
+            try:
+                result.thumbnails = render_pdf_pages(file_bytes=pdf_bytes)
+            except Exception as e:
+                result.warnings.append(f"Thumbnail rendering failed: {e}")
         return result
 
 
 def _fetch_and_convert_pdf_large(
     file_id: str,
     min_chars_threshold: int = DEFAULT_MIN_CHARS_THRESHOLD,
+    *, thumbnails: bool = True,
 ) -> PdfConversionResult:
     """
     Extract large PDF using streaming download.
@@ -225,10 +234,11 @@ def _fetch_and_convert_pdf_large(
         )
         result.warnings.insert(0, "Large file: using streaming download")
         # Render thumbnails before temp file is unlinked
-        try:
-            result.thumbnails = render_pdf_pages(file_path=tmp_path)
-        except Exception as e:
-            result.warnings.append(f"Thumbnail rendering failed: {e}")
+        if thumbnails:
+            try:
+                result.thumbnails = render_pdf_pages(file_path=tmp_path)
+            except Exception as e:
+                result.warnings.append(f"Thumbnail rendering failed: {e}")
         return result
     finally:
         tmp_path.unlink(missing_ok=True)

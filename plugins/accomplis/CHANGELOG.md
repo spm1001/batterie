@@ -1,7 +1,7 @@
 # Changelog
 
 This plugin ships as part of the **Batterie de Savoir** suite and carries the
-single suite version — currently **1.66.0**.
+single suite version — currently **1.66.1**.
 
 The suite has one canonical changelog. This file is a generated pointer, so it
 can never fall behind the version this plugin ships at:

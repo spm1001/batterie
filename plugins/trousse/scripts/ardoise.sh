@@ -10,7 +10,8 @@
 # Usage:
 #   ardoise.sh                                    # Interactive, CWD=/tmp
 #   ardoise.sh /path/to/dir                       # Interactive, specific dir
-#   ardoise.sh -p "prompt"                        # Print mode, one-shot
+#   ardoise.sh -p "prompt"                        # Print mode, one-shot (CWD=/tmp)
+#   ardoise.sh -p --cwd ~/repo "prompt"           # Print mode in a chosen dir
 #   ardoise.sh -p --max-turns 5 -- "prompt"       # Print mode with flags
 #   echo "prompt" | ardoise.sh -p --stdin         # Print mode, stdin
 #   ardoise.sh --home ~/sbx /path/to/dir          # Persistent HOME (multi-step)
@@ -20,6 +21,9 @@
 #              recipe for multi-step tests (marketplace add -> install -> verify).
 #              Seeded once; reused as-is thereafter (accumulated state survives).
 # --keep     : temp HOME as usual, but skip the cleanup trap and print its path.
+# --cwd DIR  : run the subject with CWD=DIR (both modes; sets START_DIR, so the
+#              seeder pre-trusts it). Equivalent to the bare-dir positional, which
+#              print mode now honours too. Default stays /tmp.
 #
 # Punching named holes in the isolation wall (the Vertex passthrough pattern,
 # generalised — for eval harnesses that must hand the inner Claude a fixture):
@@ -66,6 +70,14 @@ while [[ $# -gt 0 ]]; do
         --keep)
             KEEP=true
             shift
+            ;;
+        --cwd)
+            if [[ $# -lt 2 || ! -d "$2" ]]; then
+                echo "Error: --cwd requires an existing directory" >&2
+                exit 1
+            fi
+            START_DIR="$(cd "$2" && pwd)"
+            shift 2
             ;;
         --env)
             if [[ $# -lt 2 || "$2" != *=* ]]; then
@@ -277,7 +289,7 @@ ENV_VARS=(
 # ── Run ───────────────────────────────────────────────────────────────
 
 if [[ "$PRINT_MODE" == true ]]; then
-    # Print mode: claude -p, TERM=dumb, CWD=/tmp
+    # Print mode: claude -p, TERM=dumb, CWD=$START_DIR (default /tmp)
     CMD_PARTS=(claude -p)
     if [[ ${#CLAUDE_ARGS[@]} -gt 0 ]]; then
         CMD_PARTS+=("${CLAUDE_ARGS[@]}")
@@ -285,12 +297,12 @@ if [[ "$PRINT_MODE" == true ]]; then
 
     if [[ "$USE_STDIN" == true ]]; then
         env -i "${ENV_VARS[@]}" TERM="${TERM:-dumb}" \
-            bash -c 'cd /tmp && exec "$@"' _ "${CMD_PARTS[@]}"
+            bash -c 'cd "$1" && shift && exec "$@"' _ "$START_DIR" "${CMD_PARTS[@]}"
     else
         # "--" ends claude's option parsing: variadic flags (--allowed-tools,
         # --tools) would otherwise swallow the positional prompt.
         env -i "${ENV_VARS[@]}" TERM="${TERM:-dumb}" \
-            bash -c 'cd /tmp && exec "$@"' _ "${CMD_PARTS[@]}" -- "$PROMPT"
+            bash -c 'cd "$1" && shift && exec "$@"' _ "$START_DIR" "${CMD_PARTS[@]}" -- "$PROMPT"
     fi
 else
     # Interactive mode: claude TUI, real TERM, chosen CWD

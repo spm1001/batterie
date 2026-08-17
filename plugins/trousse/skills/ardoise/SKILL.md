@@ -60,10 +60,10 @@ The script lives in the trousse plugin. Resolve the path:
 ```bash
 SCRIPT="${CLAUDE_PLUGIN_ROOT}/scripts/ardoise.sh"
 # Fallback if CLAUDE_PLUGIN_ROOT isn't set in the calling context:
-[ -x "$SCRIPT" ] || SCRIPT=$(find ~/.claude/plugins/cache -path "*/trousse/*/scripts/ardoise.sh" 2>/dev/null | sort -r | head -1)
+[ -x "$SCRIPT" ] || SCRIPT=$(find ~/.claude/plugins/cache -path "*/trousse/*/scripts/ardoise.sh" 2>/dev/null | sort -rV | head -1)
 ```
 
-The fallback uses `sort -r | head -1` to prefer the highest-versioned cached copy when multiple are present.
+The fallback uses `sort -rV | head -1` to prefer the highest-versioned cached copy when multiple are present. The `-V` (version sort) matters: plain `sort -r` is lexicographic and resolves `1.8.7` above `1.66.0`, handing you a script months behind the skill instructions invoking it.
 
 ### Interactive mode (default)
 
@@ -80,7 +80,10 @@ Opens Claude's interactive TUI. You type commands yourself — `claude plugin in
 "$SCRIPT" -p "What is the best way to structure a CLI?"
 "$SCRIPT" -p --max-turns 1 "Reply with only: hello"
 echo "Design a work tracker" | "$SCRIPT" -p --stdin --max-turns 1
+"$SCRIPT" -p --cwd ~/some/project "What does the README promise?"
 ```
+
+Print mode runs in `/tmp` by default; `--cwd DIR` runs the subject in a chosen directory instead (the seeder pre-trusts it, so no trust dialog blocks the run). Use it whenever the probe must see a real repo, or when `/tmp`'s shared clutter could contaminate the subject's view.
 
 ### Persistent HOME (multi-step tests)
 

@@ -1,6 +1,6 @@
 # Cowork Environment Reference
 
-Captured 2026-03-27 from a live Cowork session. Use this when building or debugging plugins for Desktop.
+Captured 2026-03-27 from a live Cowork session. Use this when building or debugging plugins for Desktop. For **cloud (remote) Cowork** — a different surface again (Firecracker microVM, no hooks, no plugin CLIs) — see the sibling [`cowork-cloud.md`](cowork-cloud.md).
 
 ## Detection
 

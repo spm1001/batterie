@@ -87,10 +87,17 @@ def load_config(config_path: Optional[Path] = None) -> dict:
     return config
 
 
-def should_scan_file(path: Path, config: dict) -> bool:
+def should_scan_file(path: Path, config: dict, root: Path) -> bool:
     """Check if file should be scanned based on config."""
-    # Check excluded directories
-    for part in path.parts:
+    # Excluded directories are matched RELATIVE to the scan root. Matching on
+    # the absolute path's parts silently excluded everything under ~/.claude/
+    # (".claude" is itself an exclude), so scanning a skill there reported a
+    # clean bill from zero files (trousse-bujuta).
+    try:
+        rel_parts = path.relative_to(root).parts
+    except ValueError:
+        rel_parts = path.parts
+    for part in rel_parts[:-1]:
         if part in config["exclude_dirs"]:
             return False
 
@@ -303,9 +310,19 @@ def scan_repo(repo_path: Path, config: dict) -> ScanResult:
         result.errors.append(f"Path does not exist: {repo_path}")
         return result
 
+    # An explicit file argument means scan exactly that file — rglob on a
+    # file path yields nothing, which used to read as a clean 0-file pass.
+    if repo_path.is_file():
+        result.files_scanned += 1
+        try:
+            result.findings.extend(scan_file(repo_path, config))
+        except Exception as e:
+            result.errors.append(f"Error scanning {repo_path}: {e}")
+        return result
+
     # Scan files
     for path in repo_path.rglob("*"):
-        if path.is_file() and should_scan_file(path, config):
+        if path.is_file() and should_scan_file(path, config, repo_path):
             result.files_scanned += 1
             try:
                 findings = scan_file(path, config)
@@ -400,6 +417,15 @@ def main():
     if high_count > 0:
         print(f"\n⚠️  Found {high_count} HIGH risk items. Review before sharing.")
         sys.exit(1)
+
+    # A scanner that saw nothing must never look like a scanner that found
+    # nothing: zero files is an instrument failure, not a clean bill.
+    zero = [r for r in all_results if r.files_scanned == 0]
+    if zero:
+        for r in zero:
+            print(f"\n⚠️  SCANNER FAILURE: 0 files scanned in {r.repo} — NOT a clean bill. "
+                  f"Check the path and exclusion rules.", file=sys.stderr)
+        sys.exit(2)
 
     sys.exit(0)
 

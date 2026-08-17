@@ -98,7 +98,10 @@ cmd_keys() {
     # ("Enter", "Space", "Down") is typed rather than interpreted. Named
     # keys are `key`'s job.
     tmux send-keys -t "$s" -l "$text"
-    if [[ -n "$enter" ]]; then tmux send-keys -t "$s" Enter; fi
+    # The settle matters: an Enter on the heels of the paste arrives while
+    # CC's composer is still ingesting the text, and the prompt renders
+    # unsent — observed sitting 10+s in a live pane (trousse-nibajo).
+    if [[ -n "$enter" ]]; then sleep 1; tmux send-keys -t "$s" Enter; fi
 }
 
 # Named keys for driving TUI menus (/config, /hooks): each argument is a tmux
@@ -155,6 +158,11 @@ cmd_stop() {
     local s; s=$(session_of "$name")
     tmux has-session -t "$s" 2>/dev/null || { echo "no such session: $name"; return 0; }
     if [[ "${1:-}" != "--no-exit" ]]; then
+        # Ghost/suggestion text can occupy the composer after an action-capable
+        # turn, and "/exit" appended to it submits the lot as a prompt nobody
+        # wrote (observed twice, 2026-08-11, trousse-vurojo). C-u clears first;
+        # clearing an empty composer is harmless.
+        tmux send-keys -t "$s" C-u 2>/dev/null || true
         tmux send-keys -t "$s" "/exit" Enter 2>/dev/null || true
         sleep 5
     fi

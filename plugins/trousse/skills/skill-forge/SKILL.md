@@ -355,7 +355,7 @@ scripts/scan.py <skill-path>
 scripts/scan.py --risk high <skill-path>  # High-risk only
 ```
 
-Detects: emails, paths with usernames, secrets, company terms.
+Detects: emails, paths with usernames, secrets, company terms. The username/company/name categories need your terms: they load from `~/.claude/sharing-scan.json` (automatic when present) or `--config` — without one those categories are inert, and the scanner says so on stderr.
 See `references/sharing-scan.md` for triage guidelines.
 
 ## Integration

@@ -73,6 +73,17 @@ DEFAULT_CONFIG = {
 }
 
 
+# Personal terms (work domains, usernames, names) make four detector
+# categories real; without them those categories are inert. When --config is
+# absent, this path is tried so the gate hardens itself once per machine.
+DEFAULT_CONFIG_PATH = Path.home() / ".claude" / "sharing-scan.json"
+
+# Categories that detect nothing until the config names personal terms.
+PERSONAL_LIST_KEYS = (
+    "email_domains_high_risk", "path_usernames", "company_terms", "person_names"
+)
+
+
 def load_config(config_path: Optional[Path] = None) -> dict:
     """Load config, merging with defaults."""
     config = DEFAULT_CONFIG.copy()
@@ -390,13 +401,26 @@ def format_findings(result: ScanResult, format_type: str = "text") -> str:
 def main():
     parser = argparse.ArgumentParser(description="Scan repos for sharing risks")
     parser.add_argument("paths", nargs="+", help="Paths to scan (repos or directories)")
-    parser.add_argument("--config", type=Path, help="Config file (JSON)")
+    parser.add_argument("--config", type=Path,
+                        help=f"Config file (JSON); default: {DEFAULT_CONFIG_PATH} when present")
     parser.add_argument("--format", choices=["text", "json"], default="text")
     parser.add_argument("--risk", choices=["all", "high", "medium"], default="all",
                         help="Minimum risk level to report")
     args = parser.parse_args()
 
-    config = load_config(args.config)
+    config_path = args.config
+    if config_path is None and DEFAULT_CONFIG_PATH.exists():
+        config_path = DEFAULT_CONFIG_PATH
+    config = load_config(config_path)
+    print(f"config: {config_path or 'built-in defaults only'}", file=sys.stderr)
+
+    # A gate can be vacuous at more than one layer: empty personal lists leave
+    # whole categories detecting nothing, and a clean report would not say so.
+    inert = [k for k in PERSONAL_LIST_KEYS if not config.get(k)]
+    if inert:
+        print(f"note: categories inert (empty lists): {', '.join(inert)}. "
+              f"Personal terms live in --config or {DEFAULT_CONFIG_PATH}.",
+              file=sys.stderr)
 
     all_results = []
     for path_str in args.paths:

@@ -86,7 +86,7 @@ git push --force
 
 ## Custom Configuration
 
-Create/edit `scan-config.json` to extend detection:
+Personal terms are what make four of the six categories real — the defaults ship those lists empty, and the scanner names any inert categories on stderr rather than passing silently. Put your terms in `~/.claude/sharing-scan.json` (loaded automatically when `--config` is absent) or pass `--config path.json`:
 
 ```json
 {
@@ -101,3 +101,4 @@ Create/edit `scan-config.json` to extend detection:
 
 - `0`: No high-risk findings
 - `1`: High-risk findings detected (review required)
+- `2`: Scanner failure — 0 files scanned. Never read this as clean; check the path and exclusion rules.

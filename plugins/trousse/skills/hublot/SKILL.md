@@ -52,7 +52,7 @@ Resolve the script the way sibling skills do:
 
 ```bash
 SCRIPT="${CLAUDE_PLUGIN_ROOT}/scripts/hublot.sh"
-[ -x "$SCRIPT" ] || SCRIPT=$(find ~/.claude/plugins/cache -path "*/trousse/*/scripts/hublot.sh" 2>/dev/null | sort -r | head -1)
+[ -x "$SCRIPT" ] || SCRIPT=$(find ~/.claude/plugins/cache -path "*/trousse/*/scripts/hublot.sh" 2>/dev/null | sort -rV | head -1)
 ```
 
 ### 1. Choose a cwd that is already trusted

@@ -107,7 +107,22 @@ $SCRIPT read probe --all        # include scrollback
 $SCRIPT stop probe
 ```
 
-Sends `/exit` before killing tmux. This matters for mesh work: a clean exit deregisters, while a kill leaves a roster ghost for the 60–120s expiry window that will confuse the next test.
+Clears the composer (`C-u`), then sends `/exit` before killing tmux. The clear matters because ghost/suggestion text can be sitting in the composer after an action-capable turn, and `/exit` appended to it would submit the lot as a prompt nobody wrote. The clean exit matters for mesh work: it deregisters, while a kill leaves a roster ghost for the 60–120s expiry window that will confuse the next test.
+
+## Driving TUI menus (/config, /hooks)
+
+The `key` verb sends named tmux keys — `Down`, `Up`, `Escape`, `PPage`, `NPage`, `Tab`, `Enter`, `C-c` — one argument per press, repeats allowed. Menus need `key`; prose needs `keys` (which sends literally, so text that happens to be a key name is typed, not pressed).
+
+```bash
+$SCRIPT keys probe "/hooks"          # open the menu (keys types, settles ~1s, submits)
+$SCRIPT key  probe Down Down Enter   # walk to an event and open it
+$SCRIPT read probe -n 30             # read the matcher list
+$SCRIPT key  probe Escape            # back out without changing anything
+```
+
+- **`/hooks` answers settings-scope questions no file read can:** each matcher line carries its source — `[User]`, `[Local]`, `[Plugin]` — so "which file contributed this hook?" reads straight off the screen.
+- **`/config`:** type-to-filter works at the search box, and `/` re-opens search from the list.
+- **Prefer `Escape` to back out** when the goal is observation — it leaves settings uncommitted.
 
 ## Common Mistakes
 
@@ -120,16 +135,18 @@ Sends `/exit` before killing tmux. This matters for mesh work: a clean exit dere
 | Reading the pane once and concluding | An absence that is really a timing artefact | Include a positive control; assert the thing that *should* appear does. |
 | Killing the session outright | Roster ghosts, dirty state, missed teardown hooks | `stop` (it sends `/exit` first). |
 | Testing in a repo with its own `.mcp.json` | Two MCP servers, one agent id, confusing results | Drive from a neutral trusted folder. |
+| Blind `enter` after an action-capable turn | Ghost/suggestion text in the composer submits as a prompt nobody wrote | `read` the pane first; `key NAME C-u` clears anything sitting there. `stop` does this automatically before `/exit`. |
 
 ## Quick Reference
 
 ```bash
 $SCRIPT start NAME [--cwd DIR] [--unset VAR]... -- CMD...   # launch under tmux
 $SCRIPT wait  NAME REGEX [TIMEOUT_S]                        # block until it appears
-$SCRIPT keys  NAME "text" [--no-enter]                      # type
+$SCRIPT keys  NAME "text" [--no-enter]                      # type + submit (settles ~1s before Enter)
+$SCRIPT key   NAME KEY [KEY...]                             # named keys: Down Escape PPage Tab ...
 $SCRIPT enter NAME                                          # bare Enter (confirm a dialog)
 $SCRIPT read  NAME [-n LINES] [--all]                       # what is on screen
-$SCRIPT stop  NAME [--no-exit]                              # /exit then kill
+$SCRIPT stop  NAME [--no-exit]                              # clear composer, /exit, then kill
 $SCRIPT list                                                # live hublot sessions
 ```
 

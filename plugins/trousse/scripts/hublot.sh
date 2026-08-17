@@ -19,7 +19,8 @@
 #
 # VERBS
 #   start NAME [--cwd DIR] [--unset VAR]... [--] CMD...   launch under tmux
-#   keys  NAME TEXT [--no-enter]                          type into it
+#   keys  NAME TEXT [--no-enter]                          type into it (literal)
+#   key   NAME KEY [KEY...]                               named keys: Down Escape PPage ...
 #   enter NAME                                            bare Enter (confirm a dialog)
 #   read  NAME [-n LINES] [--all]                         what is on screen now
 #   wait  NAME REGEX [TIMEOUT_S]                          block until it appears
@@ -93,8 +94,24 @@ cmd_keys() {
     local enter=Enter
     [[ "${1:-}" == "--no-enter" ]] && enter=""
     local s; s=$(session_of "$name")
-    if [[ -n "$enter" ]]; then tmux send-keys -t "$s" "$text" Enter
-    else tmux send-keys -t "$s" "$text"; fi
+    # -l sends TEXT literally, so prose that happens to be a tmux key name
+    # ("Enter", "Space", "Down") is typed rather than interpreted. Named
+    # keys are `key`'s job.
+    tmux send-keys -t "$s" -l "$text"
+    if [[ -n "$enter" ]]; then tmux send-keys -t "$s" Enter; fi
+}
+
+# Named keys for driving TUI menus (/config, /hooks): each argument is a tmux
+# key name — Down, Up, Escape, PPage, NPage, Tab, Enter, C-c ... Repeat a key
+# by repeating the argument: `key probe Down Down Down Enter`. Added 2026-08-17
+# after a settings-scope investigation fell back to raw `tmux send-keys` five
+# times in one evening (carte session 0bafcb96).
+cmd_key() {
+    local name="$1"; shift
+    [[ $# -ge 1 ]] || die "key: need at least one key name"
+    local s; s=$(session_of "$name")
+    local k
+    for k in "$@"; do tmux send-keys -t "$s" "$k"; done
 }
 
 cmd_enter() { tmux send-keys -t "$(session_of "$1")" Enter; }
@@ -154,6 +171,7 @@ verb="${1:-}"; shift || true
 case "$verb" in
     start) cmd_start "$@" ;;
     keys)  cmd_keys  "$@" ;;
+    key)   cmd_key   "$@" ;;
     enter) cmd_enter "$@" ;;
     read)  cmd_read  "$@" ;;
     wait)  cmd_wait  "$@" ;;

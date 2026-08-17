@@ -212,6 +212,10 @@ Creates `.skill` file (zip format) for distribution.
 - [ ] Error handling documented
 - [ ] Dependencies explicitly listed
 - [ ] Anti-patterns section present
+- [ ] Rules carry their why — mechanism prose transfers where the rule's letter runs out: far-transfer 15/15 with whys vs 8/15 bare rules, p=0.003 (banc guidance A/B, 2026-08-03)
+- [ ] Reference skills end with a non-exhaustiveness license ("covers the common cases, not every case; reason from the whys above") — a partial spec anchored flagship models to its letter, 0/5 on an uncovered case; that one sentence restored 5/5 with zero over-extension (banc fiat A/B, 2026-08-04)
+
+*Both rows measured on private estate evals: banc `guidance/results.md` + `fiat/results.md`; narrative write-up in model-minds `experiment-guidance-style-ab.md`.*
 
 ### Workflow
 - [ ] Clear phases/steps with success criteria

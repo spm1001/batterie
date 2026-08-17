@@ -214,6 +214,8 @@ Creates `.skill` file (zip format) for distribution.
 - [ ] Anti-patterns section present
 - [ ] Rules carry their why — mechanism prose transfers where the rule's letter runs out: far-transfer 15/15 with whys vs 8/15 bare rules, p=0.003 (banc guidance A/B, 2026-08-03)
 - [ ] Reference skills end with a non-exhaustiveness license ("covers the common cases, not every case; reason from the whys above") — a partial spec anchored flagship models to its letter, 0/5 on an uncovered case; that one sentence restored 5/5 with zero over-extension (banc fiat A/B, 2026-08-04)
+- [ ] Claims about a pinned environment carry per-claim provenance — verification state plus the exact command to re-check, `[not smoke-tested at 0.19.0]` style, so a reader knows which claims to re-verify before relying on them (DAAF svy audit, 2026-08-12)
+- [ ] Content curates the pinned environment and the data, never a famous library — training weights already carry the library (a ~25k-token polars skill measured ~95% already in Gen-5 weights, while a survey skill documenting live-verified installed-version behaviour supplied what no training run can — DAAF audit, 2026-08-12)
 
 *Both rows measured on private estate evals: banc `guidance/results.md` + `fiat/results.md`; narrative write-up in model-minds `experiment-guidance-style-ab.md`.*
 
@@ -223,6 +225,7 @@ Creates `.skill` file (zip format) for distribution.
 - [ ] Integration points with other skills explicit
 - [ ] Verification/validation included
 - [ ] Quick reference for common operations
+- [ ] Recipes don't silently narrow attention — enumerated read-lists are marked as floors ("sweep everything; these are where the gold usually sits") or preceded by an explicit sweep step; a skill's map becomes the model's blind spots (skilled runs read 0% of an unlisted inbox that bare runs read 100% — accomplis coaching eval, 2026-08-05; register-principles P9)
 
 ### Discovery
 - [ ] Lifecycle positioning (before/first/required) used appropriately
@@ -377,3 +380,5 @@ See `references/sharing-scan.md` for triage guidelines.
 - `references/register-principles.md` — Emotional register guidelines for instructional text
 - `references/sharing-scan.md` — Sharing triage guidelines
 - `references/dot-graphs.md` — DOT graph syntax for workflow diagrams
+- `references/cowork-environment.md` — Desktop Cowork environment, for skills that must run there
+- `references/cowork-cloud.md` — cloud (remote) Cowork environment — different surface again: no hooks, no plugin CLIs

@@ -96,6 +96,17 @@ If hooks or skills report on token usage, context percentage, or remaining capac
 | "Context exhaustion" | "Context capacity" or "context space" |
 | Countdown language | Factual numbers without emotional framing |
 
+### P9: Mark lists as floors, not fences
+
+A different channel from P1–P8: register governs how *carefully* an agent works; topology governs *where it looks*. A recipe that enumerates places or steps implicitly closes the world — the skill's map becomes the model's blind spots. Measured (accomplis coaching eval, 2026-08-05, Sonnet n=5): the skill-guided run read only the containers the skill's structure map named — the inbox that every bare run read, no skilled run touched (0% vs 100%), and judge scores fell 0.92 → 0.70. A regression the skill itself caused.
+
+The fix costs one sentence: state the principle the list serves, and mark the list as a floor.
+
+| Instead of | Write |
+|------------|-------|
+| "Read sections A, B and C" | "Sweep everything first — A, B and C are where the gold usually sits" |
+| A bare container list in a recipe | The same list prefaced by the question it answers, so an unlisted place still gets judged by the principle |
+
 ## Applying These Principles
 
 ### In skill files

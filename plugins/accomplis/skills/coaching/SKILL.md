@@ -112,6 +112,8 @@ Desired Outcomes (project)                    Projects - Toolmaking (project)
 
 Record what you find and use it for the rest of the session rather than re-deriving. When coaching a new user, the sections-as-outcomes layout is the pattern to *recommend* — but read before you write.
 
+**A project literally named like "Desired Outcomes" may be the MIRROR, not the canonical home.** Some users run a sync automation that twins a personal outcomes project with a workspace board — and the workspace twin often carries the outcome-shaped name, which is exactly what lures a create onto the wrong side. Before creating an outcome, check for a twin project with near-identical task lists (one personal, one workspace); if a pair exists, find the automation (`systemctl --user list-units | grep -iE 'todoist|sync'`, launchd agents, cron) and read its unit description — it usually names the canonical side ("mirror team-assigned-to-me tasks with personal Projects-Work"). Edits and creates go to the canonical side; the robot carries them across. When in doubt, ask — a mis-sided outcome costs a delete-and-recreate, because the API won't move it (see Moving Tasks below).
+
 ### Workspace vs Personal Projects
 
 The CLI auto-detects workspace (team) projects and filters accordingly:
@@ -141,6 +143,8 @@ accomplis tasks --project "Shared Project" --team
 # Specific person
 accomplis tasks --project "Shared Project" --assignee "Full Name"
 ```
+
+**A task you just created in a workspace project is invisible to the default view.** API-created tasks arrive with no assignee, and the default workspace filter shows assigned-to-you only — so your own fresh create reads as "it's gone." It isn't: fetch it directly by id (`accomplis task <id>`), which is also the reliable existence check whenever a workspace listing comes back suspiciously empty. When creating tasks others should see, say so and have the user assign an owner promptly — unassigned cards hide from everyone's default view, not just yours.
 
 ### GTD Contexts Are Usually Projects
 
@@ -318,6 +322,14 @@ When delegating an outcome:
 
 **This governs your recommendations, not just your tool calls.** In review prose, the phrase to reach for is "complete it with a note" — for duplicates, dead items and drifted somedays alike. A user who hears "kill it" or "write it off" deletes history the system was preserving; completion resolves the item and keeps the record.
 
+### Moving Tasks — Verify, Don't Trust
+
+**The Todoist API refuses moves across the personal↔workspace boundary, and the refusal can be silent** — the task simply stays put while nothing errors in your output path. So a move is only done when the re-fetch says so: after any `update --project`, fetch the task again and check `project_id` changed. For a genuine cross-boundary relocation, the working recipe is create-fresh on the destination side, then delete (not complete) the mis-sided original — a never-real duplicate shouldn't enter the completion record.
+
+### Chasing a Waiting For — Discover the User's Protocol
+
+Some users maintain their Waiting For list so that **created-at means last-chased**: the list sorts oldest-first, and a chase is Todoist's Duplicate (minting a fresh card at today's date) followed by completing the old one. Under that discipline, updating a card in place after a chase silently breaks the queue — the card looks longer-unchased than it is. Before touching Waiting For cards, discover whether the user runs this pattern (ask, or look for completed near-duplicates whose notes say "chased"); if they do, chase the house way: add the fresh card, complete the old with a dated note. It's a pattern worth *recommending* too — the field the view sorts on becomes the field the discipline maintains.
+
 ### Anti-Patterns
 
 | Bad Practice | Why Wrong | Better |
@@ -327,6 +339,7 @@ When delegating an outcome:
 | Completing without reflection | Loses learning | Prompt for resolution notes |
 | Joint ownership | No clear driver, item drifts | One owner per outcome |
 | No next action on active outcome | Outcome stalls invisibly | Every active outcome needs at least one next action |
+| Trusting a cross-project move | Personal↔workspace moves are refused silently | Re-fetch the task; check `project_id` actually changed |
 
 ## Review Cadences
 

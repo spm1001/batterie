@@ -308,6 +308,8 @@ def do(
     recurrence: str | list[str] | None = None,
     send_updates: str | None = None,
     duration: int | None = None,
+    properties: dict[str, str] | None = None,
+    color: str | None = None,
 ) -> dict[str, Any]:
     """Act on Google Workspace."""
     # Build log params — include operation and non-None values that matter,
@@ -324,6 +326,7 @@ def do(
         ("attendees", attendees), ("time_min", time_min), ("time_max", time_max),
         ("location", location), ("meet", meet), ("recurrence", recurrence),
         ("send_updates", send_updates), ("duration", duration),
+        ("properties", properties), ("color", color),
     ]:
         if v is not None and v is not False:
             call_params[k] = v
@@ -378,6 +381,7 @@ def do(
         "attendees": attendees, "time_min": time_min, "time_max": time_max,
         "location": location, "meet": meet, "recurrence": recurrence,
         "send_updates": send_updates, "duration": duration,
+        "properties": properties, "color": color,
     }
 
     # Validation, metadata prefetch, and execution live in tools/dispatch.py.

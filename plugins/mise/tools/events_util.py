@@ -226,6 +226,61 @@ def normalise_attendees(attendees: list[str] | str) -> list[str]:
     return emails
 
 
+# The classic event palette (colors.get 'event' map) — fixed and global, so
+# enumerable here without the calendars-resource scope mise doesn't hold.
+# Labels (eventLabelId) are deliberately NOT surfaced: the palette lives on
+# calendars.get (403 on our scopes) and the write accepts an unknown id and
+# enriches it to a UUID — probed 2026-08-19, mise-kawegu.
+EVENT_COLORS = {
+    "1": "lavender", "2": "sage", "3": "grape", "4": "flamingo",
+    "5": "banana", "6": "tangerine", "7": "peacock", "8": "graphite",
+    "9": "blueberry", "10": "basil", "11": "tomato",
+}
+_COLOR_BY_NAME = {name: cid for cid, name in EVENT_COLORS.items()}
+
+
+def validate_color(color: Any) -> str:
+    """Colour input (id or name, either case) → colorId string.
+
+    Raises teaching ValueError naming the whole palette — eleven entries is
+    small enough to hand the caller the answer inside the refusal.
+    """
+    text = str(color).strip().lower()
+    if text in EVENT_COLORS:
+        return text
+    if text in _COLOR_BY_NAME:
+        return _COLOR_BY_NAME[text]
+    palette = ", ".join(f"{cid}={name}" for cid, name in EVENT_COLORS.items())
+    raise ValueError(f"color must be one of the event palette: {palette}.")
+
+
+def validate_properties(properties: Any) -> dict[str, str]:
+    """Caller programme keys → a clean extendedProperties.private dict.
+
+    Values are coerced to str (a programme year arriving as an int is not an
+    error); keys must be non-empty strings WITHOUT '=' — the equals sign is
+    the privateExtendedProperty filter's own key/value separator, so a key
+    containing one can never be queried back. Raises teaching ValueError.
+    """
+    if not isinstance(properties, dict):
+        raise ValueError(
+            "properties must be an object of key:value pairs, e.g. "
+            "{'mise:programme': '1to1-2026'}."
+        )
+    cleaned: dict[str, str] = {}
+    for key, value in properties.items():
+        if not isinstance(key, str) or not key.strip():
+            raise ValueError(f"properties keys must be non-empty strings, got {key!r}.")
+        if "=" in key:
+            raise ValueError(
+                f"properties key {key!r} contains '=' — that is the "
+                "privateExtendedProperty filter's separator, so the key could "
+                "never be queried. Use ':' or '.' instead."
+            )
+        cleaned[key.strip()] = str(value)
+    return cleaned
+
+
 def validate_send_updates(send_updates: str | None) -> str | None:
     """Pass through a valid sendUpdates value; raise teaching ValueError else."""
     if send_updates is None:

@@ -172,7 +172,7 @@ Each line in a `.jsonl` file is one JSON object. The `.type` field discriminates
 | `saved_hook_context` | Persisted hook output | Yes |
 | `ai-title` | Auto-generated session title, in `aiTitle`. **This is what `claude --resume` shows you** | No |
 | `bridge-session` | Remote Control association: `bridgeSessionId` (a `cse_…` id), `lastSequenceNum`, owner uuids | No |
-| `attachment` | Injected content, chiefly hook output — `attachment.{type,hookName,hookEvent,content}` | Yes |
+| `attachment` | Injected context — `.attachment.type` discriminates ~10 subtypes; hook output lives here (see "attachment entries" below) | Yes |
 | `permission-mode` | Permission mode in force, in `permissionMode` | No |
 | `mode` | Session mode, e.g. `normal`, in `mode` | No |
 | `atis-latch` | Purpose not established. Carries an `atis` string, empty in every sample seen | No |
@@ -297,6 +297,22 @@ No uuid, parentUuid, timestamp, version, or sessionId. Three fields only.
 - `local_command`: `{content: "...", level: "info"}` — slash commands
 
 ---
+
+### attachment entries
+
+`.attachment.type` discriminates many subtypes — measured across one 2026-08 session: `total_tokens_reminder` (299), `hook_additional_context` (117), `command_permissions`, `queued_command`, `hook_success`, `edited_text_file`, `hook_cancelled`, `deferred_tools_delta`, `skill_listing`, `ultra_effort_enter`.
+
+**Hook output lives here, and reading it structurally is what makes the read echo-proof.** A `hook_success` attachment carries `{hookEvent, hookName, command, stdout, stderr, exitCode, durationMs, toolUseID}`, so what a SessionStart hook actually printed is:
+
+```bash
+jq -r 'select(.type=="attachment" and .attachment.type=="hook_success"
+  and .attachment.hookEvent=="SessionStart") | .attachment.stdout' FILE.jsonl
+```
+
+Two measured cautions (2026-08-22, the handoff-routing analysis over 6,257 sessions):
+
+- **Never grep the raw file for hook-output markers instead.** Tool results and prose quote hook output freely — one session carried 20 spurious `HANDOFF=` strings in tool results and zero in its actual hook output. A raw grep counts echoes as the real thing; the attachment filter is structural.
+- **A resumed session's first SessionStart attachment is the resume-fire**, which skips the briefing by design. Take the first hook whose stdout carries the briefing banner, not `hooks[0]` — the naive choice misread 5 sessions as briefing-blind before this was caught.
 
 ## jq Recipes (when deglacer isn't enough)
 

@@ -26,7 +26,13 @@ You are working with Claude Code session data. This includes:
 - **Building tooling** — anything that reads `~/.claude/projects/` session data
 - **Debugging session format** — understanding why a jq query returns nothing
 
-**Do NOT guess at the schema.** The CC JSONL format has multiple entry types, triple-duty `user` entries, streaming-duplicated `message.id`s, and inconsistent field presence across versions. This reference is the source of truth.
+**Do NOT guess at the schema.** The CC JSONL format has multiple entry types, triple-duty `user` entries, streaming-duplicated `message.id`s, and inconsistent field presence across versions. This reference is the best record we have — and deliberately not called complete, because on 2026-08-22 a session trusted it as exhaustive and found **six** live entry types it did not list. New types arrive with CC releases and nothing announces them. Cost one command to discover:
+
+```bash
+jq -r '.type' SESSION.jsonl | sort | uniq -c | sort -rn   # run this FIRST on an unfamiliar session
+```
+
+Anything the table below doesn't name is new, not impossible. Sample its keys (`jq -c 'select(.type=="x") | [keys[]]'`) rather than assuming a shape, and add the row.
 
 ## When NOT to Use
 
@@ -164,6 +170,18 @@ Each line in a `.jsonl` file is one JSON object. The `.type` field discriminates
 | `file-history-snapshot` | File backup state | No |
 | `pr-link` | Created PR reference | Yes |
 | `saved_hook_context` | Persisted hook output | Yes |
+| `ai-title` | Auto-generated session title, in `aiTitle`. **This is what `claude --resume` shows you** | No |
+| `bridge-session` | Remote Control association: `bridgeSessionId` (a `cse_…` id), `lastSequenceNum`, owner uuids | No |
+| `attachment` | Injected content, chiefly hook output — `attachment.{type,hookName,hookEvent,content}` | Yes |
+| `permission-mode` | Permission mode in force, in `permissionMode` | No |
+| `mode` | Session mode, e.g. `normal`, in `mode` | No |
+| `atis-latch` | Purpose not established. Carries an `atis` string, empty in every sample seen | No |
+
+**Two traps in the rows above, both measured 2026-08-22 on CC 2.1.239/2.1.240.**
+
+**`ai-title` is absent from phone-spawned sessions, which makes them anonymous locally.** A session created from the Claude mobile app records `entrypoint=sdk-cli` and never gets an `ai-title`; the title you see in the app lives server-side only. So it shows up nameless in `claude --resume` and you must pass its id explicitly. An interactive session (`entrypoint=cli`) usually does get one — but not always, so absence of a title is not proof of a phone origin. This cost a real session its work: three duplicate phone sessions were archived to save compute, and identifying which had progressed furthest took eight probes because none had a name.
+
+**`bridge-session` is NOT a reliable work-id map.** It looks like the obvious way to tie a local transcript to the `cse_…` work item that created it, and it isn't: of three sessions from one phone dispatch, two had no `bridge-session` entry at all and the third named a *different* `cse_…` than the work item in the bridge log — apparently a later Remote Control re-registration after the session was resumed. Treat it as "some Remote Control association", never as provenance. To map work id to session, read the server's `--debug-file` log, or match on opening prompt and timing.
 
 ### Common Fields (on user/assistant entries)
 
@@ -351,3 +369,9 @@ done
 | Guess at field names | 39% of jq-on-.claude commands are schema discovery | Read this reference |
 | Grep with a space after the colon (`"skill": "x"`) | CC serializes JSONL **compact** — `"skill":"x"` — so the spaced pattern is a false zero that reads like absence | jq on the parsed field, or match the compact form |
 | Treat deja's list as exhaustive | Top-K, recency-weighted — common terms rank-cut older sessions | Re-probe with a rarer term before claiming absence |
+
+---
+
+## This reference is a floor, not a ceiling
+
+It covers the common cases, not every case. The schema moves with CC releases and nothing announces a new entry type, a renamed field, or a shape that changed — the six types added on 2026-08-22 had all been landing in live transcripts for a while before anyone looked. So when something here doesn't match what you are reading, believe the file and reason from the mechanisms above: discriminate on `.type` first, sample keys before assuming a shape, merge assistant content by `message.id`, and check a count against what was matched before reading a zero as an absence. Then add the row you wished had been here.

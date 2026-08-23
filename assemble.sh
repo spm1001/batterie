@@ -161,6 +161,12 @@ print('yes' if d.get('mcpServers') else 'no')
     # --delete-excluded: plugins/ is fully generated, so anything in dest
     # matching an exclude (e.g. cruft vendored before the exclude existed)
     # is stale and must go — without it, --exclude protects old cruft.
+    # /handoffs + /HANDOFF.md (2026-08-23): session handoffs are internal
+    # work notes and must NEVER ship to this public marketplace. The
+    # visible-handoffs migration (bon-sanita) moved them out from behind
+    # the /.bon exclusion and mise+sonnette handoffs went public for ~2
+    # days before a /close self-check caught it. --delete-excluded sweeps
+    # the already-vendored copies on this assemble.
     # Repo-shaped excludes are ROOT-ANCHORED (leading /): an unanchored
     # `mise/` matches at every depth and ate skills/mise/ — Desktop showed
     # "no skills" on 0.7.6. Only genuinely-anywhere patterns stay bare.
@@ -176,6 +182,7 @@ print('yes' if d.get('mcpServers') else 'no')
     # impossible; confirmed 2026-06-17). Tiny trees — checksum cost is noise.
     rsync -a --checksum --delete --delete-excluded \
       --exclude /.git --exclude /.github --exclude /.bon \
+      --exclude /handoffs --exclude /HANDOFF.md \
       --exclude /tests --exclude /docs --exclude /fixtures --exclude /bakeoff \
       --exclude /.claude-plugin/marketplace.json \
       --exclude /mise --exclude /mise-fetch --exclude /.mcp-workspace \

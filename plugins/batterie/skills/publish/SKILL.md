@@ -133,7 +133,11 @@ SessionStart hooks only fire on a full restart. (Any CLI reinstall is already li
 - **One plugin, not all:** the suite bump re-versions every plugin in the
   marketplace, but this pulls only the plugin you just shipped. The others show
   "update available" until `/batterie:update` — the "bring everything current"
-  sibling.
+  sibling. One exception: **flavour siblings of the published plugin** (e.g.
+  mise-home when publishing mise) ship the same source change in the same
+  assemble run, so the pull covers them too — tolerantly, with a printed note
+  when the sibling or its marketplace is absent on this host (they sat five
+  releases stale before this, 2026-08-24).
 - **Lazy CLI convergence (jomiwa):** when you publish a *non*-batterie source
   repo, its own `plugin.json` is also stamped to the new suite version inside the
   content commit — so that CLI's `--version` reads "the suite release that last

@@ -15,15 +15,21 @@ All tools follow a professional kitchen metaphor. Suite: **Batterie de Savoir**.
 | Browser automation | **Passe** | The pass |
 | BigQuery analysis | **Consommé** | Clarification |
 | Multi-session orchestrator | **Aboyeur** | The caller |
-| Inter-session messaging (MCP) | **Sonnette** | The bell |
+| Inter-session messaging | **Sonner** | The bell |
 | Mobile interface | **Guéridon** | The side table |
 | Natural-language BigQuery UI | **Plongeur** | The dishwasher |
 | Survey data transformation | **Mandoline** | The slicer |
 
-Sonnette rings both ways only in sessions launched with the channels flag
-(`--dangerously-load-development-channels`). Otherwise you are **send-only**:
-`send_message` and `mesh_peers` work, but inbound messages never arrive — don't
-wait on a reply you can't hear.
+Sonner addresses a **repo**, not a session id — `sonner <repo> "message"` reaches
+a live session there, or spawns one and then delivers, so it still lands as a peer
+message rather than as the user speaking. No launch flag is needed. Two things it
+cannot do for you: a provider-billed session registers with no inbox socket and is
+reachable by nothing, and Claude Code silently drops a byte-identical repeat while
+telling the sender it succeeded. So confirm receipt before relying on anything you
+sent, and load `Skill(peer-messaging)` first — it carries the rest.
+
+*Sonnette (the old conductor-mesh plugin) was delisted from the suite 2026-08-24;
+sonner supersedes it. Guidance still naming `send_message` or `mesh_peers` is stale.*
 
 ## Filesystem Zones
 

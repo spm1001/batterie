@@ -46,7 +46,6 @@ REPO_NAMES = {
     "mise": "mise-en-space",
     "accomplis": "accomplis",
     "batterie": "batterie-de-savoir",
-    "sonnette": "aboyeur",
 }
 
 REQUIRED_PLUGIN_FIELDS = {"name", "version", "description"}

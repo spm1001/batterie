@@ -155,7 +155,7 @@ Pane size: `HUBLOT_COLS` / `HUBLOT_ROWS` (default 200×50).
 ## Integration
 
 - **ardoise** — isolates *what a session knows*; hublot drives *what a session does*. Compose them to test a fresh user's onboarding, dialogs included, without a human.
-- **sonnette / mesh work** — the receive path is interactive-only, so hublot is the only honest way to verify it. Read `/tmp/conductor-bridge/{agentId}/capability` alongside the pane for the session's own send-only/bidirectional verdict.
+- **peer-message receive paths** — whether a session actually *surfaces* an inbound message is interactive-only, so hublot is the only honest way to verify it. Ring the pane with `sonner <repo> "…"` and read the screen for the peer-message framing. *(This bullet named sonnette until 2026-08-24, when it was delisted from the suite — son-pilalu. Its `/tmp/conductor-bridge/{agentId}/capability` file went with it; sonner has no send-only/bidirectional split to check, but a provider-billed session registers with no inbox socket at all, which is the equivalent thing to catch.)*
 - **bon** — when a test produces a finding, file it; when it produces a technique, extend this skill.
 
 ## Dependencies

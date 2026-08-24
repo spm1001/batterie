@@ -48,7 +48,13 @@ src/accomplis/
 ├── common.py       # Shared utilities (API client, pagination, resolution)
 ├── auth.py         # Token-based authentication
 ├── token_store.py  # Portable secrets management (env, keychain, file)
-└── flatten.py      # Subtask flattening tool (accomplis-flatten command)
+├── flatten.py      # Subtask flattening tool (accomplis-flatten command)
+└── _invlog.py      # Vendored estate invocation-log shim — every run of either
+                    # console script appends one caller-stamped JSONL line to
+                    # ~/.local/share/accomplis[-flatten]/invocations.jsonl.
+                    # Canonical copy + conformance test: spm1001/harness-ergonomics.
+                    # Never edit here; re-vendor from canonical. auth --token is
+                    # REDACTED before logging — keep it that way (erg-tebapi).
 ```
 
 Entry points defined in `pyproject.toml`:

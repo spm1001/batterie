@@ -20,8 +20,10 @@ Not to be confused with **batterie-de-savoir** — the two are a **source/artifa
 | mise | mise-en-space |
 | accomplis | accomplis |
 | sonnette | aboyeur |
+| sonner | sonner |
+| passe | passe |
 
-Retired from distribution: garde-manger (decommissioned 2026-06-03), tafelmusik (unvendored 2026-06-10 — too experimental to publish; the source repo lives on), passe (delisted 2026-07-07, `bds-wobari` — browser infra, not a knowledge plugin; the CLI installs standalone from spm1001/passe and the source repo lives on).
+Retired from distribution: garde-manger (decommissioned 2026-06-03), tafelmusik (unvendored 2026-06-10 — too experimental to publish; the source repo lives on). passe was delisted 2026-07-07 (`bds-wobari`) and **relisted 2026-07-26** (`passe-mezigo`, Sameer's call) — the standalone-CLI rationale left its shard, skills and hooks with no rot-proof install route; see the note beside the PLUGINS map in `assemble.sh`.
 
 ## Two outputs, one pipeline (bds-mumise)
 

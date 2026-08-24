@@ -46,6 +46,7 @@ trousse:trousse
 mise:mise-en-space
 accomplis:accomplis
 sonnette:aboyeur
+sonner:sonner
 passe:passe
 "
 # garde-manger delisted 2026-06-10 (decommissioned per the estate audit;

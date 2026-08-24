@@ -45,10 +45,18 @@ bon:bon
 trousse:trousse
 mise:mise-en-space
 accomplis:accomplis
-sonnette:aboyeur
 sonner:sonner
 passe:passe
 "
+# sonnette DELISTED 2026-08-24 (son-pilalu, Sameer's call): superseded by sonner,
+# which shipped two suite versions earlier. Its conductor-channel MCP traffic
+# stopped 2026-07-19 (measured, harness-ergonomics data/calls-2026-08-16.csv.gz)
+# and it was already disabled-but-installed on tube. Per the de-registration note
+# below, this removal comes WITH the marketplace.json entry and plugins/sonnette
+# in the same commit — the assembler never deletes a dest dir for an unmapped
+# plugin, so leaving the directory would ship a frozen copy forever. The aboyeur
+# SOURCE repo keeps the code and its sonnette-bundle-fresh CI guard; only
+# distribution stops here.
 # garde-manger delisted 2026-06-10 (decommissioned per the estate audit;
 # Sameer confirmed). tafelmusik unvendored 2026-06-10 (too experimental to
 # publish; Sameer's call — source repo lives on, just not distributed).

@@ -19,11 +19,10 @@ Not to be confused with **batterie-de-savoir** — the two are a **source/artifa
 | trousse | trousse |
 | mise | mise-en-space |
 | accomplis | accomplis |
-| sonnette | aboyeur |
 | sonner | sonner |
 | passe | passe |
 
-Retired from distribution: garde-manger (decommissioned 2026-06-03), tafelmusik (unvendored 2026-06-10 — too experimental to publish; the source repo lives on). passe was delisted 2026-07-07 (`bds-wobari`) and **relisted 2026-07-26** (`passe-mezigo`, Sameer's call) — the standalone-CLI rationale left its shard, skills and hooks with no rot-proof install route; see the note beside the PLUGINS map in `assemble.sh`.
+Retired from distribution: garde-manger (decommissioned 2026-06-03), tafelmusik (unvendored 2026-06-10 — too experimental to publish; the source repo lives on), **sonnette (delisted 2026-08-24, `son-pilalu`, Sameer's call — superseded by sonner; the aboyeur source repo keeps the code and its bundle-freshness CI guard, only distribution stopped)**. passe was delisted 2026-07-07 (`bds-wobari`) and **relisted 2026-07-26** (`passe-mezigo`, Sameer's call) — the standalone-CLI rationale left its shard, skills and hooks with no rot-proof install route; see the note beside the PLUGINS map in `assemble.sh`.
 
 ## Two outputs, one pipeline (bds-mumise)
 

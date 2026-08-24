@@ -79,6 +79,19 @@
       ]
     },
     {
+      "name": "sonner",
+      "source": "./plugins/sonner",
+      "description": "Repo-addressed peer messaging — ring a repo and a Claude answers. CLI + peer-messaging skill.",
+      "category": "integration",
+      "homepage": "https://github.com/spm1001/sonner",
+      "keywords": [
+        "messaging",
+        "peer",
+        "cross-session",
+        "doorbell"
+      ]
+    },
+    {
       "name": "passe",
       "source": "./plugins/passe",
       "description": "Fast browser automation via Chrome DevTools Protocol — fetch pages, screenshots, forms, network capture. Auto-installs the passe CLI on first session.",

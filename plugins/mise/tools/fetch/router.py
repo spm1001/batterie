@@ -5,6 +5,7 @@ Fetch routing — ID detection and do_fetch entry point.
 from pathlib import Path
 
 from adapters.gmail import search_threads
+from workspace.manager import deposit_lock as _deposit_lock
 from adapters.gmail_browser import resolve_gmail_url_via_browser
 from adapters.gmail_ids import get_thread_id_for_draft, get_thread_id_for_rfc822_message_id
 from models import MiseError, ErrorKind, FetchResult, FetchError
@@ -13,6 +14,20 @@ from validation import extract_drive_file_id, extract_gmail_draft_id, extract_gm
 from .decorations import UrlDecorations, apply_url_decorations, parse_drive_url_decorations
 from .gmail import fetch_gmail, fetch_attachment
 from .drive import fetch_drive
+
+# Tool bodies run concurrently since the serializer was lifted (mise-bapije,
+# 2026-08-24). Deposits are the one per-resource shared state: two concurrent
+# fetches of the SAME resource share a deposit folder, and get_deposit_folder's
+# wipe-on-refetch would eat the sibling's in-flight writes — with different
+# fetch options (tabs=, thumbnails=, suggestions=) the survivor is a chimera of
+# two runs. So the dispatch below serializes per RESOLVED id: same-id fetches
+# queue (rare, correct), different-id fetches — the CC parallel-hydration case
+# the lift exists for — stay fully parallel. The registry lives in
+# workspace/manager.py so the do(source=) readers and the gmail
+# message→thread rescue converge on the same locks. One known divergence is
+# handled at the rescue itself (tools/fetch/gmail.py): a bare MESSAGE id
+# locks here on the message id, and fetch_gmail takes the resolved THREAD
+# id's lock as a second, inner take before touching the deposit.
 
 
 def detect_id_type(input_id: str) -> tuple[str, str, UrlDecorations]:
@@ -213,17 +228,18 @@ def do_fetch(file_id: str, base_path: Path | None = None, attachment: str | None
                 source, normalized_id, decorations = detect_id_type(file_id)
 
         # Single-attachment fetch (Gmail only)
-        if attachment:
-            if source != "gmail":
-                return FetchError(
-                    kind="invalid_input",
-                    message="attachment parameter only works with Gmail thread/message IDs",
-                )
-            result = fetch_attachment(normalized_id, attachment, base_path=base_path, raw=raw, thumbnails=thumbnails)
-        elif source == "gmail":
-            result = fetch_gmail(normalized_id, base_path=base_path)
-        else:
-            result = fetch_drive(normalized_id, base_path=base_path, recursive=recursive, tabs=tabs, suggestions=suggestions, thumbnails=thumbnails)
+        if attachment and source != "gmail":
+            return FetchError(
+                kind="invalid_input",
+                message="attachment parameter only works with Gmail thread/message IDs",
+            )
+        with _deposit_lock(normalized_id):
+            if attachment:
+                result = fetch_attachment(normalized_id, attachment, base_path=base_path, raw=raw, thumbnails=thumbnails)
+            elif source == "gmail":
+                result = fetch_gmail(normalized_id, base_path=base_path)
+            else:
+                result = fetch_drive(normalized_id, base_path=base_path, recursive=recursive, tabs=tabs, suggestions=suggestions, thumbnails=thumbnails)
 
         # Disclose any resolution (draft→thread, Message-ID→thread, or
         # browser-resolved a-family URL) as a cue — resolve-and-cue, never

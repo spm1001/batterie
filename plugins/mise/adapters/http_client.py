@@ -32,6 +32,7 @@ QueryParamsType = dict[str, Any] | list[tuple[str, str]] | None
 
 import json
 import logging
+import threading
 from pathlib import Path
 
 import httpx
@@ -399,17 +400,35 @@ class MiseSyncClient:
         )
         token_path = resolve_token_path(TOKEN_FILE)
         self._credentials = _load_and_diagnose_credentials(token_path)
+        # Single-flight refresh: tool bodies run on concurrent worker threads
+        # since the serializer lift (mise-bapije, 2026-08-24). Google tolerates
+        # a double refresh, so a stampede was benign-by-argument; the lock makes
+        # it safe-by-construction — one thread refreshes, siblings re-check
+        # validity under the lock and skip. It also covers the dead-grant
+        # reload path, which SWAPS self._credentials and re-resolves the
+        # identity cue: unlocked, two threads could interleave that swap.
+        # (The async client needs none of this: one event loop, and its
+        # refresh call blocks the loop, so no interleaving inside refresh.)
+        self._refresh_lock = threading.Lock()
         # Resolve authenticated identity once, eagerly. Keeps response
         # serialisation pure — to_dict() never triggers HTTP.
         from cues_util import resolve_user_email_eager
         resolve_user_email_eager(self, token_path)
 
     def _ensure_valid_token(self) -> None:
-        """Refresh the access token if expired."""
+        """Refresh the access token if expired (single-flight under the lock)."""
         if not self._credentials.valid:
-            self._refresh_or_reload()
+            with self._refresh_lock:
+                if not self._credentials.valid:  # a sibling may have refreshed
+                    self._refresh_or_reload_locked()
 
     def _refresh_or_reload(self) -> None:
+        """Serialized entry for callers that must force a refresh (the 401
+        retry), where a validity re-check would wrongly skip."""
+        with self._refresh_lock:
+            self._refresh_or_reload_locked()
+
+    def _refresh_or_reload_locked(self) -> None:
         """Refresh the access token; on a dead grant, re-read the token file.
 
         Credentials load once at client creation, so a long-running server
@@ -445,13 +464,20 @@ class MiseSyncClient:
                     + " Once a fresh token lands, this server picks it up on "
                     "the next call — no restart needed."
                 )
+            # The new grant may belong to a different account. Clear
+            # identity-derived caches BEFORE swapping the credentials in:
+            # sibling threads skip this lock the moment the new credentials
+            # look valid, so any window must read as "identity unknown"
+            # (enrichment skips honestly) — never the OLD account's email or
+            # directory profiles stamped beside the NEW account's data (cold
+            # review, mise-bapije 2026-08-24).
+            from adapters.people import clear_profile_cache
+            from cues_util import clear_user_email_cache, resolve_user_email_eager
+            clear_user_email_cache()
+            clear_profile_cache()
             self._credentials = fresh
             if not self._credentials.valid:
                 self._credentials.refresh(GoogleAuthRequest())
-            # The new grant may belong to a different account — re-resolve so
-            # the _identity cue stays honest (best-effort inside).
-            from cues_util import clear_user_email_cache, resolve_user_email_eager
-            clear_user_email_cache()
             resolve_user_email_eager(self, token_path)
 
     def _auth_headers(self) -> dict[str, str]:
@@ -683,6 +709,7 @@ def clear_http_client() -> None:
 
 # Sync client — for Phase 1 (adapter migration while tools stay sync)
 _sync_client: MiseSyncClient | None = None
+_sync_client_mint = threading.Lock()
 
 
 def get_sync_client() -> MiseSyncClient:
@@ -690,10 +717,17 @@ def get_sync_client() -> MiseSyncClient:
 
     Phase 1 only — used during adapter migration. When the full chain
     goes async, switch to get_http_client() and remove this.
+
+    Minted under a lock: tool bodies run concurrently (mise-bapije), and an
+    unlocked check-then-act here let a first-burst pair construct two clients
+    — two httpx pools (the loser's never closed), two credential loads.
+    Double-checked so the steady state stays lock-free.
     """
     global _sync_client
     if _sync_client is None:
-        _sync_client = MiseSyncClient()
+        with _sync_client_mint:
+            if _sync_client is None:
+                _sync_client = MiseSyncClient()
     return _sync_client
 
 

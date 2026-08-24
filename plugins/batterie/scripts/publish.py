@@ -67,6 +67,15 @@ CLI_REPOS = {
     "accomplis": ("accomplis", ""),
 }
 
+# Flavour siblings: one source repo, several published plugins. The assemble
+# run ships them ALL, but the pull below covers only the plugin being
+# published — so a sibling's local install goes silently stale on every
+# publish (mise-home sat five releases behind mise before anyone noticed,
+# 2026-08-24). published plugin name -> [(sibling plugin, its marketplace)].
+FLAVOUR_SIBLINGS = {
+    "mise": [("mise-home", "batterie-home")],
+}
+
 
 def die(msg: str) -> "NoReturn":  # type: ignore[name-defined]
     print(f"error: {msg}", file=sys.stderr)
@@ -595,6 +604,26 @@ def main() -> int:
                       f"plugin update skipped (CLI reinstall still runs)")
             elif verdict == "fail":
                 checked(cp, "plugin update")
+        # Flavour siblings shipped in the same assemble run: pull them too,
+        # tolerantly — a host without the sibling (or its private marketplace)
+        # skips with a printed note, never silently and never fatally.
+        for sib_name, sib_market in FLAVOUR_SIBLINGS.get(name, []):
+            cp = run(["claude", "plugin", "marketplace", "update", sib_market],
+                     dry=dry, capture=True, env=claude_env)
+            if cp is not None and cp.returncode != 0:
+                print(f"  note: marketplace {sib_market} not reachable on this "
+                      f"host — {sib_name} pull skipped (/batterie:update later)")
+                continue
+            cp = run(["claude", "plugin", "update", f"{sib_name}@{sib_market}"],
+                     dry=dry, capture=True, env=claude_env)
+            if cp is not None:
+                verdict = plugin_update_disposition(
+                    cp.returncode, f"{cp.stdout or ''}{cp.stderr or ''}")
+                if verdict == "skip":
+                    print(f"  note: {sib_name} not installed on this host — "
+                          f"sibling pull skipped")
+                elif verdict == "fail":
+                    checked(cp, f"plugin update {sib_name}")
         if cli:
             binary, extras = cli
             # bds-zelobu / the weaning: reinstall from git+https (the artifact

@@ -233,6 +233,16 @@ incremental updates. Merge content blocks by `message.id`, dedup
 
 **DRAGON: `stop_reason` is null in older sessions** (pre-v2.1.79).
 
+**`requestId` is the only thing that names the billing lane.** Nothing in the JSONL records the provider, and model ids are *identical* across providers — a `claude-opus-5` turn looks the same whether the Anthropic API or Vertex served it. But **Vertex stamps `requestId` as `req_vrtx_…`** while everything else uses a bare `req_…`, so that one prefix splits any historical usage or cost analysis by lane. `deglacer.billing_lane(entry)` returns `'vertex' | 'other' | None`, and `--stats` reports the split.
+
+Measured 2026-08-26 over 6,347 sessions and ~499k assistant entries: exactly those two shapes, no third. Five things to hold, four of them learned the hard way:
+
+- **`'other'`, not `'anthropic-api'`.** This corpus contains no Bedrock or Foundry traffic, so what those stamp is unmeasured. On an estate that uses them, a bare `req_` may not mean the Anthropic API.
+- **Count distinct `requestId`s, not entries.** CC streams one response across several entries sharing a `message.id` *and* a `requestId`; counting lines reports three requests where one was made.
+- **No `requestId` is not a lane.** Local and synthetic responses (`model: "<synthetic>"`) carry none — that means no API request was made, not that some other provider served it. ~2,600 such entries in this corpus.
+- **The repo is NOT a proxy for the lane, however much it looks like one.** Tempting control, and it fails: the three repos here carrying gitignored Vertex billing pins measure 0%, 31% and 73% Vertex, because the pins landed only days before the census and different wrappers get used in the same directory. Ground truth comes from `claude-whoami` (which names the route *and* the transcript) or from a probe against the provider, not from `cwd`.
+- **Don't `grep` the raw file for `req_vrtx_`** — the anti-pattern table's echo-hit warning bites here specifically. A session that merely *discusses* Vertex has the string all over its tool results: searching for it during this very investigation returned the session doing the searching. Read `requestId` on `assistant` entries structurally.
+
 ### user entries (TRIPLE DUTY)
 
 The `user` type serves three purposes. Discriminate with:

@@ -7,7 +7,9 @@ description: >
   and `deglacer` CLI tool, plus routing to `deja` ranked content search — prevents the
   54-attempt fumble pattern where Claudes guess
   at field names. Triggers on 'what happened last session', 'find when we discussed',
-  'parse session', 'read conversation', 'session history', 'token usage', 'deglacer', 'deja'.
+  'parse session', 'read conversation', 'session history', 'token usage', 'deglacer', 'deja',
+  'resume a teleport session', 'translate a session id',
+  "this session isn't in the --resume list".
   Do NOT use for git history (use git log) or your own current-session context. (user)
 allowed-tools: [Bash, Read, Grep, Glob]
 ---
@@ -130,7 +132,17 @@ Sessions live at:
 ~/.claude/projects/{encoded-cwd}/{session-uuid}.jsonl
 ```
 
-Where `{encoded-cwd}` replaces `/` with `-` in the project path.
+Where `{encoded-cwd}` replaces `/` with `-` in the project path. **That encoding is
+one-way — never decode it back.** Every `/` became a `-`, so a repo whose name
+contains a dash is unrecoverable: `-home-user-repos-acme-data-tools` decodes to
+`.../acme/data/tools`, which does not exist. A first draft of `teleport-id.sh` printed
+exactly that as a `cd` target. Read `.cwd` off the transcript instead — it is on every
+`user` and `assistant` entry:
+
+```bash
+sed -n '1,60p' SESSION.jsonl | jq -r 'select(.cwd) | .cwd' | head -1
+```
+
 Subagent transcripts: `{session-uuid}/subagents/agent-{id}.jsonl`.
 
 **Find recent sessions:**
@@ -179,9 +191,34 @@ Each line in a `.jsonl` file is one JSON object. The `.type` field discriminates
 
 **Two traps in the rows above, both measured 2026-08-22 on CC 2.1.239/2.1.240.**
 
-**`ai-title` is absent from phone-spawned sessions, which makes them anonymous locally.** A session created from the Claude mobile app records `entrypoint=sdk-cli` and never gets an `ai-title`; the title you see in the app lives server-side only. So it shows up nameless in `claude --resume` and you must pass its id explicitly. An interactive session (`entrypoint=cli`) usually does get one — but not always, so absence of a title is not proof of a phone origin. This cost a real session its work: three duplicate phone sessions were archived to save compute, and identifying which had progressed furthest took eight probes because none had a name.
+**`ai-title` is absent from phone-spawned sessions, which makes them anonymous locally.** A session created from the Claude mobile app records `entrypoint=sdk-cli` and never gets an `ai-title`; the title you see in the app lives server-side only. So it shows up nameless in `claude --resume` and you must pass its id explicitly. An interactive session (`entrypoint=cli`) usually does get one — but not always, so absence of a title is not proof of a phone origin. This cost a real session its work: three duplicate phone sessions were archived to save compute, and identifying which had progressed furthest took eight probes because none had a name. Measured era-matched on one estate (sessions since 2026-08-15, so every one of them post-dates `ai-title` itself): **v4 UUIDs 21/25 carry an `ai-title`; v5 UUIDs 0/12.** So the picker is not filtering these out — they are nameless, and it has nothing to render. An earlier pass at this measurement sampled sessions at random and got a meaningless 0/30 against 1/30, because most of them pre-dated the field entirely: era-match the control.
 
 **`bridge-session` is NOT a reliable work-id map.** It looks like the obvious way to tie a local transcript to the `cse_…` work item that created it, and it isn't: of three sessions from one phone dispatch, two had no `bridge-session` entry at all and the third named a *different* `cse_…` than the work item in the bridge log — apparently a later Remote Control re-registration after the session was resumed. Treat it as "some Remote Control association", never as provenance. To map work id to session, read the server's `--debug-file` log, or match on opening prompt and timing.
+
+**Translating a teleport id into a local session UUID.** The phone hands you `session_01SJ6FncRfJsipguyykkbvQZ`; `claude --resume` wants a UUID. Four mechanics make that tractable (measured 2026-08-28, CC 2.1.2xx):
+
+- **`session_<body>` and `cse_<body>` are one id with two prefixes** — the base62 body is identical. The local UUID is *not* derivable from it: uuid3 and uuid5, over the nil/DNS/URL/OID/X500 namespaces, against `cse_…`, `session_…`, the bare body and the SDK URL, all miss. The namespace is private to the CC bundle. So this is a lookup, not a computation — don't burn a turn trying to hash your way there.
+- **`~/.claude/logs/bridge-transcript-cse_<body>.jsonl` carries the local UUID in `.session_id`.** Read it *structurally*. A raw grep for a UUID over that file also matches UUIDs merely quoted in its own tool output, and that echo hit made two different sessions claim one teleport id in a first draft of the tool below — the same echo-hazard as the `hook_success` row above, in a new place.
+- **Retention is short, and it is the binding constraint.** One estate held 64 programmatically-spawned sessions against 6 bridge transcripts, all from the preceding ~24h. Past that window the only surviving record is the derived title: `sed -n "s/.*derived title for session_<body>: //p" ~/.claude/logs/claude-remote-*.log*` yields the session's first prompt, which you match against local transcripts. Slower, and it needs the prompt to be distinctive.
+- **The bridge log redacts `sessionId=[REDACTED]`** in its own lines, so the log alone will not give you the UUID — only the per-session transcript and debug files do.
+
+```bash
+SCRIPT="${CLAUDE_PLUGIN_ROOT}/scripts/teleport-id.sh"
+[ -x "$SCRIPT" ] || SCRIPT=$(find ~/.claude/plugins/cache -path "*/trousse/*/scripts/teleport-id.sh" 2>/dev/null | sort -rV | head -1)
+"$SCRIPT" session_01SJ6FncRfJsipguyykkbvQZ     # prints the UUID; resume hint on stderr
+"$SCRIPT" --fallback session_01SJ…             # force the title-match path
+```
+
+**The v5 tell — spotting these sessions in the first place.** A programmatically-spawned session gets a **version-5 UUID**, where an ordinary interactive one gets a v4. Character 15 of the filename is the version nibble: `4d64fcc3-f878-`**`5`**`f74-b74e-75b4dd3a4f7a`. The mechanism is why it holds — the harness derives the id by hashing a caller-supplied session id, and a name-based hash is by definition a v5. Every v5 sampled carried `entrypoint=sdk-cli`; v4 is mixed, so **v5 implies sdk-cli but not the converse** — don't run the inference backwards. It catches teleport, Remote Control and any SDK-spawned session (scheduled jobs, email loops) alike.
+
+```bash
+SCRIPT="${CLAUDE_PLUGIN_ROOT}/scripts/remote-sessions.sh"
+[ -x "$SCRIPT" ] || SCRIPT=$(find ~/.claude/plugins/cache -path "*/trousse/*/scripts/remote-sessions.sh" 2>/dev/null | sort -rV | head -1)
+"$SCRIPT" 20      # date, uuid, cwd, first prompt — and which are still teleport-resolvable
+"$SCRIPT" -t      # only the ones a teleport id can still be translated to
+```
+
+Both scripts are bash 3.2 clean (they run on macOS's stock `/bin/bash`) and need `jq`. Filter to v5 by *filename* before calling `stat`: on a 6k-session estate that is ~60 stat calls instead of 6,000.
 
 ### Common Fields (on user/assistant entries)
 

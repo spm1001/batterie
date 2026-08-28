@@ -49,7 +49,14 @@ done
 # bridge logs — the uuid5 derivation (see teleport-id.sh) needs no transcript,
 # so this reaches sessions whose transcripts were cleaned up long ago.
 if command -v python3 >/dev/null 2>&1; then
-  rg -a -o --no-filename 'cse_[A-Za-z0-9]{20,}' "$HOME"/.claude/logs/claude-remote-*.log* 2>/dev/null \
+  if command -v rg >/dev/null 2>&1; then
+    # NB in rg the no-filename flag is --no-filename; -h is --help (and -N is --no-line-number),
+    # so a grep-style `-h` here silently prints rg's help into the map.
+    rg -a -o --no-filename 'cse_[A-Za-z0-9]{20,}' "$HOME"/.claude/logs/claude-remote-*.log* 2>/dev/null
+  else
+    # No rg (stock macOS, for one). In grep, -h IS the no-filename flag.
+    command grep -Eho 'cse_[A-Za-z0-9]{20,}' "$HOME"/.claude/logs/claude-remote-*.log* 2>/dev/null
+  fi \
     | sort -u \
     | python3 -c '
 import sys, uuid

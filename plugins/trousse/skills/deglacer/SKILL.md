@@ -66,6 +66,8 @@ deglacer --with-thinking SESSION.jsonl  # include thinking blocks
 deglacer --last 5 SESSION.jsonl         # last 5 turns only
 deglacer --json SESSION.jsonl           # structured JSON output
 deglacer --stats SESSION.jsonl          # session statistics (tokens, models, tools)
+deglacer --stats --tools SESSION.jsonl  # + which file/command/host each call went to
+deglacer --doctor SESSION.jsonl         # does the parser still fit the format? exits 1 if flagged
 deglacer --timeline SESSION.jsonl       # timestamped turn log
 deglacer --find "search term"           # search across recent sessions
 deglacer --recent                       # list recent sessions (default 20)
@@ -212,8 +214,8 @@ Each line in a `.jsonl` file is one JSON object. The `.type` field discriminates
 - **The bridge log redacts `sessionId=[REDACTED]`** in its own lines, so the log alone will not give you the UUID — only the per-session transcript and debug files do.
 
 ```bash
-SCRIPT="${CLAUDE_PLUGIN_ROOT}/scripts/teleport-id.sh"
-[ -x "$SCRIPT" ] || SCRIPT=$(find ~/.claude/plugins/cache -path "*/trousse/*/scripts/teleport-id.sh" 2>/dev/null | sort -rV | head -1)
+SCRIPT="${CLAUDE_PLUGIN_ROOT}/skills/deglacer/scripts/teleport-id.sh"
+[ -x "$SCRIPT" ] || SCRIPT=$(find ~/.claude/plugins/cache -path "*/skills/deglacer/scripts/teleport-id.sh" 2>/dev/null | sort -rV | head -1)
 "$SCRIPT" session_01SJ6FncRfJsipguyykkbvQZ     # prints the UUID; resume hint on stderr
 "$SCRIPT" --fallback session_01SJ…             # force the title-match path
 ```
@@ -221,8 +223,8 @@ SCRIPT="${CLAUDE_PLUGIN_ROOT}/scripts/teleport-id.sh"
 **The v5 tell — spotting these sessions in the first place.** A programmatically-spawned session gets a **version-5 UUID**, where an ordinary interactive one gets a v4. Character 15 of the filename is the version nibble: `4d64fcc3-f878-`**`5`**`f74-b74e-75b4dd3a4f7a`. The mechanism is why it holds — the harness derives the id by hashing a caller-supplied session id, and a name-based hash is by definition a v5. Every v5 sampled carried `entrypoint=sdk-cli`; v4 is mixed, so **v5 implies sdk-cli but not the converse** — don't run the inference backwards. It catches teleport, Remote Control and any SDK-spawned session (scheduled jobs, email loops) alike.
 
 ```bash
-SCRIPT="${CLAUDE_PLUGIN_ROOT}/scripts/remote-sessions.sh"
-[ -x "$SCRIPT" ] || SCRIPT=$(find ~/.claude/plugins/cache -path "*/trousse/*/scripts/remote-sessions.sh" 2>/dev/null | sort -rV | head -1)
+SCRIPT="${CLAUDE_PLUGIN_ROOT}/skills/deglacer/scripts/remote-sessions.sh"
+[ -x "$SCRIPT" ] || SCRIPT=$(find ~/.claude/plugins/cache -path "*/skills/deglacer/scripts/remote-sessions.sh" 2>/dev/null | sort -rV | head -1)
 "$SCRIPT" 20      # date, uuid, cwd, first prompt — and which are still teleport-resolvable
 "$SCRIPT" -t      # only the ones a teleport id can still be translated to
 ```

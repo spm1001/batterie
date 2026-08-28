@@ -45,6 +45,22 @@ for b in "$HOME"/.claude/logs/bridge-transcript-cse_*.jsonl; do
   [ -n "$u" ] && printf '%s\t%s\n' "$u" "$cse" >> "$map"
 done
 
+# Extend the map by COMPUTING the uuid for every cse id named anywhere in the
+# bridge logs — the uuid5 derivation (see teleport-id.sh) needs no transcript,
+# so this reaches sessions whose transcripts were cleaned up long ago.
+if command -v python3 >/dev/null 2>&1; then
+  rg -a -o --no-filename 'cse_[A-Za-z0-9]{20,}' "$HOME"/.claude/logs/claude-remote-*.log* 2>/dev/null \
+    | sort -u \
+    | python3 -c '
+import sys, uuid
+NS = uuid.UUID("3ab19d7e-9f35-45c2-926e-75e271cc60b3")
+for line in sys.stdin:
+    c = line.strip()
+    if not c: continue
+    print(uuid.uuid5(NS, "https://api.anthropic.com/v1/code/sessions/" + c), c, sep="\t")
+' >> "$map" 2>/dev/null || true
+fi
+
 # Filter to v5 by filename BEFORE stat'ing — 6k sessions, ~60 candidates.
 command find "$HOME/.claude/projects" -mindepth 2 -maxdepth 2 -name '*.jsonl' 2>/dev/null \
   | awk -F/ '{ f=$NF; if (substr(f,15,1)=="5") print }' > "$cand"

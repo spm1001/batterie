@@ -195,11 +195,20 @@ Each line in a `.jsonl` file is one JSON object. The `.type` field discriminates
 
 **`bridge-session` is NOT a reliable work-id map.** It looks like the obvious way to tie a local transcript to the `cse_…` work item that created it, and it isn't: of three sessions from one phone dispatch, two had no `bridge-session` entry at all and the third named a *different* `cse_…` than the work item in the bridge log — apparently a later Remote Control re-registration after the session was resumed. Treat it as "some Remote Control association", never as provenance. To map work id to session, read the server's `--debug-file` log, or match on opening prompt and timing.
 
-**Translating a teleport id into a local session UUID.** The phone hands you `session_01SJ6FncRfJsipguyykkbvQZ`; `claude --resume` wants a UUID. Four mechanics make that tractable (measured 2026-08-28, CC 2.1.2xx):
+**Translating a teleport id into a local session UUID.** The phone hands you `session_01SJ6FncRfJsipguyykkbvQZ`; `claude --resume` wants a UUID. The translation is a one-line computation; the rest is fallbacks for when it stops being one (measured 2026-08-28, CC 2.1.250):
 
-- **`session_<body>` and `cse_<body>` are one id with two prefixes** — the base62 body is identical. The local UUID is *not* derivable from it: uuid3 and uuid5, over the nil/DNS/URL/OID/X500 namespaces, against `cse_…`, `session_…`, the bare body and the SDK URL, all miss. The namespace is private to the CC bundle. So this is a lookup, not a computation — don't burn a turn trying to hash your way there.
+- **`session_<body>` and `cse_<body>` are one id with two prefixes.** The bundle does exactly that swap: `function Jl(e){if(!e.startsWith("session_"))return e;return"cse_"+e.slice(8)}`.
+- **The local UUID is COMPUTABLE — no logs, any age, offline.** It is a uuid5 over the SDK resume URL, with a namespace constant that lives in the CC bundle as `var Z="3ab19d7e-…"` and is used as `QY(t.href, Z)`:
+
+  ```python
+  uuid.uuid5(uuid.UUID("3ab19d7e-9f35-45c2-926e-75e271cc60b3"),
+             f"https://api.anthropic.com/v1/code/sessions/cse_{body}")
+  ```
+
+  Confirmed 6/6 against sessions that still had a bridge transcript, then **out-of-sample** on 6 more whose transcripts were gone. Three caveats: `CLAUDE_CODE_REMOTE_SESSION_ID`, when set, is hashed instead of the URL; a `/clear` in a cloud session mints a new worker id; and the namespace is a *client constant*, so a future CC could move it — cross-check against a bridge transcript whenever one exists, and treat disagreement as the tell.
+- **How this was nearly missed, which is the transferable part.** A first pass brute-forced uuid3/uuid5 across the five standard namespaces and concluded "not derivable, it must be a lookup" — and shipped that. The namespace was in fact reachable, and one of the tried candidates was even the right one; what was wrong was the *name* being hashed (the bare id, not the resume URL). **A negative result from a search over guessed candidates is a statement about your guesses, not about the system.** When the artefact that computes the answer is on disk — a binary, a bundle, a minified blob — read it before concluding something is unknowable. `rg -a` over the CC executable took one command.
 - **`~/.claude/logs/bridge-transcript-cse_<body>.jsonl` carries the local UUID in `.session_id`.** Read it *structurally*. A raw grep for a UUID over that file also matches UUIDs merely quoted in its own tool output, and that echo hit made two different sessions claim one teleport id in a first draft of the tool below — the same echo-hazard as the `hook_success` row above, in a new place.
-- **Retention is short, and it is the binding constraint.** One estate held 64 programmatically-spawned sessions against 6 bridge transcripts, all from the preceding ~24h. Past that window the only surviving record is the derived title: `sed -n "s/.*derived title for session_<body>: //p" ~/.claude/logs/claude-remote-*.log*` yields the session's first prompt, which you match against local transcripts. Slower, and it needs the prompt to be distinctive.
+- **Bridge-transcript retention is short, which is why the computation matters.** One estate held 64 programmatically-spawned sessions against 6 bridge transcripts, all from the preceding ~24h. Past that window the only surviving record is the derived title: `sed -n "s/.*derived title for session_<body>: //p" ~/.claude/logs/claude-remote-*.log*` yields the session's first prompt, which you match against local transcripts. Slower, and it needs the prompt to be distinctive.
 - **The bridge log redacts `sessionId=[REDACTED]`** in its own lines, so the log alone will not give you the UUID — only the per-session transcript and debug files do.
 
 ```bash

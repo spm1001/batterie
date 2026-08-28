@@ -337,6 +337,28 @@ The `user` type serves three purposes. Discriminate with:
 The `input_tokens` field is ONLY the non-cached portion.
 Real input = `input_tokens + cache_creation_input_tokens + cache_read_input_tokens`.
 
+**Dedupe per request, and take the WHOLE row from the entry with the highest `output_tokens`.** The row above says to count distinct `requestId`s rather than entries, which is right and not enough: the repeated entries do **not** all carry the same usage. Output *grows* as the response streams, so keeping the first entry of each group looks like a clean dedupe and silently halves your output figure.
+
+Measured 2026-08-27 across 400 session files (5,193 requestIds, 4,422 with more than one entry): 2,487 groups — 56% — vary, 2,484 of those in `output_tokens` only, and **all 2,487 non-decreasing**. A worked group:
+
+```
+(in 2, cache_w 59726, cache_r 11007, out    5)
+(in 2, cache_w 59726, cache_r 11007, out    5)
+(in 2, cache_w 59726, cache_r 11007, out  499)   <- take this row, entire
+```
+
+The arithmetic both ways: summing raw entries overcounts totals **2.3×**; keeping the first of each group undercounts output **50.6%**. Never splice a max output onto another row's cache figures — in the rare group where input and cache move too, they move *together with* output.
+
+Two notes on the key itself. `message.id` and `requestId` partition assistant entries **identically** on this corpus (zero cross-mappings either way; 5,200 vs 5,193 distinct, the gap being entries with no `requestId`), so either works — it is the keep-one-vs-max-output choice that carries the error, not the key. And input and cache figures are stable across a group to within 0.05%: only output streams.
+
+Reference implementation: `dedupe_by_request()` in deglacer `parsing.py`. **Both a July 2026 field report and a fresh reading in August reached "the usage objects are identical" from a small sample** — 4 entries of one session, and 2 sessions respectively — and the July one nearly shipped as the fix. Widen the sample before trusting this shape.
+
+### Checking the parser still fits — `deglacer --doctor`
+
+The schema moves with CC releases and a drifted parser does not raise; it quietly reports different numbers. `deglacer --doctor FILE` reports lines read, bad-JSON and non-object lines, entry-type counts, requests vs assistant entries, and duplicates collapsed — then renders findings and **exits 1 if anything is flagged**, so it works in a pipeline.
+
+The load-bearing one is the dedupe count. **Zero duplicates collapsed on a transcript of any size means the key has stopped matching and every total is inflated** — that is the exact failure above, and the check exists because it went unnoticed for seven weeks. Run it before trusting numbers from an unfamiliar session or after a CC upgrade. Swept over 120 real sessions it flagged 8, all true positives: workflow `journal.jsonl` files (a different format — `started`/`result`, no conversation) and genuinely abandoned sessions.
+
 ### summary entries (minimal)
 
 ```json

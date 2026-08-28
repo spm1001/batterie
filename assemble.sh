@@ -47,6 +47,7 @@ mise:mise-en-space
 accomplis:accomplis
 sonner:sonner
 passe:passe
+arete:arete
 "
 # sonnette DELISTED 2026-08-24 (son-pilalu, Sameer's call): superseded by sonner,
 # which shipped two suite versions earlier. Its conductor-channel MCP traffic

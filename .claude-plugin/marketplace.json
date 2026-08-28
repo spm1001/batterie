@@ -90,6 +90,19 @@
         "cdp",
         "chrome"
       ]
+    },
+    {
+      "name": "arete",
+      "source": "./plugins/arete",
+      "description": "Move lists in and out of MindNode — a pasted list becomes a mind map, and a map comes back as Markdown. Skill only; the CLI is macOS-only.",
+      "category": "productivity",
+      "homepage": "https://github.com/spm1001/arete",
+      "keywords": [
+        "mindnode",
+        "mind-map",
+        "opml",
+        "outline"
+      ]
     }
   ]
 }

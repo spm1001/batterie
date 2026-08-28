@@ -167,6 +167,17 @@ if [[ -n "${CLAUDE_CODE_USE_VERTEX:-}" ]]; then
              ANTHROPIC_DEFAULT_SONNET_MODEL ANTHROPIC_DEFAULT_HAIKU_MODEL; do
         [[ -n "${!v:-}" ]] && VERTEX_VARS+=("$v=${!v}")
     done
+    # Per-model region pins (VERTEX_REGION_<MODEL>) must survive the wall
+    # too: without them the sandboxed claude falls back to the default
+    # region for that base model, which can be a different QUOTA POOL than
+    # the caller's session is using. Measured 2026-08-28 (mit-garni eval
+    # gate): the caller ran Fable on `global` all afternoon while the
+    # ardoise judge 429'd twice on the starved `eu` multi-region — an
+    # instrument failure indistinguishable from quota exhaustion until the
+    # region mismatch was spotted in the caller's env.
+    while IFS='=' read -r rk rv; do
+        VERTEX_VARS+=("$rk=$rv")
+    done < <(env | grep '^VERTEX_REGION_')
     # Vertex auth is gcloud ADC. env -i + a fresh HOME hides the default
     # ~/.config/gcloud path, so pin GOOGLE_APPLICATION_CREDENTIALS to the real ADC.
     ADC="${GOOGLE_APPLICATION_CREDENTIALS:-$HOME/.config/gcloud/application_default_credentials.json}"

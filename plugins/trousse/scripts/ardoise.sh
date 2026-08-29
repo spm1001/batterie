@@ -294,8 +294,21 @@ ENV_VARS=(
 )
 # Pass Vertex config + ADC through the isolation wall (auth only, like the creds copy).
 [[ ${#VERTEX_VARS[@]} -gt 0 ]] && ENV_VARS+=("${VERTEX_VARS[@]}")
-# Caller-requested --env passthroughs (explicit, named holes only).
+# Model selection passes the wall on EVERY lane (trousse-finane, 2026-08-29):
+# a model id is engine choice, not estate context — the wall isolates
+# knowledge, not horsepower. Before this, a non-Vertex caller running Fable
+# silently spawned a sandbox on the fresh-config default (measured:
+# opus[1m]) — a verifier downshift nobody chose, caught only when the human
+# asked which model the cold reader had been.
+[[ "$ON_VERTEX" == false && -n "${ANTHROPIC_MODEL:-}" ]] && ENV_VARS+=("ANTHROPIC_MODEL=$ANTHROPIC_MODEL")
+# Caller-requested --env passthroughs (explicit, named holes only; a --env
+# ANTHROPIC_MODEL=... lands later in env -i's list, so it overrides the inherit).
 [[ ${#EXTRA_ENV[@]} -gt 0 ]] && ENV_VARS+=("${EXTRA_ENV[@]}")
+# Announce the effective model either way, so an unpinned run is visible
+# rather than a silent downshift.
+_eff_model=""
+for _kv in "${ENV_VARS[@]}"; do [[ "$_kv" == ANTHROPIC_MODEL=* ]] && _eff_model="${_kv#ANTHROPIC_MODEL=}"; done
+echo "ardoise: model=${_eff_model:-<sandbox config default>}" >&2
 
 # ── Run ───────────────────────────────────────────────────────────────
 

@@ -32,6 +32,7 @@ fi
 STANDALONE_MAX=12
 OUTCOME_MAX=12
 SUGGESTED_MAX=6
+UNPROCESSED_MAX=6
 
 # === PATHS ===
 BASE_CONTEXT_DIR="$HOME/.claude/.session-context"
@@ -128,6 +129,10 @@ find_latest_in() {
     [ -d "$dir" ] || return 0
     for f in "$dir"/*.md; do
         [ -e "$f" ] || continue
+        # The ledger is an index, not a handoff — and being touched by
+        # every close and every tick it is mtime-newest, so in a dir of
+        # headerless handoffs it would WIN the ranking (essayeur, 2026-08-30).
+        case "$(basename "$f")" in LEDGER.md) continue ;; esac
         d=$(sed -n 's/^# Handoff — \([0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}\).*/\1/p' "$f" 2>/dev/null | head -1)
         [ -z "$d" ] && d="0000-00-00"
         mt=$(file_mtime "$f")
@@ -184,6 +189,69 @@ if [ -n "$LATEST_FILE" ]; then
     if [ -z "$LATEST_PURPOSE" ]; then
         LATEST_PURPOSE=$(grep -A1 "^## Done" "$LATEST_FILE" 2>/dev/null | tail -1 | sed 's/^- //' | cut -c1-60 || true)
     fi
+fi
+
+# --- Unprocessed handoffs (bon-supuko) ---
+# The sweep replaces latest-wins. Every close appends an unticked ledger
+# line ('- [ ] date [file](file) — purpose') to its handoff dir's
+# LEDGER.md; /open processes EVERY unticked line (synthesis + candidate
+# minting are batch-safe) and ticks each. Latest-wins silently dropped
+# the older of two interleaved closes — its For-Claudes-to-come never
+# synthesised, its Candidates never minted, nothing said so (the
+# two-interleaved-closes scenario, 11:00/12:30 — common-core design 2026-08-29).
+# Lines without a checkbox are legacy prior art (~/notes) and count as
+# processed; a handoff in no ledger at all is covered by latest-wins only.
+UNPROCESSED_PATHS=""
+UNPROCESSED_MISSING=0
+LEDGER_DRIFT=0
+while IFS= read -r HDIR; do
+    # The global stash serves container sessions and holds OTHER repos'
+    # history — sweeping it would synthesise foreign handoffs into this
+    # repo's understanding.md. Latest-wins still reads it, unchanged.
+    if [ "$HDIR" = "$HOME/.bon/handoffs" ]; then continue; fi
+    [ -f "$HDIR/LEDGER.md" ] || continue
+    PARSED_COUNT=0
+    while IFS= read -r TARGET; do
+        [ -n "$TARGET" ] || continue
+        PARSED_COUNT=$((PARSED_COUNT + 1))
+        case "$TARGET" in
+            /*) FPATH="$TARGET" ;;
+            *)  FPATH="$HDIR/$TARGET" ;;
+        esac
+        if [ -f "$FPATH" ]; then
+            UNPROCESSED_PATHS="${UNPROCESSED_PATHS}${FPATH}"$'\n'
+        else
+            UNPROCESSED_MISSING=$((UNPROCESSED_MISSING + 1))
+        fi
+    done < <(sed -n 's/^- \[ \][^][]*\[[^]]*\](\([^)]*\)).*/\1/p' "$HDIR/LEDGER.md")
+    # A checkbox line the parser could not read is an unticked handoff
+    # nothing will sweep — drifted format, silent-open failure direction.
+    RAW_UNTICKED=$(grep -c '^[-*] \[ \]' "$HDIR/LEDGER.md" 2>/dev/null || true)
+    RAW_UNTICKED=${RAW_UNTICKED:-0}
+    if [ "$RAW_UNTICKED" -gt "$PARSED_COUNT" ]; then
+        LEDGER_DRIFT=$((LEDGER_DRIFT + RAW_UNTICKED - PARSED_COUNT))
+    fi
+    # The un-ledgered net: a handoff file NO ledger line mentions at all —
+    # a pre-ledger plugin's close, a close that forgot its append, a
+    # hand-dropped file. Without this, one coexisting unticked line closes
+    # the latest-wins fallback and the file becomes permanently unreachable
+    # after the next ledgered close (essayeur refutation, 2026-08-30).
+    # Substring match on the basename, so drifted line formats still count
+    # as "mentioned".
+    for F in "$HDIR"/*.md; do
+        [ -e "$F" ] || continue
+        BASE=$(basename "$F")
+        # README.md: a dir-level readme is index prose, not a handoff.
+        case "$BASE" in LEDGER.md|README.md) continue ;; esac
+        if ! grep -qF "$BASE" "$HDIR/LEDGER.md"; then
+            UNPROCESSED_PATHS="${UNPROCESSED_PATHS}${F} [no ledger line — process, then ADD a ticked line for it]"$'\n'
+        fi
+    done
+done < <(handoff_read_dirs "$CWD" | awk '!seen[$0]++')
+# Oldest first (filenames lead YYYY-MM-DD-HHMM, so basename sort is
+# chronological) — the sweep processes in write order.
+if [ -n "$UNPROCESSED_PATHS" ]; then
+    UNPROCESSED_PATHS=$(printf '%s' "$UNPROCESSED_PATHS" | awk -F/ '{print $NF "\t" $0}' | sort | cut -f2-)
 fi
 
 # --- Bon context ---
@@ -305,6 +373,38 @@ echo ""
 if [ -n "$LATEST_FILE" ]; then
     echo "Last session ($LATEST_STR): $LATEST_PURPOSE"
     echo "HANDOFF=$LATEST_FILE"
+    echo ""
+fi
+
+# --- 2b. Unprocessed handoffs (bon-supuko: the sweep replaces latest-wins) ---
+if [ -n "$UNPROCESSED_PATHS" ]; then
+    UNPROCESSED_COUNT=$(printf '%s\n' "$UNPROCESSED_PATHS" | wc -l | tr -d ' ')
+    echo "Unprocessed handoffs ($UNPROCESSED_COUNT) — sweep oldest-first before draw-down, tick each ledger line:"
+    printf '%s\n' "$UNPROCESSED_PATHS" | head -n "$UNPROCESSED_MAX" | while IFS= read -r p; do
+        echo "  UNPROCESSED=$p"
+    done
+    if [ "$UNPROCESSED_COUNT" -gt "$UNPROCESSED_MAX" ]; then
+        echo "  … +$((UNPROCESSED_COUNT - UNPROCESSED_MAX)) more — see the handoffs dir's LEDGER.md"
+    fi
+    echo ""
+fi
+if [ "$UNPROCESSED_MISSING" -gt 0 ]; then
+    echo "Warning: $UNPROCESSED_MISSING unticked LEDGER.md line(s) point at files that no longer exist — find where each file went (moved room? renamed?) and fix the line before ticking it."
+    echo ""
+fi
+if [ "$LEDGER_DRIFT" -gt 0 ]; then
+    echo "Warning: $LEDGER_DRIFT unticked LEDGER.md line(s) are in a format the sweep cannot parse — normalise them to '- [ ] DATE [file](file) — purpose' or they will never be swept."
+    echo ""
+fi
+
+# --- 2c. Personal half (bon-hedatu) ---
+# The accent file carries this operator's variation-point content, read by
+# the rites at designated points (docs/ACCENT.md). Emit the path only when
+# the file exists: an absent accent is a complete rite, not a gap — no
+# nudge, no placeholder line, ever (law 1: complete-without).
+ACCENT_FILE="$HOME/.claude/mit-accent.md"
+if [ -f "$ACCENT_FILE" ]; then
+    echo "ACCENT=$ACCENT_FILE"
     echo ""
 fi
 

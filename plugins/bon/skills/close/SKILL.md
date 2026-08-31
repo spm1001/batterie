@@ -34,7 +34,7 @@ Capture what matters while context is rich, then commit and exit.
 ```
 Orient        → find scripts, verify .bon, close-context.sh → context, HANDOFF_DIR, SESSION_ID
 Reflect       → review session's work, propose Now/Bon plan → user reviews
-Act           → execute, craft handoff, commit → overnight Claude reviews
+Act           → execute, craft handoff, cold-read it, commit → overnight Claude reviews
 ```
 
 ---
@@ -66,6 +66,7 @@ The script outputs TIME, GIT, BON, LOCATION context, plus the values you'll need
 | `HANDOFF_FILE_TAKEN=<name>` | The natural filename was already on disk; `HANDOFF_FILE` is suffixed | Normally just use the suffixed name — it means this session is closing twice today. Worth a sentence if you weren't expecting it |
 | `HANDOFF_MIGRATED=<n>` (with `HANDOFF_MIGRATED_DEST`) | This repo still had handoffs in the retired `.bon/handoffs/`; the script moved them to the visible `handoffs/` (bon-sedoze) | **Stage the move in your commit** — `git mv` staged it for tracked files, but an untracked pile is now sitting as new files. Mention it in one line: their history just changed location |
 | `HANDOFF_MIGRATE_INCOMPLETE=true` | At least one legacy handoff could not be moved | Those files are no longer read by anything. Say so plainly and move them by hand — don't let it pass as a detail |
+| `BRIDGE_UNCLOSED=<file>` (with `BRIDGE_CUE`) | This repo holds an id-migration bridge doc with no dated close-out (bon-kefoba) | If the migration has landed, append one dated `Closed out YYYY-MM-DD` section saying what landed and leave the text above it alone — it is the record of what was true then. If it hasn't landed, say so in one line and move on. A bridge doc is the first thing a future reader consults about a retired id, so one still reading as in-flight sends them to do work already done |
 | `HANDOFF_DIR_SOURCE=global-fallback` | No board was found, so the handoff goes to `~/.bon/handoffs` | It won't sync anywhere. Say so, and consider whether it belongs on a real board instead |
 | `HANDOFF_DIR_SOURCE=ambiguous` (with `HANDOFF_CANDIDATE` lines, **no `HANDOFF_DIR`**) | Cwd is outside any board repo and several sibling repos sit below it — the script refuses to guess among them (bon-gojeni: recency picks whichever repo the last publish touched, not where you worked) | Placement is **work-based**: pick the candidate this session actually worked in (you know; the script can't), and write `HANDOFF_FILE` into that repo's visible `handoffs/` — the room you worked in if it has one, else the repo root. If the session's work matches none of the candidates, `~/.bon/handoffs` is the honest fallback — say so |
 
@@ -194,6 +195,8 @@ Now sort the remaining actions into three buckets:
 
 The four laws (docs/ACCENT.md) apply: no `ACCENT=` line or no `## close.personal` section → skip SILENTLY, the close is complete without it; this slot only, the spine is not overridable; a broken half is one plain line, never a banner; and NO write into the operator's own systems happens without the accent's own recorded sanction — an accent without written sanctions is read-only, however convenient the write would be.
 
+**If an accent's sanctions include ticking queue lines, read each line's DESCRIPTION before you tick it** (bon-zevajo). A tick is atomic and takes the description with it, so a second work-item parked there dies with the line, silently — that is what happened on 2026-08-30 to the "also take the five" rider, which the operator then had to re-mint by hand. A description is the sanctioned home for a *steer* (how to do that line's work, which rightly shares its fate) and the wrong home for a second work-item, which needs a line of its own first. Nothing catches this for you: a rider carries no bon id, so any join keyed on cited ids is structurally blind to it, and a queue read that pulls only each line's content never sees descriptions at all.
+
 ### Cultivate the personal half
 
 The accent grows only from observation, and this is the one place it grows (law 1's other half). If this session watched the operator do something rite-shaped and recurring BY HAND — a queue they always consult before picking work, a ranking they always impose, a path they always archive to — propose capturing it in their accent as part of the close-out: name the habit, the variation point it would fill, and the exact text you'd add. From observed habits only: never propose for an empty slot on a machine with no accent, never turn an absence into a nudge. Any write sanction enters the accent only in the operator's own words, opt-in, dated (law 4).
@@ -229,6 +232,8 @@ Wait for approval or adjustment before doing anything.
 ### Do the "Now" work
 
 Work through the list. Finish the quick fixes, close off completed Bon items - generally leave things how you'd like to find them.
+
+**Closing something a fresh reader ought to check first?** `bon step --no-complete` on the final step finishes the tactical without closing the card, so the verdict can wait for the check instead of the check chasing the verdict — `bon step` otherwise auto-completes on the last step, which closes the card before anyone has read the work. `bon reopen` undoes a close that got ahead of itself.
 
 ### File the new bons
 
@@ -376,6 +381,47 @@ for f in <handoff-dir>/*.md; do b=$(basename "$f"); [ "$b" = LEDGER.md ] && cont
 
 Candidate mode included — the ledger append is a Write-tool edit, no CLI needed, and the candidate-bearing handoffs are exactly the ones the sweep must not drop. A repo with its own richer ledger convention (prose-heavy lines, extra columns): keep its register, but lead the line with the checkbox so the sweep can see it.
 
+
+### Cold eyes on the handoff (bon-dimadu)
+
+Before committing, hand the finished handoff to one fresh-context subagent. Every other claim in this rite was checked by the session that made it; the handoff is written *after* all of that, so nothing has ever read the finished artefact cold — and its Opportunities section is the baton the next session's hook puts in front of whoever opens. Measured on 2026-08-30: one such read returned 19 findings on a single file, none of them fabrication.
+
+**The bar is always** (Sameer, 2026-08-31), skippable only with a reason you state in the close summary — "the handoff is four lines and cites nothing" is a fine reason; "the session went smoothly" is not one, because a smooth session is exactly where an unchecked claim slides through.
+
+Give the reader the handoff's **path**, not its pasted contents, and a narrow brief. That choice is load-bearing: a reader holding the path can check claims against the estate — boards, git, the code — and two live runs of this prompt found things a text-only read could not, including an Opportunities bullet whose cited item had since closed. A pasted copy gets you proofreading; a path gets you verification.
+
+The measured failure class is specific, so name it rather than asking for scepticism in general:
+
+> Read this handoff as the next Claude, who has none of the writing session's context and all of its responsibility. Three questions. (1) What here would mislead you — quote the sentence and say what you would wrongly believe. (2) What did that session evidently know that is missing — name the gap, not a wish. (3) Read each Opportunities bullet's FIRST SENTENCE ALONE: the session-start hook trims them to that, so a bullet whose first sentence misleads in isolation is broken however good the rest is. Also flag any finding stated without a verdict, and any next move stated without an owner. If nothing would mislead you, say so and list what you checked — an examined all-clear is a real answer, and inventing a finding to look useful is worse than none.
+
+Two things make that prompt hard to rubber-stamp, and both are deliberate. It asks for artefacts a bare agreement cannot produce — a quoted sentence, a named gap, an owner — so "looks good" does not fit the shape of the ask. And it licences an honest all-clear, so the reader is never pushed into manufacturing findings to justify itself.
+
+Then fold what lands. A finding you accept gets fixed in the file before the commit; one you reject gets a sentence in the close summary saying why, because "the cold reader raised X and I disagreed, for Y" is itself useful to the next session. Keep the reader on a peer-quality model — a cheaper verifier than the writer is the rubber stamp this step exists to avoid.
+
+**Say the count in the close summary: read, N findings, n folded, m rejected.** The suspect at this point is not the reader but the folder — findings arrive at a session near the end of its budget, and nothing about a quiet close distinguishes "read clean" from "read, and ignored it" or "never ran". One line makes those three different, the same way the board-motion line makes its number auditable rather than yours to shade. It is also the only mark a skipped read leaves, since an omission announces nothing by itself.
+
+If a fold changes what the session was *for*, update the `purpose:` gloss on the ledger line too — the ledger is appended with the handoff, which is before this step.
+
+### Net board motion (bon-racafo)
+
+Once the board work is done — the Now items, the new bons filed, anything knocked out and `bon done`'d — re-derive the tally and state it in one line:
+
+```bash
+# Pass the bare timestamp only — not the parenthesised gloss beside it.
+"$BON_SCRIPTS/close-context.sh" --motion-only "<the timestamp the full run printed, e.g. 2026-08-31T11:48:00>"
+```
+
+Re-derive rather than reusing the Orient figures: this rite *mints and closes items after the context script ran*, so the earlier numbers are stale in exactly the direction that matters. The window is since the previous close, not since this session started — wider on purpose, because per-session windows leave motion nobody counts. Where you can see some of it wasn't yours, say so.
+
+Then one line, using the script's numbers and naming the ids:
+
+> Board motion since the last close: closed 3 (bon-a, bon-b, bon-c), minted 2 (bon-x, bon-y), 2 carried forward.
+
+**Minting is capture, not debt.** A session that files five discoveries and closes two did its job — chasing them instead would have been the error. `MOTION_CARRIED` is the honest growth figure, since a card minted and closed within the window never touched the backlog. So there is no target here and nothing to optimise: the line exists so board growth is visible now rather than surfacing weeks later when a review ceremony trips over it (2026-08-30: 13 closed, 11 minted, one line that reframed the whole review conversation).
+
+Report what the script printed. It computes from `bon log` precisely so the figure isn't yours to shade, and naming the ids makes what you *did* file auditable at a glance. Be clear about the limit, though: the tally counts board items, so a discovery you never filed at all has no id and leaves no gap — nothing here can see it. That one is guarded by the triage step above and by capturing generously, not by this line.
+
+If the script prints `MOTION_ERROR` or `MOTION_TRUNCATED`, say that instead of a number you'd have to guess at.
 
 ### Commit and go
 

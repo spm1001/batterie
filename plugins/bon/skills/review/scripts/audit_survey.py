@@ -41,13 +41,39 @@ signal (commit count in the window + last commit line). The pyramid's
 Jobs grouping: each repo group carries `job` when assigned — Dolt boards from
 the repos table's `job` column (`bon register --job`), JSONL boards from a
 `.bon/job` marker file. Boards with open items and no job are listed in
-`jobs_unassigned` — fail-visible for assignment, never guessed.
+`jobs_unassigned` — fail-visible for assignment, never guessed. `--job <slug>`
+scopes the survey to one or more jobs groups.
+
+Scoping is loud, never quiet (bon-libito). `--repos` and `--job` match WHOLE
+labels — for repos, the whole label or its whole final path segment, so
+`--repos sonner` finds `spm1001/sonner` but `--repos passe` no longer sweeps in
+`spm1001/passe-partout`. A scope flag that quietly returns the wrong-sized
+answer looks exactly like a good one, so four things are refused or announced:
+
+* an unrecognised, misspelled, `=`-joined or repeated option exits — the parse
+  refuses what it cannot read rather than ignoring it;
+* a flag given with no values exits rather than widening to the estate;
+* a value matching no board exits, listing the substring near-misses, so a
+  caller relying on the old substring behaviour is told exactly what to type;
+* a narrowing is named on stderr — both the near-misses one `--repos` value
+  excludes (computed against the union of all values' hits, so a label another
+  value pulled in is never reported as dropped) and, when `--repos` and `--job`
+  compose, the boards `--repos` matched that `--job` then discarded.
+
+Provenance, since it is the useful part: the empty-flag and no-match exits
+shipped by design, while the whole first bullet and both refinements in the
+last one came out of adversarial rounds AFTER the card looked finished. The
+first version of this hardening still surveyed all 52 boards, silently, on
+`--repos=bon`; the second still dropped a value after `--window-days`.
 
 Usage:
     uv run --script audit_survey.py                        # JSON to stdout
     uv run --script audit_survey.py --repos trousse passe  # Filter by label
+    uv run --script audit_survey.py --job batterie         # Filter by jobs group
     uv run --script audit_survey.py --roots ~/repos        # Explicit roots
     uv run --script audit_survey.py --window-days 14       # Recent-wins window
+    uv run --script audit_survey.py --full-dones           # Lift the per-board
+                                                           # recent_dones cap
 """
 
 import json
@@ -302,11 +328,20 @@ def item_record(item: dict) -> dict:
 RECENT_DONES_CAP = 10
 
 
-def done_records(done_items: list[dict]) -> tuple[list[dict], int]:
+def done_records(
+    done_items: list[dict], cap: int | None = RECENT_DONES_CAP
+) -> tuple[list[dict], int]:
     """Shape recent-done items: newest first, capped, with the TRUE total.
 
     The cap keeps busy boards from flooding the output; the count states the
     remainder so a truncated list can't read as complete (no silent caps).
+
+    `cap=None` lifts it — what `--full-dones` passes. The cap is right for the
+    pyramid's "recent wins" lines and wrong for the queue-line annotation join,
+    which needs every close in the window to match a line against its card: on
+    hot boards (aboyeur 30, mise 93 dones in 30 days) the cap hid exactly the
+    closes the annotation was looking for, forcing per-board `bon show`
+    round-trips (bon-libito, from the 2026-08-30 lane ceremony).
     """
     recs = []
     for i in sorted(done_items, key=lambda x: x.get("done_at") or "", reverse=True):
@@ -318,7 +353,7 @@ def done_records(done_items: list[dict]) -> tuple[list[dict], int]:
         if i.get("done_note"):
             r["done_note"] = i["done_note"]
         recs.append(r)
-    return recs[:RECENT_DONES_CAP], len(recs)
+    return (recs if cap is None else recs[:cap]), len(recs)
 
 
 def git_activity(repo_path: Path, window_days: int) -> dict | None:
@@ -544,9 +579,12 @@ def survey(
     roots: list[Path],
     repo_filter: list[str] | None = None,
     window_days: int = 30,
+    job_filter: list[str] | None = None,
+    full_dones: bool = False,
 ) -> dict:
     """Hybrid estate survey. Returns the full output document."""
     boards = discover_boards(roots)
+    dones_cap = None if full_dones else RECENT_DONES_CAP
     local_dolt_by_prefix = {
         b["prefix"]: b for b in boards if b["backend"] == "dolt" and b["prefix"]
     }
@@ -584,7 +622,9 @@ def survey(
             items = dolt_items.get(prefix, [])
             open_items = [i for i in items if i["id"] not in seen_ids]
             seen_ids.update(i["id"] for i in open_items)
-            recent, recent_total = done_records(dolt_dones.get(prefix, []))
+            recent, recent_total = done_records(
+                dolt_dones.get(prefix, []), cap=dones_cap
+            )
             if not open_items and not recent:
                 continue
             mapping = repos_map.get(prefix)
@@ -626,10 +666,14 @@ def survey(
             if i.get("status") == "open" and i["id"] not in seen_ids
         ]
         seen_ids.update(i["id"] for i in open_items)
-        recent, recent_total = done_records([
-            i for i in items
-            if i.get("status") == "done" and (i.get("done_at") or "") >= done_cutoff
-        ])
+        recent, recent_total = done_records(
+            [
+                i for i in items
+                if i.get("status") == "done"
+                and (i.get("done_at") or "") >= done_cutoff
+            ],
+            cap=dones_cap,
+        )
         if not open_items and not recent:
             continue
         label = repo_label(board["repo_path"], board["root"])
@@ -646,7 +690,12 @@ def survey(
         results.append(repo_entry(label, open_items, **extra))
 
     if repo_filter:
-        results = [r for r in results if any(f in r["repo"] for f in repo_filter)]
+        results = apply_repo_filter(results, repo_filter)
+
+    if job_filter:
+        results = apply_job_filter(
+            results, job_filter, report_drops=bool(repo_filter)
+        )
 
     # Light git signal for every board with a clone here — the pyramid's
     # "recent wins" line wants motion, and board writes alone under-report it.
@@ -693,40 +742,316 @@ def survey(
     }
 
 
+def flag_values(argv: list[str], flag: str) -> list[str] | None:
+    """Values following `flag` up to the next `--option`, or None if absent.
+
+    An empty list is a real answer here, not a shrug — `--repos --roots ~/x`
+    means the caller asked for a filter and named nothing. Callers must
+    distinguish it from None; `require_values` is the guard.
+    """
+    if flag not in argv:
+        return None
+    idx = argv.index(flag)
+    vals = []
+    for a in argv[idx + 1:]:
+        if a.startswith("--"):
+            break
+        vals.append(a)
+    return vals
+
+
+def require_values(vals: list[str] | None, flag: str) -> list[str] | None:
+    """Refuse an empty flag rather than letting it read as "not given".
+
+    `--repos` with no values used to yield [], which the filter check treated
+    as no-filter — the survey silently widened to the whole estate while the
+    caller believed it was scoped (bon-libito). A scope flag that widens on a
+    typo is the worst shape available: the output looks like a complete answer.
+    """
+    if vals is not None and not vals:
+        print(
+            f"{flag} was given with no values — refusing rather than guessing. "
+            f"An empty {flag} used to widen the survey to the whole estate "
+            f"while looking scoped. Name at least one value, or drop the flag.",
+            file=sys.stderr,
+        )
+        sys.exit(2)
+    return vals
+
+
+def match_repo(label: str, value: str) -> bool:
+    """Does `value` name this repo? Whole label, or whole final path segment.
+
+    Labels are heterogeneous — bare (`bon`, `trousse`) and owner-bucketed
+    (`spm1001/sonner`, `itv/mit-kg`) — so bare-name filtering has to keep
+    working; `--repos sonner` must still find `spm1001/sonner`. What it must
+    NOT do is the old substring match, under which `--repos passe` silently
+    swept in `spm1001/passe-partout` and `--repos trousse` swept in
+    `spm1001/trousse-personal`.
+    """
+    return value == label or value == label.rsplit("/", 1)[-1]
+
+
+def apply_repo_filter(results: list[dict], repo_filter: list[str]) -> list[dict]:
+    """Filter by repo label, reporting every narrowing and every miss.
+
+    Two loud paths, because the danger here is a quiet answer of the wrong
+    size (bon-libito, and the reason the whole card exists):
+
+    * a value naming no board EXITS — with the substring near-misses listed,
+      so a caller who relied on the old semantics is told exactly what to type;
+    * a value that matches but leaves substring near-misses behind SAYS SO, so
+      a narrowing relative to the old behaviour can never pass unnoticed.
+    """
+    labels = [r["repo"] for r in results]
+    # Near-misses are computed against the union of ALL values' hits, not one
+    # value's. `--repos passe passe-partout` otherwise reported
+    # spm1001/passe-partout as excluded while the second value was pulling it
+    # in — a loud channel that lies is worse than a quiet one, because the
+    # whole design rests on believing it.
+    per_value = {v: [l for l in labels if match_repo(l, v)] for v in repo_filter}
+    all_hits = {l for hits in per_value.values() for l in hits}
+
+    kept: list[str] = []
+    misses: list[str] = []
+    notes: list[str] = []
+
+    for value in repo_filter:
+        hits = per_value[value]
+        near = [l for l in labels if value in l and l not in all_hits]
+        if not hits:
+            misses.append(
+                f"  {value!r} matched no board"
+                + (f" — did you mean: {', '.join(sorted(near))}?" if near else "")
+            )
+            continue
+        kept.extend(hits)
+        if near:
+            notes.append(
+                f"  {value!r} → {', '.join(sorted(hits))} "
+                f"(NOT matched, though they contain {value!r}: "
+                f"{', '.join(sorted(near))} — pass the full label to include them)"
+            )
+
+    if misses:
+        print(
+            "--repos matched nothing for:\n" + "\n".join(misses)
+            + "\n\nMatching is whole label or whole final path segment "
+              "(so `sonner` finds `spm1001/sonner`), NOT substring.",
+            file=sys.stderr,
+        )
+        sys.exit(2)
+
+    if notes:
+        print("--repos narrowed:\n" + "\n".join(notes), file=sys.stderr)
+
+    keep = set(kept)
+    return [r for r in results if r["repo"] in keep]
+
+
+def apply_job_filter(
+    results: list[dict], job_filter: list[str], report_drops: bool = False
+) -> list[dict]:
+    """Filter by jobs-group slug — the dial the skill text already described.
+
+    Jobs were readable in the output but not selectable, so the review skill's
+    "scope by jobs group" position documented a workaround (run the full survey,
+    narrow the later phases by eye) rather than a mechanism. Exact slug match:
+    slugs are curated by `bon register --job` / `.bon/job`, so a near-miss is a
+    typo, not a shorthand — and an unknown slug exits naming the live set rather
+    than returning a confidently empty survey.
+
+    `report_drops` is set when a repo filter ran first, and it exists because
+    composing the two filters reopened the exact hole the card was closing:
+    `--repos bon notes --job batterie` returned only `bon`, exit 0, silent —
+    a board the caller had named by hand, matched by `--repos`, dropped here
+    with no signal (found by this card's essayeur, 2026-08-31). Naming a board
+    and then discarding it needs to be said out loud.
+    """
+    known = sorted({r["job"] for r in results if r.get("job")})
+    unknown = [j for j in job_filter if j not in known]
+    if unknown:
+        print(
+            f"--job matched no board for: {', '.join(repr(j) for j in unknown)}\n"
+            f"Jobs assigned on this run: "
+            f"{', '.join(known) if known else '(none — see jobs_unassigned)'}",
+            file=sys.stderr,
+        )
+        sys.exit(2)
+
+    wanted = set(job_filter)
+    kept = [r for r in results if r.get("job") in wanted]
+
+    if report_drops:
+        dropped = [r for r in results if r.get("job") not in wanted]
+        if dropped:
+            named = ", ".join(
+                f"{r['repo']} (job={r['job']})" if r.get("job")
+                else f"{r['repo']} (no job assigned)"
+                for r in sorted(dropped, key=lambda r: r["repo"])
+            )
+            print(
+                f"--job further narrowed what --repos matched — "
+                f"{len(dropped)} board(s) dropped: {named}",
+                file=sys.stderr,
+            )
+
+    return kept
+
+
+# Every option this script understands, and HOW MANY values it takes:
+# 0 = bare switch, 1 = exactly one, None = one or more.
+#
+# The arity is the load-bearing part, not decoration. A boolean "takes values"
+# left `--repos bon --window-days 7 notes` accepting `notes` as belonging to
+# `--window-days`, which reads only argv[idx+1) — so a scope value the caller
+# typed was dropped at exit 0 with empty stderr, which is this card's fault
+# reappearing inside the guard built to end it (found by the post-repair
+# essayeur, 2026-08-31).
+KNOWN_FLAGS = {
+    "--roots": None,
+    "--repos": None,
+    "--job": None,
+    "--window-days": 1,
+    "--full-dones": 0,
+}
+
+
+def reject_unknown_argv(argv: list[str]) -> None:
+    """Refuse any token the parser does not understand.
+
+    The parse reads each flag by `argv.index`, so anything it fails to
+    recognise is silently ignored — and an ignored SCOPE flag is the original
+    bug wearing a different hat. Measured 2026-08-31 against the first version
+    of this hardening: `--repos=bon`, the ordinary GNU spelling, surveyed all
+    52 boards and 864 items at exit 0 with nothing on stderr, because the
+    token `--repos=bon` is simply not the token `--repos`. `--repo`, `--jobs`
+    and a repeated `--repos` all failed the same way.
+
+    So the guard is the parse itself: every token is either a known option or
+    a value belonging to the option before it, and anything else stops the run.
+    The empty-value check next door is one door; this is the corridor.
+    """
+    seen: set[str] = set()
+    current: str | None = None
+    taken = 0
+    known = ", ".join(sorted(KNOWN_FLAGS))
+
+    for tok in argv:
+        if tok.startswith("--"):
+            if tok not in KNOWN_FLAGS:
+                hint = ""
+                head = tok.split("=", 1)[0]
+                if "=" in tok and head in KNOWN_FLAGS:
+                    hint = (
+                        f"\nValues follow a space, not an '=': "
+                        f"`{head} {tok.split('=', 1)[1]}`"
+                    )
+                print(
+                    f"Unrecognised option {tok!r} — refusing rather than "
+                    f"ignoring it, because an ignored scope flag surveys the "
+                    f"whole estate while looking scoped.\n"
+                    f"Known options: {known}{hint}",
+                    file=sys.stderr,
+                )
+                sys.exit(2)
+            if tok in seen:
+                print(
+                    f"{tok} given more than once — only the first would have "
+                    f"been read. Pass all its values after a single {tok}.",
+                    file=sys.stderr,
+                )
+                sys.exit(2)
+            seen.add(tok)
+            current = tok if KNOWN_FLAGS[tok] != 0 else None
+            taken = 0
+        elif current is None:
+            print(
+                f"Unexpected argument {tok!r} — it follows no option that "
+                f"takes values.\nKnown options: {known}",
+                file=sys.stderr,
+            )
+            sys.exit(2)
+        else:
+            taken += 1
+            arity = KNOWN_FLAGS[current]
+            if arity is not None and taken > arity:
+                print(
+                    f"{current} takes {arity} value(s); {tok!r} is one too "
+                    f"many. It would have been read by nothing at all — which "
+                    f"is how a scope value gets dropped in silence.",
+                    file=sys.stderr,
+                )
+                sys.exit(2)
+
+
 def main():
+    argv = sys.argv[1:]
+    reject_unknown_argv(argv)
+
     # Root priority: --roots flag > REPOS_DIR env > defaults
-    if "--roots" in sys.argv:
-        idx = sys.argv.index("--roots")
-        vals = []
-        for a in sys.argv[idx + 1:]:
-            if a.startswith("--"):
-                break
-            vals.append(a)
-        roots = [Path(v).expanduser() for v in vals]
+    root_vals = require_values(flag_values(argv, "--roots"), "--roots")
+    if root_vals is not None:
+        roots = [Path(v).expanduser() for v in root_vals]
+        # A root that isn't there contributes nothing and says nothing: a
+        # typo'd --roots silently dropped the survey from 52 boards to 19 at
+        # exit 0 (measured 2026-08-31). Same family as the --repos hole this
+        # card closed, aimed at a different flag. Warn per missing root and
+        # refuse only when NONE exist — `--roots ~/repos ~/Repos` is a
+        # legitimate cross-platform spelling where one side is always absent.
+        missing = [r for r in roots if not r.is_dir()]
+        if missing:
+            print(
+                "--roots: no such director"
+                + ("y" if len(missing) == 1 else "ies") + ": "
+                + ", ".join(str(m) for m in missing),
+                file=sys.stderr,
+            )
+        if missing and len(missing) == len(roots):
+            print(
+                "Every --roots value is missing, so the filesystem sweep would "
+                "silently cover nothing. Refusing rather than reporting a "
+                "smaller estate as if it were the whole one.",
+                file=sys.stderr,
+            )
+            sys.exit(2)
     elif os.environ.get("REPOS_DIR"):
         roots = [Path(os.environ["REPOS_DIR"])]
     else:
         roots = default_roots()
 
-    repo_filter = None
-    if "--repos" in sys.argv:
-        idx = sys.argv.index("--repos")
-        repo_filter = []
-        for a in sys.argv[idx + 1:]:
-            if a.startswith("--"):
-                break
-            repo_filter.append(a)
+    repo_filter = require_values(flag_values(argv, "--repos"), "--repos")
+    job_filter = require_values(flag_values(argv, "--job"), "--job")
+    full_dones = "--full-dones" in argv
 
     window_days = 30
-    if "--window-days" in sys.argv:
-        idx = sys.argv.index("--window-days")
+    if "--window-days" in argv:
+        idx = argv.index("--window-days")
         try:
-            window_days = int(sys.argv[idx + 1])
-        except (IndexError, ValueError):
+            window_days = int(argv[idx + 1])
+        except (IndexError, ValueError, OverflowError):
             print("--window-days needs an integer argument", file=sys.stderr)
             sys.exit(2)
+        if window_days < 0:
+            # A negative window puts the dones cutoff in the FUTURE, so the
+            # recent-wins list empties while the git signal — which reads the
+            # same string as a past offset — reports commits. Two halves of one
+            # output disagreeing is worse than either being empty.
+            print(
+                f"--window-days must not be negative (got {window_days}): the "
+                f"dones cutoff would land in the future while the git signal "
+                f"still reads it as a past window.",
+                file=sys.stderr,
+            )
+            sys.exit(2)
 
-    output = survey(roots, repo_filter, window_days=window_days)
+    output = survey(
+        roots,
+        repo_filter,
+        window_days=window_days,
+        job_filter=job_filter,
+        full_dones=full_dones,
+    )
 
     if output["unmapped_prefixes"]:
         print(

@@ -1,6 +1,6 @@
 {
   "name": "arete",
-  "version": "1.83.2",
+  "version": "1.84.0",
   "description": "Move lists in and out of MindNode — a pasted list becomes a mind map, and a map comes back as Markdown. Ships the mindnode-mapping skill; the CLI is macOS-only.",
   "author": {
     "name": "Sameer Modha",

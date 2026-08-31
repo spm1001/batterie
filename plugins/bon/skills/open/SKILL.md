@@ -137,6 +137,22 @@ the second session was one unnoticed glance from presenting a different repo's
 board as its own (bon-potipe). Wrong-board orientation fails silently, so the
 collision-proof path is the whole guard.
 
+**Then declare the orientation** (bon-lateje). The estate's launch pattern has moved: sessions start in a high-level folder and `/open REPONAME` orients against a repo, but the statusline shows the directory the process was launched in — so a session working `mit-kg` reads as sitting in `~`. The dissolve is not to track the session but to have it *declare*, here, at the moment it commits to a board:
+
+```bash
+mkdir -p ~/.claude/state/oriented
+printf '%s %s\n' "$CLAUDE_PID" "/absolute/path/of/the/repo/you/just/oriented/on" \
+  > ~/.claude/state/oriented/"$CLAUDE_CODE_SESSION_ID"
+```
+
+Write it on **every** `/open`, not only a roaming one. A session that roams to another repo and later comes back would otherwise leave a breadcrumb still naming where it went, and the statusline would confidently show the wrong repo — which is the exact failure the card exists to prevent. Overwriting on every orientation keeps the file true by construction; when it names the launch dir the statusline draws nothing, so the plain in-repo case looks precisely as it does today.
+
+Three things are contract with the reader (`statusline.local.sh`, carte-kasepo) rather than free choices: the filename is the session id **from the environment**, never inferred from the newest file — deriving identity from ambient state is how two sessions come to read each other's state; the PID goes *inside* the file rather than in its name, because a session id survives `claude --resume` while a PID does not; and the format is one line, `<pid> <absolute path>`. The reader checks the PID with `kill -0` and renders nothing at all when the breadcrumb is absent, malformed or dead — a confidently wrong location is worse than a coarse right one, so if you cannot name the repo with certainty, write nothing.
+
+**If you are a subagent, do not write it.** A dispatched worker inherits the PARENT's `CLAUDE_CODE_SESSION_ID` — measured 2026-08-31, byte-identical to the `--session-id` on the parent harness's own command line — and the parent's live `CLAUDE_PID` with it. So a worker that writes the breadcrumb does not mint its own: it overwrites the parent's, with a liveness token that passes every check the reader makes, and the human's statusline then confidently shows wherever the *worker* roamed. That is the failure this card exists to prevent, arriving through the one door that looks like a rounding error. **Knowing you were dispatched is the authority here; `CLAUDE_CODE_CHILD_SESSION` is only a hint.** That variable is set in workers at every depth measured, but it has also been seen leaking into a genuine top-level session through tmux inheritance (carte-suruta, 2026-08-24), which is why the estate's other worker-detector refuses to key on the environment at all. The leak is harmless here — a top-level session that wrongly skips the write leaves no breadcrumb, and the reader then shows the honest launch dir, which is the coarse-right answer we want. It is the opposite mistake that costs, so when the two disagree, trust what you know about how you were started.
+
+And if you are roaming as a worker, the orientation you would be declaring is not the one the human is looking at anyway: the breadcrumb has no expiry and nothing restores it when you exit, so a worker's write to its repo would outlive the work and stand there after the worker is gone.
+
 ### 4. Personal Half (variation point `open.personal`)
 
 `open.personal` names a POINT INSIDE this one rite — there is exactly one /open for everyone, never a personal /open beside a team one; the personal half is a file this step reads, silently absent on most machines. The spine ends at the hierarchy; what a given operator wants rendered between the hierarchy and the direction pick — a dispatch-queue digest, a calendar glance, nothing — is theirs, and lives in their personal half (`~/.claude/mit-accent.md`, spec: `docs/ACCENT.md`). The session-start hook prints `ACCENT=<path>` when the file exists. The four personal variation points are named by ownership, uniformly — `open.personal`, `close.personal`, `plan.personal`, `review.personal` (settled by the operator, 2026-08-30; "personal" not "local", because local means per-machine on this estate and this split is per-person) — and whatever the operator calls the content inside their own file is theirs to change without touching core.
@@ -177,6 +193,7 @@ The ritual is reliable only if you supply what the harness will not — each beh
 5. **No tactical nudges for the target.** The UserPromptSubmit injection keys on the launch cwd, so step discipline is manual: `cd TARGET && bon work --status` on each return. Mirror hazard: claims key on the invoking cwd, so two roaming sessions working the same target read as one session to the claim guard — declare the lane where a collision is plausible.
 6. **Check the target's billing pin.** A repo can pin its own billing route (an `env` block in its `.claude/settings.local.json`, or a launcher-level pin registry); pins bind at launch, so a roaming session silently dodges them. If the target carries a pin this session isn't honouring, say so in one line before heavy work — the user owns the lane choice.
 7. **Tell /close where you were.** Handoff placement is work-based, not launch-based (the /close skill's placement table) — name the repo(s) actually worked, so the handoff lands in the target's `handoffs/`, not the launch cwd's.
+8. **Declare the orientation** — step 3's breadcrumb, and this is the case it was built for: a roaming session is precisely the one whose statusline is otherwise wrong all session. Write it for TARGET, and rewrite it whenever you roam again — **unless you are a dispatched worker, which is the other thing roaming sessions usually are.** A worker's write lands on its parent's breadcrumb, not its own; step 3 has the mechanism and the reason.
 
 A target carrying its own visiting protocol in CLAUDE.md (route → read on entry → search before mint → register on write) is stating this same rite in local terms — follow the stricter. The list covers the seams found so far, not every seam; where it runs out, reason from the mechanism: nothing launch-scoped follows you, everything on-demand does.
 
@@ -189,12 +206,27 @@ A target carrying its own visiting protocol in CLAUDE.md (route → read on entr
 1. **`bon show <id>`** — verify the item exists, check its type and brief
    - If the ID came from a handoff or memory, it may have been archived. Verify first.
    - If `Type: outcome`, pick one of its actions instead.
-2. **`bon work <id>`** — initialize tactical steps from `--what`
+2. **Three legs of staleness** — see below. About thirty seconds; skip for a card you filed this session.
+3. **`bon work <id>`** — initialize tactical steps from `--what`
    - Shows "Approach:" context from `--how` when present
    - If `--what` has no numbered steps, provide explicit ones: `bon work <id> "Step 1" "Step 2"`
    - **A `Baton (date): <handoff>` line means another session last worked this thread** (bon-jeweke: the newest handoff citing this item in its `items:` frontmatter). Read that handoff before starting — it is the directional briefing addressed to whoever picks the thread up, which is now you. A fresh item shows no Baton line.
-3. **Work through with checkpoints:** `bon step` after each
-4. **Final step auto-completes** the action
+4. **Work through with checkpoints:** `bon step` after each
+5. **Final step auto-completes** the action
+
+### Three legs of staleness (bon-kejika)
+
+A brief is written at the moment of least knowledge about the work, and everything after that makes it wronger. The bon instruction shard has long said to check briefs for staleness before executing, without naming a method — this is the method, borrowed from the dispatch loop, where it caught two of ten queue lines describing work that had already shipped before any worker rebuilt it (2026-08-30). A solo session drawing a card down has the same exposure and nobody above it to catch the miss.
+
+One command each, on the brief you just read:
+
+1. **Do the named artefacts still exist?** `ls` the paths the brief names. Renames are invisible from a brief, and a path that moved reads as a path that was never built. Paths only — where the artefact is a database column, a doc section or a deployed behaviour, note that the leg didn't apply and move on rather than going looking.
+2. **Has the card been overtaken?** Read the tail of `--how`, which `bon show` has already printed — no command. Supersession notes, `PARKED for Sameer:` lines and other lanes' claims all land there, because bon refuses a second `bon work` anywhere in one clone, so a parallel lane's claim arrives as appended brief prose rather than in `bon work --status` (bon-kapipu).
+3. **Is a sibling already building it?** Scan the hierarchy you already presented at orientation for an open item producing the same artefact; re-run `bon list` only if the session has been going a while. Near-duplicate items spike when several sessions run in parallel, and the board is where that becomes visible.
+
+**A failing leg is information, not a stop sign.** Say what you found before starting rather than discovering it forty minutes into an implementation: `bon edit ID --append-how "STALE <date>: <what you found>"`, then either pick something else or re-brief the card and carry on. Where the evidence needs a human — the desire may have changed, not just the facts — park it in the same append and move on.
+
+Three legs is the whole check. A fourth, or a fifteen-minute investigation, is the failure mode this is guarding against: an orientation nobody finishes is worse than one that occasionally misses.
 
 **Constraints:**
 - **Actions only** — `bon work` on an outcome will error

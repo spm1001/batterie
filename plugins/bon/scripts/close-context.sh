@@ -29,6 +29,106 @@ validate_dependencies
 # /open READER (open-context.sh) in lockstep on the same convention.
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib-handoff.sh"
 
+# === BOARD MOTION (bon-racafo) ===
+# Cards closed versus cards minted since the previous close. Sessions file
+# discoveries rather than chase them — correctly — so a productive session
+# quietly replenishes the board, and that residue has to be SEEN rather than
+# left implicit in the per-item notes.
+#
+# The counts are DERIVED here, never narrated by the closing Claude. That is
+# the point: this card's falsifier is evasive behaviour when nobody is
+# watching, whose scoreboard face is pressure to close rather than file
+# honestly, and an agent cannot inflate a count it did not compute. Two more
+# properties earn their keep for the same reason — every id is NAMED, so a
+# suppressed filing is visible to anyone who scrolls; and CARRIED (minted in
+# the window and still open) sits beside the totals so a card minted and
+# closed within the session cannot read as board growth.
+#
+# Callable twice on purpose. The full script runs at Orient, but /close mints
+# new bons and closes knocked-out ones later, in Act — so an Orient-time tally
+# would undercount exactly the filings this exists to surface, and in the one
+# direction the falsifier cares about. `--motion-only <since>` re-derives it
+# at summary time from one source of truth rather than a copy in skill prose.
+emit_board_motion() {
+    local since="$1" root="$2" cmd="$3"
+    # `|| true` inside the subshell, for the second time in this file and the
+    # same reason: on a Dolt board with the server down, `bon log` exits 1,
+    # pipefail lifts that to the pipeline, and `set -e` then kills the whole
+    # script HERE — losing every section after BOARD MOTION, including the
+    # migration-bridge block below. The bon-cuvice death again, and the
+    # comment forty lines up guards a different pipeline against exactly it.
+    # Found by bon-kefoba's essayeur in code this session had already shipped.
+    (cd "$root" && { "$cmd" log -n 500 --json 2>/dev/null || true; }) \
+        | MOTION_SINCE="$since" python3 -c '
+import json, os, sys
+
+since = os.environ["MOTION_SINCE"]
+try:
+    events = json.load(sys.stdin)
+except Exception:
+    print("MOTION_ERROR=could not read bon log — state the tally as unavailable")
+    sys.exit(0)
+
+# bon log stamps UTC with a trailing Z, and `since` is UTC too — the caller
+# converts, because handoff filenames carry LOCAL time. Both sides UTC means
+# the string compare is a real instant comparison rather than a coincidence.
+window = [e for e in events if (e.get("time") or "").rstrip("Z") >= since]
+closed = sorted({e["id"] for e in window if e.get("verb") == "completed"})
+minted = sorted({e["id"] for e in window if e.get("verb") == "created"})
+carried = sorted(set(minted) - set(closed))
+
+print(f"MOTION_CLOSED={len(closed)}" + (" " + ", ".join(closed) if closed else ""))
+print(f"MOTION_MINTED={len(minted)}" + (" " + ", ".join(minted) if minted else ""))
+print(f"MOTION_CARRIED={len(carried)}" + (" " + ", ".join(carried) if carried else ""))
+# The cap only hides something if the OLDEST event returned is still inside
+# the window; otherwise the log reached past it and the counts are exact.
+# A cap that cannot have trimmed anything must not cry wolf.
+if len(events) >= 500 and events and (events[-1].get("time") or "").rstrip("Z") >= since:
+    print("MOTION_TRUNCATED=true — the log cap was reached and the oldest "
+          "event is still inside the window, so these counts are floors")
+'
+}
+
+# Handoff FILENAMES carry local time (`date +%H%M`); `bon log` stamps UTC with
+# a trailing Z. Comparing them as one clock silently drops the first hour of
+# every window under BST, and double-counts under GMT — measured live on
+# 2026-08-31, when an item minted half an hour after the previous close
+# reported MOTION_MINTED=0. Worse, at-close filings land minutes after Orient,
+# so their UTC stamps sit up to an hour BEFORE the next window's local-time
+# boundary: they would have been invisible to both tallies, which is exactly
+# the filing this feature exists to make visible.
+#
+# Input "YYYY-MM-DD HH:MM:SS" in LOCAL time; output the same instant in UTC.
+# Two-step via epoch because BSD `date -u -j -f` reads its INPUT as UTC too,
+# so the one-liner that works on tube would be wrong on the Macs this ships to.
+_local_to_utc() {
+    local epoch
+    epoch=$(date -d "$1" +%s 2>/dev/null) \
+        || epoch=$(date -j -f '%Y-%m-%d %H:%M:%S' "$1" +%s 2>/dev/null) \
+        || return 1
+    date -u -d "@$epoch" '+%Y-%m-%dT%H:%M:%S' 2>/dev/null \
+        || date -u -r "$epoch" '+%Y-%m-%dT%H:%M:%S' 2>/dev/null
+}
+
+if [ "${1:-}" = "--motion-only" ]; then
+    MOTION_SINCE_ARG="${2:-}"
+    if [ -z "$MOTION_SINCE_ARG" ]; then
+        echo "MOTION_ERROR=--motion-only needs the MOTION_SINCE value the full run printed"
+        exit 2
+    fi
+    MROOT=$(board_root "$(pwd -P)") || {
+        echo "MOTION_ERROR=no board found from $(pwd -P)"; exit 0
+    }
+    MCMD=$(command -v bon 2>/dev/null || echo "$HOME/repos/spm1001/bon/.venv/bin/bon")
+    if [ ! -x "$MCMD" ]; then
+        echo "MOTION_ERROR=bon CLI not found"; exit 0
+    fi
+    echo "=== BOARD MOTION ==="
+    echo "MOTION_SINCE=$MOTION_SINCE_ARG (re-derived at summary time)"
+    emit_board_motion "$MOTION_SINCE_ARG" "$MROOT" "$MCMD"
+    exit 0
+fi
+
 # === TIME ===
 echo "=== TIME ==="
 CURRENT_HOUR=$(date +%H)
@@ -84,21 +184,12 @@ fi
 # === BON STATUS (default tracker) ===
 echo ""
 echo "=== BON ==="
-# Walk up to the board root, mirroring the CLI's discovery: at CWD any
-# .bon counts; above it only one with a prefix file (skips bare handoff
-# stashes like ~/.bon); a .git boundary stops the walk so a nested repo
-# never adopts an outer repo's board.
-BON_ROOT=""
-BWALK=$(pwd -P)
-BSTART="$BWALK"
-while [ "$BWALK" != "/" ]; do
-    if [ -d "$BWALK/.bon" ] && { [ "$BWALK" = "$BSTART" ] || [ -f "$BWALK/.bon/prefix" ]; }; then
-        BON_ROOT="$BWALK"
-        break
-    fi
-    [ -e "$BWALK/.git" ] && break
-    BWALK=$(dirname "$BWALK")
-done
+# Board root via lib-handoff's shared resolver: at CWD any .bon counts;
+# above it only one with a prefix file (skips bare handoff stashes like
+# ~/.bon); a .git boundary stops the walk so a nested repo never adopts an
+# outer repo's board. This file used to carry its own byte-alike copy of that
+# walk, and bon-racafo briefly added a third — one rule, one reader.
+BON_ROOT=$(board_root "$(pwd -P)" || true)
 
 if [ -n "$BON_ROOT" ]; then
     # Find bon CLI - check PATH first, then known location
@@ -279,6 +370,77 @@ if [ -e "$HANDOFF_DIR/$HANDOFF_FILE" ]; then
     HANDOFF_FILE="${HANDOFF_BASE}-${SUFFIX}.md"
 fi
 echo "HANDOFF_FILE=$HANDOFF_FILE"
+
+# Window for the tally: the newest handoff's filename date prefix. Fixed-width
+# and string-sortable across both the dated and the dated+HHMM conventions, and
+# deliberately not mtime — clones and sync rebases flatten mtimes (bon-wakaju).
+# Note this window is "since the previous close", not "since this session
+# started", which is wider on purpose: per-session windows leave gaps that
+# nobody counts, and the label says which window it is.
+if [ -n "${BON_ROOT:-}" ] && [ -n "${BON_CMD:-}" ] && [ -x "$BON_CMD" ]; then
+    MOTION_SINCE=""
+    MOTION_SINCE_SRC="fallback"
+    if [ -n "${HANDOFF_DIR:-}" ] && [ -d "$HANDOFF_DIR" ]; then
+        # `|| true` is load-bearing under `set -euo pipefail`: a grep matching
+        # nothing exits 1, pipefail propagates it, and set -e then kills the
+        # whole script mid-output — the bon-cuvice death, which took every
+        # section after this one with it until a test caught it. Capture, then
+        # test the RESULT for emptiness rather than the pipeline for success.
+        LAST_HANDOFF=$(ls -1 "$HANDOFF_DIR" 2>/dev/null \
+            | grep -E '^[0-9]{4}-[0-9]{2}-[0-9]{2}' | sort | tail -1 || true)
+        if [ -n "$LAST_HANDOFF" ]; then
+            MOTION_DATE="${LAST_HANDOFF:0:10}"
+            case "$LAST_HANDOFF" in
+                [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]-[0-9][0-9][0-9][0-9]-*)
+                    MOTION_HHMM="${LAST_HANDOFF:11:4}"
+                    MOTION_SINCE=$(_local_to_utc \
+                        "$MOTION_DATE ${MOTION_HHMM:0:2}:${MOTION_HHMM:2:2}:00") || MOTION_SINCE=""
+                    ;;
+                *)
+                    MOTION_SINCE=$(_local_to_utc "$MOTION_DATE 00:00:00") \
+                        || MOTION_SINCE=""
+                    ;;
+            esac
+            MOTION_SINCE_SRC="previous handoff ($LAST_HANDOFF)"
+        fi
+    fi
+    if [ -z "$MOTION_SINCE" ]; then
+        MOTION_SINCE=$(date -u -d '24 hours ago' '+%Y-%m-%dT%H:%M:%S' 2>/dev/null \
+            || date -u -v-24H '+%Y-%m-%dT%H:%M:%S' 2>/dev/null || echo "")
+        # Two different reasons land here and they want different messages: no
+        # dated handoff at all, versus one whose timestamp would not convert
+        # (a local time that does not exist on a DST-skip day, or a malformed
+        # name). Saying "none found" when one WAS found points a future
+        # debugger away from the cause, while the window itself stays honest.
+        if [ -n "${LAST_HANDOFF:-}" ]; then
+            MOTION_SINCE_SRC="last 24h — $LAST_HANDOFF has an unconvertible timestamp (window is not this session)"
+        else
+            MOTION_SINCE_SRC="last 24h (no dated handoff found — window is not this session)"
+        fi
+    fi
+
+    if [ -n "$MOTION_SINCE" ]; then
+        echo ""
+        echo "=== BOARD MOTION ==="
+        echo "MOTION_SINCE=$MOTION_SINCE ($MOTION_SINCE_SRC)"
+        emit_board_motion "$MOTION_SINCE" "$BON_ROOT" "$BON_CMD"
+    fi
+
+    # An id-migration bridge doc with no dated close-out (bon-kefoba). `bon
+    # doctor` reports this, but doctor is opt-in and nothing on the estate runs
+    # it unbidden — so the check was a detector nobody consults, which is not
+    # what the card promised. Surfaced here because /close is the moment a
+    # migration's last pointer usually gets corrected. One line, and silent
+    # when there is nothing to say.
+    BRIDGE_LINE=$( (cd "$BON_ROOT" && "$BON_CMD" doctor 2>/dev/null) \
+        | grep -m1 'bridge doc with no close-out stamp' || true)
+    if [ -n "$BRIDGE_LINE" ]; then
+        echo ""
+        echo "=== MIGRATION BRIDGE ==="
+        echo "BRIDGE_UNCLOSED=${BRIDGE_LINE#*: }"
+        echo "BRIDGE_CUE=this migration's bridge doc still reads as in-flight. If the migration has landed, append a dated 'Closed out YYYY-MM-DD' section saying what landed — leave the text above it as the record of what was true then."
+    fi
+fi
 
 # (The HANDOFF_GITIGNORED / HANDOFF_ADD_CMD force-add probe lived here until
 # bon-sedoze. It existed for one shape: a repo gitignoring `.bon/` wholesale,

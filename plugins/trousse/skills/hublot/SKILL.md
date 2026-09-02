@@ -76,6 +76,8 @@ $SCRIPT start probe --cwd ~/repos/spm1001/some-trusted-repo \
 
 `--unset` scrubs *inside* the session's shell. Billing env is the usual case: a Vertex-billed parent makes every child Vertex, and some behaviour (channels) is unavailable there.
 
+**Choose the wallet on purpose — the command after `--` decides who pays, and a probe is not free.** Bare `claude` bills the seat the human is working on; `claudev` bills Vertex. A driven session runs a whole session's worth of turns (a session-start ritual alone can be several minutes of a large model), so a handful of probes is a real dent. Measured 2026-09-01: two hublot sessions, one of them running a full orientation over a large repo, took the operator's Teams seat to its 5-hour limit — which then blocked the very fixture the probes were for, for eighty minutes. Ask which wallet can afford this before you type the command, not after the limit lands.
+
 **Success:** `start` reports the tmux session name.
 
 ### 3. Wait for a pattern, never sleep and hope
@@ -109,6 +111,8 @@ $SCRIPT stop probe
 
 Clears the composer (`C-u`), then sends `/exit` before killing tmux. The clear matters because ghost/suggestion text can be sitting in the composer after an action-capable turn, and `/exit` appended to it would submit the lot as a prompt nobody wrote. The clean exit matters for mesh work: it deregisters, while a kill leaves a roster ghost for the 60–120s expiry window that will confuse the next test.
 
+**`read` the pane before you stop it — a driven session is a real session, and a human may have joined it.** Yours is not the only keyboard: the tmux session is attachable, and an operator glancing at their windows can find a live Claude that asked a sensible question and answer it. On 2026-09-01 a probe session ended its `/open` by asking which direction to take, the operator typed a reply into it, and the teardown three minutes later cleared the composer and exited — the reply and the thread went with it. Nothing was lost from disk that time; that was luck, not the design. So before `stop`: read the pane, and if there is text you did not send or a turn you did not prompt, leave it alone and say so rather than tearing it down.
+
 ## Driving TUI menus (/config, /hooks)
 
 The `key` verb sends named tmux keys — `Down`, `Up`, `Escape`, `PPage`, `NPage`, `Tab`, `Enter`, `C-c` — one argument per press, repeats allowed. Menus need `key`; prose needs `keys` (which sends literally, so text that happens to be a key name is typed, not pressed).
@@ -134,6 +138,8 @@ $SCRIPT key  probe Escape            # back out without changing anything
 | `sleep 30; capture-pane` | Flaky and slow at the same time | `wait` with a pattern. |
 | Reading the pane once and concluding | An absence that is really a timing artefact | Include a positive control; assert the thing that *should* appear does. |
 | Killing the session outright | Roster ghosts, dirty state, missed teardown hooks | `stop` (it sends `/exit` first). |
+| `stop` without reading the pane | A human joined the driven session; teardown clears their reply and kills the thread | `read` first. Text you didn't send means someone else is in there. |
+| Reaching for bare `claude` out of habit | The probe bills whichever seat the human is working on, and can exhaust its limit | Pick the wallet: `-- claudev` for probes that don't need the seat. |
 | Testing in a repo with its own `.mcp.json` | Two MCP servers, one agent id, confusing results | Drive from a neutral trusted folder. |
 | Blind `enter` after an action-capable turn | Ghost/suggestion text in the composer submits as a prompt nobody wrote | `read` the pane first; `key NAME C-u` clears anything sitting there. `stop` does this automatically before `/exit`. |
 

@@ -45,6 +45,29 @@ compute() {
 
 find_file() { command find "$HOME/.claude/projects" -mindepth 2 -maxdepth 2 -name "$1.jsonl" 2>/dev/null | first_line; }
 
+# A LIVE session's registry record (~/.claude/sessions/<pid>.json, and the commis
+# seat's ~/.claude-commis/sessions/) already carries the join: bridgeSessionId
+# (session_…) beside sessionId. While that record exists no computation is
+# needed — and no plain resume is safe, because the record means a live process
+# still drives the transcript, and a second resumer shares its JSONL (2026-09-09:
+# a phone session that had hit its model limit was still a live bridge child
+# twenty minutes after its last turn).
+registry_dirs() { for _d in "$HOME/.claude/sessions" "$HOME/.claude-commis/sessions"; do [ -d "$_d" ] && echo "$_d"; done; return 0; }
+registry_by_bridge() {  # -> local uuid for session_<body>, from any live record
+  for _d in $(registry_dirs); do for _r in "$_d"/*.json; do
+    [ -f "$_r" ] || continue
+    jq -r --arg b "session_$body" 'select(.bridgeSessionId==$b) | .sessionId // empty' "$_r" 2>/dev/null
+  done; done | first_line
+}
+live_holder() {  # uuid -> "pid dir" when a live process holds it
+  for _d in $(registry_dirs); do for _r in "$_d"/*.json; do
+    [ -f "$_r" ] || continue
+    _p=$(jq -r --arg u "$1" 'select(.sessionId==$u) | .pid // empty' "$_r" 2>/dev/null)
+    [ -n "$_p" ] && kill -0 "$_p" 2>/dev/null && { echo "$_p $_d"; return 0; }
+  done; done
+  return 1
+}
+
 report() {
   _uuid="$1"; _how="$2"; _f=$(find_file "$_uuid")
   printf '%s\n' "$_uuid"
@@ -57,6 +80,10 @@ report() {
   else
     echo "  WARNING: no local transcript for this uuid — the session did not run on this machine" >&2
   fi
+  if _h=$(live_holder "$_uuid"); then
+    echo "  WARNING: a live process still holds this session — pid ${_h%% *} (registry ${_h#* })." >&2
+    echo "  End it first (kill -TERM ${_h%% *} — graceful, resumable) or add --fork-session; two drivers on one JSONL corrupt it." >&2
+  fi
 }
 
 t="$HOME/.claude/logs/bridge-transcript-cse_${body}.jsonl"
@@ -65,6 +92,14 @@ looked_up=""
 
 if [ "$mode" = auto ]; then
   computed=$(compute)
+  reg=$(registry_by_bridge)
+  if [ -n "$reg" ]; then
+    if [ -n "$computed" ] && [ "$computed" != "$reg" ]; then
+      echo "teleport-id: WARNING — computed $computed but the live session registry says $reg." >&2
+      echo "  The CC namespace or URL form has probably changed; trusting the registry." >&2
+    fi
+    report "$reg" "session registry (live record — see WARNING below)"; exit 0
+  fi
   if [ -n "$computed" ]; then
     if [ -n "$looked_up" ] && [ "$computed" != "$looked_up" ]; then
       echo "teleport-id: WARNING — computed $computed but the bridge transcript says $looked_up." >&2

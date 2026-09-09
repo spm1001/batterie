@@ -1,8 +1,9 @@
 #!/bin/bash
 # remote-sessions — list Claude Code sessions that were spawned programmatically
-# (teleport / Remote Control / SDK). These are invisible-or-nameless in the
-# `claude --resume` picker, because they never get an `ai-title` entry — the
-# title lives server-side only.
+# (teleport / Remote Control / SDK). These are INVISIBLE in the `claude --resume`
+# picker: the lister filters out any transcript whose head entrypoint is
+# sdk-cli/sdk-ts/sdk-py by design (CC 2.1.266, measured 2026-09-09) — and they
+# are nameless besides, since an `ai-title` never lands on them.
 #
 #   remote-sessions.sh          # 20 most recent
 #   remote-sessions.sh 50       # 50 most recent

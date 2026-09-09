@@ -8,7 +8,9 @@ name: Assemble plugins
 #   is the gate. The PR ceremony required a weekly human merge that
 #   never happened on schedule — mise 0.7.3 sat in an unmerged PR for
 #   17 days. Green run now MEANS shipped; a red run is the only failure
-#   signal, and GitHub emails on scheduled-run failures.
+#   signal, and GitHub emails on scheduled-run failures. Since 2026-09-09
+#   a version-ratchet quarantine is no longer red: the run auto-bumps the
+#   suite and dispatches a follow-on run (bds-hajeli, last step below).
 # - A commit to THIS repo is what triggers Desktop/org marketplace
 #   re-sync (confirmed by probe 2026-06-04). Source-repo bumps alone are
 #   invisible to clients — this workflow's commits are the update bus.
@@ -24,6 +26,7 @@ on:
 
 permissions:
   contents: write
+  actions: write   # the auto-bump step dispatches a follow-on run of this workflow (bds-hajeli)
 
 jobs:
   assemble:
@@ -177,21 +180,77 @@ jobs:
           git push origin main
           echo "state=pushed" >> "$GITHUB_OUTPUT"
 
-      - name: Fail red on any quarantined plugin
+      - name: Auto-bump the suite on quarantine (bds-hajeli)
         # Runs only after the healthy plugins have been committed and pushed
         # above, so a single laggard never blocks the others (bds-pujaki).
         # The laggard's vendored dir was reverted to last-published in
-        # assemble.sh, so the marketplace stays consistent — but the run
-        # still goes RED naming it, so a missed version bump can't hide
-        # behind a green build (no silent SKIP, the husk lesson).
+        # assemble.sh, so the marketplace stays consistent for THIS run.
+        #
+        # Until 2026-09-09 this step went RED naming the laggards and asked a
+        # human to bump. Measured: the run was red every day from 2 to 8 Sep
+        # (trousse, then bon, mise and sonner too) and nobody acted on seven
+        # emails — the drift shipped only because an unrelated publish
+        # re-stamped everything. The ratchet's purpose is "never ship changed
+        # content under an unchanged version"; it never needed a human to do
+        # the bump, only for the bump to happen. So: bump the SUITE patch
+        # version in batterie-de-savoir with publish.py (the same engine
+        # /batterie:publish uses — one combined plugin.json+CHANGELOG commit,
+        # twin-publish race recovery included), push it over a write deploy
+        # key, and dispatch a follow-on run of this workflow, which sees the
+        # new suite version and publishes the laggards. No loop: the bump
+        # commit touches only plugin.json (version-filtered) and CHANGELOG.md
+        # (not vendored), so the follow-on run finds no drift unless a fresh
+        # push landed in between — and then it simply bumps once more.
+        # publish.py's --no-wait skips the run watch; --no-pull skips the
+        # local-machine pull; both are meaningless in CI.
+        # RED is reserved for a real fault: no deploy key, or the bump itself
+        # failing — in which case the old message and the old advice stand.
+        env:
+          DEPLOY_KEY: ${{ secrets.BDS_DEPLOY_KEY }}
+          GH_TOKEN: ${{ github.token }}
         run: |
-          if [ -s /tmp/assemble-quarantine.txt ]; then
-            echo "::error::Version-ratchet quarantine — these plugins drifted without a version bump and were held at their last-published version:"
-            sed 's/^/  - /' /tmp/assemble-quarantine.txt
-            echo "Healthy plugins published normally. Bump .claude-plugin/plugin.json in each laggard's source repo, then re-run."
+          if [ ! -s /tmp/assemble-quarantine.txt ]; then
+            echo "No quarantined plugins — all assembled plugins published."
+            exit 0
+          fi
+          echo "Version-ratchet quarantine — these plugins drifted without a suite bump and were held at their last-published version this run:"
+          sed 's/^/  - /' /tmp/assemble-quarantine.txt
+          if [ -z "$DEPLOY_KEY" ]; then
+            echo "::error::BDS_DEPLOY_KEY secret is missing, so the suite cannot be auto-bumped. Ship the drift with /batterie:publish (or restore the secret) and re-run."
             exit 1
           fi
-          echo "No quarantined plugins — all assembled plugins published."
+          # One changelog line naming each laggard and the subject of its newest
+          # source commit — the auto-generated stand-in for the human narrative
+          # a hand publish carries. The plugin→repo map is assemble.sh's PLUGINS
+          # block, the same single source the clone step reads.
+          parts=""
+          while IFS= read -r plugin; do
+            [ -n "$plugin" ] || continue
+            repo=$(grep -E '^[a-z-]+:[a-z-]+$' batterie/assemble.sh | awk -F: -v p="$plugin" '$1==p{print $2; exit}')
+            subj=$(git -C "$repo" log -1 --format=%s 2>/dev/null || echo "?")
+            parts="${parts}${parts:+; }${plugin}: ${subj}"
+          done < /tmp/assemble-quarantine.txt
+          laggards=$(paste -sd, /tmp/assemble-quarantine.txt)
+          changelog="Auto-bump by the daily assembler (bds-hajeli): content drifted without a publish — ${parts}"
+          mkdir -p ~/.ssh
+          printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/bds_deploy
+          chmod 600 ~/.ssh/bds_deploy
+          ssh-keyscan github.com >> ~/.ssh/known_hosts 2>/dev/null
+          export GIT_SSH_COMMAND="ssh -i ~/.ssh/bds_deploy -o IdentitiesOnly=yes"
+          cd batterie-de-savoir
+          git remote set-url origin git@github.com:spm1001/batterie-de-savoir.git
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          # publish.py stages with `git add -u` in the suite repo: this checkout
+          # must be clean apart from the bump it writes. Say so if it isn't.
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "::warning::batterie-de-savoir checkout is not clean before the auto-bump:"
+            git status --porcelain
+          fi
+          uv run --script scripts/publish.py --patch --no-wait --no-pull \
+            -m "chore(batterie): auto-bump suite for drift in ${laggards} (bds-hajeli)" \
+            --changelog "$changelog"
+          echo "::notice::Auto-bumped the suite for drift in ${laggards}; a follow-on assemble run was dispatched to publish them at the new version."
 
       # ---- Deadman pings (bds-bidasi) -------------------------------------
       # Pinged ONLY when the whole run is green (if: success() — so a red run,

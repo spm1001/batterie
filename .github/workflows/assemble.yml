@@ -252,38 +252,11 @@ jobs:
             --changelog "$changelog"
           echo "::notice::Auto-bumped the suite for drift in ${laggards}; a follow-on assemble run was dispatched to publish them at the new version."
 
-      # ---- Deadman pings (bds-bidasi) -------------------------------------
-      # Pinged ONLY when the whole run is green (if: success() — so a red run,
-      # a quarantine day, or a dead schedule all starve the ping and
-      # Healthchecks emails after period 1d + grace 6h). A deadman catches
-      # what failure-emails can't: runs that never happen at all (e.g. GitHub
-      # auto-disabling the cron after 60 days of repo inactivity).
-      # URLs are capability tokens → Actions secrets, never committed.
-
-      - name: Deadman ping — assemble green (bds-bidasi)
-        if: success()
-        env:
-          HC: ${{ secrets.ASSEMBLE_HC_URL }}
-        run: |
-          if [ -z "$HC" ]; then
-            echo "::warning::ASSEMBLE_HC_URL secret not set — assemble deadman is NOT being fed"
-            exit 0
-          fi
-          curl -fsS -m 10 --retry 3 -o /dev/null "$HC" && echo "assemble deadman pinged"
-
-      - name: Deadman ping — batterie-home published (bds-bidasi)
-        # Starves when the private-push step skipped (missing deploy key /
-        # missing private output), even though that skip keeps the run green —
-        # the exact silent-stale mode bds-bidasi exists to catch. "current"
-        # counts as healthy: the private marketplace is fresh, nothing to push.
-        # Explicit allow-list (not != 'skipped') so an exit path that forgets
-        # to set state starves the ping rather than silently feeding it.
-        if: success() && (steps.home.outputs.state == 'pushed' || steps.home.outputs.state == 'current')
-        env:
-          HC: ${{ secrets.BATTERIE_HOME_HC_URL }}
-        run: |
-          if [ -z "$HC" ]; then
-            echo "::warning::BATTERIE_HOME_HC_URL secret not set — batterie-home deadman is NOT being fed"
-            exit 0
-          fi
-          curl -fsS -m 10 --retry 3 -o /dev/null "$HC" && echo "batterie-home deadman pinged"
+      # ---- Deadman pings: RETIRED 2026-09-11 -------------------------------
+      # The two Healthchecks checks this workflow fed (batterie-assemble,
+      # batterie-home-publish; bds-bidasi) were folded into tube's daily
+      # estate-sweep when the roster was consolidated 20 -> 9. The sweep reads
+      # this workflow's runs directly (red on main with age; a scheduled
+      # workflow silent for >3 days), so the pings became a second copy of one
+      # fact. Secrets ASSEMBLE_HC_URL / BATTERIE_HOME_HC_URL were deleted the
+      # same day. History of the steps: git log -S bds-bidasi.

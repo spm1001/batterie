@@ -4,10 +4,10 @@ description: >
   MANDATORY gate BEFORE running jq on any .jsonl under ~/.claude/ or reading past CC sessions.
   Invoke FIRST when introspecting conversations, searching session history, parsing transcripts,
   or building tools that read ~/.claude/projects/ data. Provides the CC JSONL schema reference
-  and `deglacer` CLI tool, plus routing to `deja` ranked content search — prevents the
+  and `deglacer` CLI tool, plus the cross-session search routing — prevents the
   54-attempt fumble pattern where Claudes guess
   at field names. Triggers on 'what happened last session', 'find when we discussed',
-  'parse session', 'read conversation', 'session history', 'token usage', 'deglacer', 'deja',
+  'parse session', 'read conversation', 'session history', 'token usage', 'deglacer',
   'resume a teleport session', 'translate a session id',
   "this session isn't in the --resume list".
   Do NOT use for git history (use git log) or your own current-session context. (user)
@@ -86,46 +86,30 @@ deglacer --summary --last 5 SESSION.jsonl         # quick recap of recent turns
 
 ---
 
-## deja — Ranked Content Search (optional companion)
+## Cross-session search — "have we discussed X before?"
 
-[deja](https://github.com/vshulcz/deja-vu) is a third-party single-binary search engine (MIT, Go — no LLM, no embeddings) that maintains a local BM25 index over **all** CC sessions. It is the right tool for "find when we discussed X" across months of history: `deglacer --find` substring-scans recent sessions only; deja ranks the whole estate.
+**There is no ranked whole-history search on this estate today.** deja, a
+third-party Go binary that indexed every session, was dropped on 2026-09-13
+after measurement: 52 invocations ever, two genuine searches in the preceding
+month, an installed build twelve releases behind an upstream shipping every
+two or three days, and an index holding unredacted transcript text. A native
+`deglacer --index` / `--search` over conversation text is specified and not yet
+built. Until it lands, route like this:
 
-It ships separately from deglacer — check before reaching for it:
+| Question | Reach for | Cost / caveat |
+|---|---|---|
+| "have we discussed X?" across all history | `rg -li -F 'fragment' ~/.claude/projects -g '*.jsonl'` | 100% recall on the 13-task bench, but ~120 unranked files per query and ~15s warm. Fixed-string (`-F`) matters: the raw bytes include JSON escaping |
+| the same, inside the recent window | `deglacer --find "term"` | Scans the 200 most-recent sessions, stops at 10 matches, and PRINTS that scope — read the scope line before reading a null as an absence. `--since DATE` widens it to every session after that date |
+| "what happened in THIS session" | `deglacer --summary FILE` / `--json` / `--stats` | Schema-aware; the rest of this reference |
 
-```bash
-command -v deja || echo "not installed"   # single binary; releases at the repo above
-deja distinctive terms                     # 2-3 rare terms, not the whole question
-```
+Two things that were true of deja and stay true of any search over this corpus,
+so keep them in mind when the native index lands:
 
-**Measured routing** (13-task bench, banc/session-search, 2026-08-09 — private estate eval):
-
-- **Default: deja with 2–3 distinctive terms** — ranked, ~12 results, ~2s warm; 85% recall on the bench. Whole-question queries dropped that to 64% (AND-matching cliff).
-- **Backstop when deja returns nothing or absence must be proven:** `rg -li -F 'fragment' ~/.claude/projects -g '*.jsonl'` — 100% recall on the bench (it sees raw bytes deja's tokeniser can miss, e.g. dotted versions like `25.12.5`), but ~120 unranked files per query.
-- **`deglacer --find fragment`** — only worth it inside its window (the 200 most-recently-modified sessions); short substrings only.
-- **hit@1 was 8–15% for every tool** — treat any result list as a candidate set to skim, never as an oracle.
-
-### Quirks that matter
-
-- **Query with a few distinctive terms, not the whole question.** Multi-word queries are AND-matched (filler words dropped; double-quoted phrases mean contiguous text), so a six-content-word question routinely matches zero sessions — the tool itself says "try fewer words". Two or three rare terms is the sweet spot; `--re PATTERN` for regex.
-- **`deja --help` is not help — it searches for the literal string `--help`.** Real flags and subcommands do exist: `--since 30d`, `--project`, `--limit N`, `--json`, and `version`, `show <id>`, `blame <path>`, `resume <id>`, `stats`, `doctor` among others. The repo README is the full surface.
-- **It auto-indexes on every run.** Warm runs answer in ~2 seconds; the first run after weeks of inactivity re-indexes the backlog and can take minutes. Don't pipe it through `head` (SIGPIPE kills it mid-index) — redirect to a file and read that.
-- **Results are capped (default ~15 sessions) and recency-weighted, NOT exhaustive.** A session containing your term can be absent when the term is common across your history (measured: a 3-week-old session with 3 matches lost every slot to fresher, denser hits). Absence from results is not absence from history: re-probe with a rarer term or raise `--limit` before concluding something was never discussed.
-- **Echo hits.** It indexes tool results as well as prose, so a session that *quotes* old content (reading a handoff, grepping a transcript) matches alongside the original. Use the date column to tell originals from echoes.
-- **A non-default `CLAUDE_CONFIG_DIR` blinds it — destructively.** deja resolves its source from `CLAUDE_CONFIG_DIR`, and its walker doesn't follow a symlinked root: a profile dir whose `projects/` is a symlink reads as zero sessions ("no agent history was found on this machine"), and that scan *rewrites the shared index to empty* — the next normal query pays a full re-index. From any such session, point it at the real corpus: `DEJA_CLAUDE_ROOT=$HOME/.claude/projects deja …` (or `env -u CLAUDE_CONFIG_DIR deja …`). A zero result there is the tool looking in the wrong place, not an absent history.
-
-### From deja result to deglacer
-
-```
-[claude] owner/repo · Jul 19 · 511191c5-458 — 12 matches
-```
-
-The third field is a session-id prefix. `deja show <id>` prints the conversation directly; for schema-aware extraction (tool calls, thinking, token usage, timelines), resolve to the file and hand it to deglacer:
-
-```bash
-deglacer --summary ~/.claude/projects/*/511191c5-458*.jsonl
-```
-
----
+- **hit@1 was 8–15% for every tool measured.** Treat a result list as a
+  candidate set to skim, never as an oracle.
+- **Echo hits.** Anything that indexes tool results as well as prose matches
+  the session that *quoted* old content (reading a handoff, grepping a
+  transcript) alongside the original. Use dates to tell originals from echoes.
 
 ## File Discovery
 
@@ -439,8 +423,8 @@ jq -c 'select(.type == "assistant") | .message.usage
 
 **Find sessions mentioning a term:**
 ```bash
-# Prefer: deja term (ranked, all history — see the deja section) when installed
-# Else:   deglacer --find "term" (substring, recent sessions)
+# Prefer: deglacer --find "term" (recent window, prints its scope)
+# Else:   rg -li -F 'term' ~/.claude/projects -g '*.jsonl' (all history, unranked)
 # Raw jq fallback:
 for f in ~/.claude/projects/*/*.jsonl; do
   if jq -e 'select(.type == "user" and (.message.content | type) == "string"
@@ -467,7 +451,7 @@ done
 | `2>/dev/null` on everything | Hides real errors | Understand the schema, don't hedge |
 | Guess at field names | 39% of jq-on-.claude commands are schema discovery | Read this reference |
 | Grep with a space after the colon (`"skill": "x"`) | CC serializes JSONL **compact** — `"skill":"x"` — so the spaced pattern is a false zero that reads like absence | jq on the parsed field, or match the compact form |
-| Treat deja's list as exhaustive | Top-K, recency-weighted — common terms rank-cut older sessions | Re-probe with a rarer term before claiming absence |
+| Treat any search result list as exhaustive | Every tool here is capped or scoped — `deglacer --find` at 200 sessions / 10 hits, `rg` at whatever you globbed | Read the scope line, re-probe with a rarer term, and say what you searched before claiming absence |
 
 ---
 

@@ -225,6 +225,12 @@ accomplis tasks --label "waiting-for"  # Works if label exists
 # But no: list-all-labels                       # Doesn't exist
 ```
 
+**`--labels ""` does not clear labels** — an empty value is dropped before the request, and the command reports success (tgt-jalupa, 14 Sep 2026). Until that lands, clear through the SDK: `api.update_task(id, labels=[])` from accomplis's own venv.
+
+### Deleted Tasks Still Fetch by ID
+
+**`accomplis task <id>` returns a deleted task as if it were live** — no `is_deleted`, no error (measured 14 Sep 2026 on a workspace task). The board listing is the truth: after `accomplis delete`, assert with `accomplis tasks --project "…" --team` and check the id is absent, not with a direct fetch.
+
 ### Cross-Workspace Limitation
 
 **Moving tasks between personal and shared projects fails.** The `move_task` API cannot move tasks across workspace boundaries (personal account ↔ a team workspace).

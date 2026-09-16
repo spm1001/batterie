@@ -8,11 +8,17 @@ is the cohesive slice that funds the new capability (the "which unfrozen
 sibling owns this logic?" move, .bon/understanding.md).
 """
 
+import re
 from collections import defaultdict
 from datetime import datetime
 from typing import Any
 
 from models import CalendarEvent
+
+# httpx's own message quotes the status: "Client error '404 Not Found' for url '…'"
+_HTTPX_STATUS = re.compile(r"'(\d{3} [^']*)' for url")
+# A raw response body past this is HTML noise; the cue is prose, not a dump.
+_REASON_CAP = 160
 
 # A resource calendar's address — the organiser of a room hold, not a person.
 _ROOM_SUFFIX = "@resource.calendar.google.com"
@@ -116,21 +122,54 @@ def _enrich_drive_results_with_meetings(
             dr["meeting_context"] = meeting_index[file_id]
 
 
-def calendars_read_cue(calendars: list[dict[str, Any]]) -> str:
+def _google_reason(message: str) -> str:
+    """The part of an HTTP error message that teaches. retry._format_http_error
+    appends Google's structured reason after " | API: " or a raw body after
+    " | Body: "; a bare httpx string carries the status in quotes plus an MDN
+    footer. The URL teaches nothing in a cue, so it never survives this."""
+    for sep in (" | API: ", " | Body: "):
+        if sep in message:
+            reason = message.split(sep, 1)[1].strip()
+            break
+    else:
+        match = _HTTPX_STATUS.search(message)
+        reason = match.group(1) if match else message.splitlines()[0].strip()
+    return reason if len(reason) <= _REASON_CAP else reason[:_REASON_CAP] + "…"
+
+
+def _calendar_label(cal: dict[str, Any]) -> str:
+    """A calendar's own summary first; the id in brackets where it differs,
+    so a reader can pass it straight back as calendar_id."""
+    summary, cal_id = cal.get("summary") or cal["id"], cal["id"]
+    label = "primary" if cal.get("primary") else cal_id
+    return summary if summary == label else f"{summary} ({label})"
+
+
+def calendars_read_cue(
+    calendars: list[dict[str, Any]], failed: list[dict[str, Any]] | None = None
+) -> str:
     """Name every calendar the fan-out read (mise-cegeva) — a null on the
     calendar lane is a statement about THESE calendars, not about every diary
-    the account can name. A calendar's own summary first; the id in brackets
-    where it differs, so a reader can pass it as calendar_id."""
-    names = []
-    for cal in calendars:
-        summary, cal_id = cal.get("summary") or cal["id"], cal["id"]
-        label = "primary" if cal.get("primary") else cal_id
-        names.append(summary if summary == label else f"{summary} ({label})")
-    n = len(calendars)
+    the account can name. When some of the list could not be read, the count
+    is "N of M" and the misses are named here, in the headline (mise-gudeci):
+    six 'from your calendar list' once read as complete when the list held
+    eight, and an event on the two that 404'd was absent with no other sign."""
+    names = [_calendar_label(c) for c in calendars]
+    n, total = len(calendars), len(calendars) + len(failed or [])
+    if failed:
+        misses = "; ".join(
+            f"{_calendar_label(f)}: {f['kind'].replace('_', ' ')} ({_google_reason(f['error'])})"
+            for f in failed
+        )
+        coverage = (
+            f"{n} of {total} calendars in your calendar list. {len(failed)} could not be "
+            f"read — {misses} — so an event on those is absent here with no other sign."
+        )
+    else:
+        coverage = f"{n} calendar{'s' if n != 1 else ''} from your calendar list."
     return (
-        f"calendars read: {', '.join(names)} — {n} calendar{'s' if n != 1 else ''} "
-        "from your calendar list. An event absent here is absent from these; a "
-        "colleague's diary is a calendar_id= away."
+        f"calendars read: {', '.join(names) or 'none'} — {coverage} An event absent "
+        "here is absent from these; a colleague's diary is a calendar_id= away."
     )
 
 
@@ -139,9 +178,7 @@ def calendar_list_refused_cue(reason: str) -> str:
     calendar.readonly. Says what WAS read, what was not, and the one move
     that fixes it — the freebusy 403 teaching pattern, on a degraded path
     rather than an error."""
-    # retry._format_http_error appends Google's own reason after " | API: ";
-    # the URL and MDN link ahead of it teach nothing here.
-    reason = reason.split(" | API: ", 1)[-1].strip()
+    reason = _google_reason(reason)
     return (
         "only 'primary' was read — listing your calendars needs the "
         "calendar.readonly scope, added 2026-09-14, and this token predates it "

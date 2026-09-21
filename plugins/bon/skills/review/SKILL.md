@@ -28,6 +28,7 @@ Estate-wide backlog review encoded as a repeatable 5-phase workflow. Replaces th
 - After a burst of work across multiple repos
 - When bon item count is growing and needs pruning
 - When starting a new focus period — shed stale commitments first
+- **Mid-cycle, as a delta** — a full pass ran days ago and the operator wants "what's where, what needs doing" before a break or a busy week. Run Phase 1 only (survey with `--full-dones`, net-motion, the whole queue joined to its cards, handoffs since the last ceremony), skip the verification fan and the repricings, and say so in the pyramid's headline. Measured 2026-09-21, nine days after a 199-agent full pass: 30 minutes, no subagents, and it still found the estate's one down piece of plumbing (notes-sync on a sentinel), three stale queue lines and a fired park condition. The 189 cards filed in the gap were too young to have rotted, so the fan would have bought nothing.
 
 ## When NOT to Use
 

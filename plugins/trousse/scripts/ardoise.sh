@@ -308,7 +308,21 @@ ENV_VARS=(
 # rather than a silent downshift.
 _eff_model=""
 for _kv in "${ENV_VARS[@]}"; do [[ "$_kv" == ANTHROPIC_MODEL=* ]] && _eff_model="${_kv#ANTHROPIC_MODEL=}"; done
-echo "ardoise: model=${_eff_model:-<sandbox config default>}" >&2
+# A --model flag beats ANTHROPIC_MODEL inside claude, so it must win here too.
+# Before this, `-p --model claude-fable-5-1[1m]` announced the inherited
+# Opus 5.5 while the run itself used Fable (measured 2026-09-22 from
+# modelUsage), so the one line meant to expose the engine named the wrong one.
+_model_src="env"
+for ((i=0; i<${#CLAUDE_ARGS[@]}; i++)); do
+    if [[ "${CLAUDE_ARGS[$i]}" == "--model" ]]; then
+        _eff_model="${CLAUDE_ARGS[$((i+1))]}"; _model_src="--model"
+    fi
+done
+if [[ -n "$_eff_model" ]]; then
+    echo "ardoise: model=$_eff_model (from $_model_src)" >&2
+else
+    echo "ardoise: model=<sandbox config default> (no pin)" >&2
+fi
 
 # ── Run ───────────────────────────────────────────────────────────────
 

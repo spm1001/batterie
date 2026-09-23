@@ -35,10 +35,10 @@ sonner supersedes it. Guidance still naming `send_message` or `mesh_peers` is st
 
 | Zone | Path |
 |------|------|
-| **Repos** | `~/repos/` — git-controlled, never cloud-synced. Owner-bucketed: batterie tools in `~/repos/spm1001/`. |
-| **Config** | `~/.claude/` — git: `spm1001/.claude` |
-| **Work** | Google Drive (web) — no local mount |
-| **Sharing** | `~/scratch/` — Syncthing (Mac ↔ tube); `~/notes` is git-canonical via notes-sync. Taildrive retired 2026-07-07. |
+| **Repos** | `~/repos/<owner>/<repo>` — the layout `/open REPO` and `bon move --to` resolve bare names against (`~/repos/*/NAME`). Git-controlled; never inside a cloud-synced folder. |
+| **Work documents** | Google Drive, reached through mise — no local mount assumed. |
+
+Everything else about a machine's layout — sync folders, a notes repo, whether `~/.claude` is itself a git repo — differs by machine and belongs in that machine's own guidance, not in this shard, which loads for every teammate.
 
 ## Overrides
 

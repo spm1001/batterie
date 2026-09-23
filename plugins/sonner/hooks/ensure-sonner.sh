@@ -15,13 +15,22 @@ UPDATE_LOG="$HOME/.cache/sonner/auto-update.log"
 mkdir -p "$(dirname "$UPDATE_LOG")" 2>/dev/null
 
 # --- Instruction shard ---
-# Symlink into ~/.claude/rules/ so the always-on shard loads every session.
+# Copy into <config dir>/rules/ so the always-on shard loads every session.
 # Idempotent — ln -sf overwrites stale symlinks from old plugin versions.
 HOOK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_ROOT="$(dirname "$HOOK_DIR")"
 if [ -f "$PLUGIN_ROOT/instructions.md" ]; then
-    mkdir -p "$HOME/.claude/rules"
-    ln -sf "$PLUGIN_ROOT/instructions.md" "$HOME/.claude/rules/sonner.md"
+    # Honour CLAUDE_CONFIG_DIR (bds-wuvola): a second config dir (the commis
+    # seat) loads its own rules/. Copy via temp+mv, NOT a symlink (bds-zilesu):
+    # the plugin root can be an ephemeral session dir that Desktop or Cowork
+    # purges, and a symlink into it dies silently. The copy is rewritten every
+    # session start, so it cannot go stale for long — edit instructions.md, not
+    # the copy. Same pattern as mise, accomplis and passe.
+    RULES_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/rules"
+    mkdir -p "$RULES_DIR"
+    _tmp="$(mktemp "$RULES_DIR/sonner.md.XXXXXX")" \
+        && cat "$PLUGIN_ROOT/instructions.md" > "$_tmp" \
+        && mv -f "$_tmp" "$RULES_DIR/sonner.md"
 fi
 
 # Resolve install source. A source checkout carries pyproject.toml; the

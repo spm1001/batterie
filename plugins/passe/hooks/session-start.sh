@@ -9,8 +9,8 @@ PLUGIN_ROOT="$(dirname "$HOOK_DIR")"
 # (the Cowork-sandbox incident, dead for a week). A copy can only go stale,
 # and this rewrite refreshes it every session start — same pattern as mise.
 if [ -f "$PLUGIN_ROOT/instructions.md" ]; then
-    mkdir -p "$HOME/.claude/rules"
-    RULES_FILE="$HOME/.claude/rules/passe.md"
+    mkdir -p "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/rules"
+    RULES_FILE="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/rules/passe.md"
     # Remove any leftover symlink first — writing through one would clobber
     # its target (e.g. a working-tree instructions.md), not replace the link.
     rm -f "$RULES_FILE"

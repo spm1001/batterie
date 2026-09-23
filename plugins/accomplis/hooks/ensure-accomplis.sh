@@ -20,8 +20,8 @@ ISSUES=""
 HOOK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 _SHARD_SRC="$(dirname "$HOOK_DIR")/instructions.md"
 if [ -f "$_SHARD_SRC" ]; then
-    mkdir -p "$HOME/.claude/rules"
-    RULES_DEST="$HOME/.claude/rules/accomplis.md"
+    mkdir -p "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/rules"
+    RULES_DEST="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/rules/accomplis.md"
     # temp+mv: a stale entry may be a symlink from an older install, and cp-ing
     # source over a symlink-to-source errors ("same file"). mv -f replaces the
     # entry atomically whatever it was, never following it.

@@ -1,10 +1,8 @@
 #!/bin/bash
-# SessionStart hook: ensure the accomplis CLI is available and has a token.
-# Install-if-MISSING only — no version-drift check here. Post single-version
-# cutover the vendored plugin.json carries the stamped SUITE version, not
-# accomplis's own, so any version comparison at session start is
-# structurally false (bds-japoca). Freshness is /batterie:update's job
-# (commit-based). Silent when fine.
+# SessionStart hook: ensure the accomplis CLI is available, has a token, and
+# is no older than the wheel this plugin ships. The comparison is against the WHEEL's filename (the tool's own
+# version), never plugin.json's stamped SUITE version, which is
+# structurally false (bds-japoca). Silent when fine.
 
 export PATH="$HOME/.local/bin:$PATH"
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-}"
@@ -43,6 +41,7 @@ elif _WHEELS=("$(dirname "$HOOK_DIR")"/wheels/accomplis-*.whl) && [ -f "${_WHEEL
     # clean machine installs from the public marketplace alone, and the source
     # repo can stay private.
     INSTALL_SRC="${_WHEELS[0]}"
+    WHEEL="${_WHEELS[0]}"
 else
     # Maintainer fallback: the source repo is private, so this works only with
     # GitHub credentials. Reached when a plugin copy predates shipped wheels.
@@ -62,6 +61,26 @@ if ! command -v accomplis &>/dev/null; then
         FIXED="${FIXED}• accomplis CLI installed (v${LANDED})\n"
     else
         ISSUES="${ISSUES}• accomplis CLI not found and auto-install failed (full error: ${UPDATE_LOG}). Run manually:\n\n  uv tool install \"$INSTALL_SRC\" --force --reinstall --no-cache\n"
+    fi
+fi
+
+# CLI older than the shipped wheel → reinstall from it (local file, no
+# network). The wheel's filename carries accomplis's own version, so this compares
+# like with like, unlike plugin.json's suite stamp (bds-japoca). Upgrade only:
+# a maintainer's newer from-source install is never replaced. Without this
+# the skills auto-update while the CLI keeps its first install forever on any
+# machine where nobody runs /batterie:update (a family Mac, 2026-09-23;
+# bon-rikaka carries the same fix for bon).
+if [ -n "${WHEEL:-}" ] && command -v accomplis &>/dev/null; then
+    WANT=$(basename "$WHEEL" | sed -E 's/^accomplis-([0-9]+\.[0-9]+\.[0-9]+).*/\1/')
+    HAVE=$(accomplis --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+    OLDEST=$(printf '%s\n%s\n' "${HAVE:-0.0.0}" "$WANT" | sort -V | head -1)
+    if [ "${HAVE:-0.0.0}" != "$WANT" ] && [ "$OLDEST" = "${HAVE:-0.0.0}" ]; then
+        if uv tool install "$INSTALL_SRC" --force --reinstall --no-cache >"$UPDATE_LOG" 2>&1; then
+            FIXED="${FIXED}• accomplis CLI updated v${HAVE:-unknown} → v${WANT} from the plugin's own wheel\n"
+        else
+            ISSUES="${ISSUES}• accomplis CLI is v${HAVE:-unknown}, older than the plugin's v${WANT}, and the update failed (full error: ${UPDATE_LOG}). Run manually:\n\n  uv tool install \"$INSTALL_SRC\" --force --reinstall --no-cache\n"
+        fi
     fi
 fi
 

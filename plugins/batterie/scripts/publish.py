@@ -166,6 +166,25 @@ def scope_disagreement(installs: list[dict]) -> str | None:
                      f"={i.get('version')}" for i in installs)
 
 
+def entries_behind(installs: list[dict], expected: str) -> str | None:
+    """None when every install entry is at `expected` or newer; otherwise a
+    line naming the laggards. The value check scope_disagreement is not: two
+    scopes can agree on the PREVIOUS version, which is how the 1.86.22 publish
+    printed "every scope current" with both copies still on 1.86.21
+    (2026-09-23, caught by the close's cold read)."""
+    want = tuple(int(x) for x in expected.split("."))
+    def ver(i):
+        try:
+            return tuple(int(x) for x in str(i.get("version", "")).split("."))
+        except ValueError:
+            return ()
+    lag = [i for i in installs if ver(i) < want]
+    if not lag:
+        return None
+    return ", ".join(f"{i.get('scope')}{' ' + i['projectPath'] if i.get('projectPath') else ''}"
+                     f"={i.get('version')}" for i in lag)
+
+
 def bump_version(version: str, level: str) -> str:
     """Compute the next semver. Pure — the heart of the testable surface."""
     parts = version.split(".")
@@ -244,7 +263,8 @@ def checked(cp: subprocess.CompletedProcess | None, what: str) -> subprocess.Com
     return cp
 
 
-def converge_project_scopes(key: str, *, env: dict | None, dry: bool) -> None:
+def converge_project_scopes(key: str, *, env: dict | None, dry: bool,
+                            expected: str | None = None) -> None:
     """Bring every project-scope copy of `key` level with the user scope just
     pulled, then assert the scopes agree (bds-wesumo, bds-getaka).
 
@@ -275,7 +295,30 @@ def converge_project_scopes(key: str, *, env: dict | None, dry: bool) -> None:
             settings.write_bytes(before)
             print(f"  WARNING: the project-scope update at {path} rewrote "
                   f"{settings} — restored it")
-    bad = scope_disagreement(registry_installs(key, config_dir))
+    installs = registry_installs(key, config_dir)
+    if expected and entries_behind(installs, expected):
+        # The marketplace clone can lag the assemble push by a few seconds, so
+        # `plugin update` reports "already at latest" on the old version.
+        # Refresh once and retry every scope before calling it a failure.
+        print(f"  note: {key} still behind {expected} "
+              f"({entries_behind(installs, expected)}) — refreshing once and retrying")
+        time.sleep(15)
+        mkt = key.rsplit("@", 1)[1]
+        checked(run(["claude", "plugin", "marketplace", "update", mkt],
+                    capture=True, env=env), f"marketplace update {mkt}")
+        checked(run(["claude", "plugin", "update", key], capture=True, env=env),
+                f"plugin update {key}")
+        for path in project_scope_paths(installs):
+            if Path(path).is_dir():
+                checked(run(["claude", "plugin", "update", key, "--scope", "project"],
+                            cwd=Path(path), capture=True, env=env),
+                        f"plugin update {key} (project scope {path})")
+        installs = registry_installs(key, config_dir)
+        lag = entries_behind(installs, expected)
+        if lag:
+            die(f"{key} shipped as {expected}, but this machine still holds {lag} "
+                f"after a retry — the release is live; run /batterie:update here")
+    bad = scope_disagreement(installs)
     if bad:
         die(f"{key} scopes disagree after the pull ({bad}) — this machine can "
             f"still load an older copy than the one just shipped")
@@ -713,9 +756,11 @@ def main() -> int:
             elif verdict == "fail":
                 checked(cp, "plugin update")
             else:
-                converge_project_scopes(f"{name}@batterie", env=claude_env, dry=dry)
+                converge_project_scopes(f"{name}@batterie", env=claude_env, dry=dry,
+                                        expected=shipped)
         else:
-            converge_project_scopes(f"{name}@batterie", env=claude_env, dry=dry)
+            converge_project_scopes(f"{name}@batterie", env=claude_env, dry=dry,
+                                    expected=shipped)
         # Flavour siblings shipped in the same assemble run: pull them too,
         # tolerantly — a host without the sibling (or its private marketplace)
         # skips with a printed note, never silently and never fatally.
@@ -738,7 +783,7 @@ def main() -> int:
                     checked(cp, f"plugin update {sib_name}")
                 else:
                     converge_project_scopes(f"{sib_name}@{sib_market}",
-                                            env=claude_env, dry=dry)
+                                            env=claude_env, dry=dry, expected=shipped)
         if cli:
             binary, extras = cli
             # bds-timule: reinstall from the wheel the assemble run just shipped

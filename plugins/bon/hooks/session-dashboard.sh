@@ -287,12 +287,16 @@ CURRENT_BRANCH=$(git branch --show-current 2>/dev/null || echo "")
 GAP_MSG=""
 if [ -n "$PREV_TS" ] && [ "$PREV_TS" != "" ] && [ "$PREV_TS" != "null" ]; then
     # Parse ISO timestamp to epoch
-    PREV_EPOCH=$(date -d "$PREV_TS" +%s 2>/dev/null || date -jf "%Y-%m-%dT%H:%M:%S" "${PREV_TS%%.*}" +%s 2>/dev/null || echo 0)
+    # BSD date needs -u: last_ts is UTC, and without it macOS reads the stamp
+    # as local time, adding an hour to every gap under BST (a 30s pause read
+    # as "Returning after ~60m", found on a family Mac 2026-09-23).
+    _TS="${PREV_TS%%.*}"; _TS="${_TS%Z}"
+    PREV_EPOCH=$(date -d "$PREV_TS" +%s 2>/dev/null || date -u -jf "%Y-%m-%dT%H:%M:%S" "$_TS" +%s 2>/dev/null || echo 0)
     NOW_EPOCH=$(date +%s)
     if [ "$PREV_EPOCH" -gt 0 ] 2>/dev/null; then
         GAP_SECS=$((NOW_EPOCH - PREV_EPOCH))
         if [ "$GAP_SECS" -ge 86400 ]; then
-            PREV_DATE=$(date -d "$PREV_TS" '+%A at %H:%M' 2>/dev/null || echo "earlier")
+            PREV_DATE=$(date -d "$PREV_TS" '+%A at %H:%M' 2>/dev/null || date -r "$PREV_EPOCH" '+%A at %H:%M' 2>/dev/null || echo "earlier")
             GAP_MSG="New day. Last active ${PREV_DATE}."
         elif [ "$GAP_SECS" -ge 7200 ]; then
             GAP_HOURS=$((GAP_SECS / 3600))

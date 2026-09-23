@@ -517,6 +517,23 @@ def main() -> int:
         die(f"{repo.name}: {len(untracked)} untracked file(s) present — refusing to "
             f"sweep them into a release commit (bds-fifuko):\n{listing}\n"
             "  Stage or remove them, or pass --all to include them deliberately.")
+    # Lint the plugin being published BEFORE anything is pushed (bds-lewabi):
+    # batterie-lint otherwise runs only in the assemble workflow, after the
+    # push, so a fault it catches costs a red run and a second suite version
+    # (1.86.6, 2026-09-23: a backtick inside the update skill's snapshot block).
+    # It needs the marketplace checkout beside this repo; without one, say so.
+    lint = suite_repo / "scripts" / "batterie-lint.py"
+    if not (suite_repo.parent / "batterie" / ".claude-plugin" / "marketplace.json").is_file():
+        print("  lint: skipped — no spm1001/batterie checkout beside the suite repo "
+              "(the assemble workflow still lints after the push)")
+    elif lint.is_file():  # read-only, so it runs under --dry-run too
+        cp = subprocess.run(["uv", "run", "--script", str(lint), name],
+                            text=True, capture_output=True, check=False)
+        if cp.returncode != 0:
+            print(cp.stdout, end="")
+            die(f"batterie-lint fails on {name} — fix it before publishing "
+                f"(the assemble run would go red on the same check)")
+        print(f"  lint: batterie-lint passes on {name}")
     print(f"  staging (git add {add_flag} in content repo) — these files plus the suite bump:")
     print("\n".join(f"    {ln}" for ln in pending.splitlines()) or "    (only the version bump)")
 

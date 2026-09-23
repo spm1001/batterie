@@ -18,6 +18,7 @@ from adapters.drive import (
     GOOGLE_DOC_MIME,
     GOOGLE_FORM_MIME,
     GOOGLE_SHEET_MIME,
+    is_google_workspace_file,
     upload_file_content,
 )
 from markdown_import import convert_fenced_blocks
@@ -33,6 +34,11 @@ from tools.plain_file import plain_overwrite
 from tools.restore_point import capture_restore_point, merge_restore_cues
 from tools.sheet_edit import sheet_overwrite
 from validation import validate_drive_id
+
+
+def _is_plain_target(metadata: dict[str, Any] | None) -> bool:
+    """True when the target is a plain (non-Google-native) Drive file."""
+    return bool(metadata) and not is_google_workspace_file(metadata.get("mimeType", ""))
 
 
 def do_overwrite(
@@ -100,11 +106,19 @@ def do_overwrite(
         if not resolved.is_file():
             return {"error": True, "kind": "invalid_input",
                     "message": f"Not a file: {file_path}"}
+        raw = resolved.read_bytes()
+        if _is_plain_target(metadata):
+            # A plain Drive file (PDF, PNG, xlsx...) takes the bytes as they are;
+            # decoding first refused every binary overwrite (mise-josebe).
+            return plain_overwrite(file_id, None, None, base_path, metadata,
+                                   file_bytes=raw, local_name=resolved.name)
         try:
-            content = resolved.read_text(encoding="utf-8")
+            content = raw.decode("utf-8")
         except UnicodeDecodeError:
             return {"error": True, "kind": "invalid_input",
-                    "message": f"File is not valid UTF-8 text: {file_path}"}
+                    "message": f"File is not valid UTF-8 text: {file_path} — a Google "
+                               "Doc, Sheet or Form takes text. Binary overwrite works "
+                               "on plain Drive files (PDF, image, Office...)."}
 
     if resolved_source and content:
         return {
@@ -133,6 +147,10 @@ def do_overwrite(
                        f"{mime}. For a Doc, use replace_text/prepend/append.",
         }
     if metadata and metadata.get("mimeType") == GOOGLE_FORM_MIME:
+        if resolved_source:  # source= was dropped here, then "requires content" blamed the wrong param (mise-tijeko)
+            return {"error": True, "kind": "invalid_input",
+                    "message": "source= replays a fetched deposit as a Doc or Sheet body; "
+                               "a form takes its YAML/JSON spec as content= or file_path=."}
         return form_overwrite(file_id, content, metadata)
     if metadata and metadata.get("mimeType") != GOOGLE_DOC_MIME:
         return plain_overwrite(file_id, content, source, base_path, metadata)

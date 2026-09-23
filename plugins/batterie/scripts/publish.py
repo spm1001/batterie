@@ -78,6 +78,18 @@ FLAVOUR_SIBLINGS = {
 }
 
 
+def registry_path(config_dir: str | None) -> Path:
+    base = Path(config_dir or os.environ.get("CLAUDE_CONFIG_DIR") or Path.home() / ".claude")
+    return base / "plugins" / "installed_plugins.json"
+
+
+def registry_installs(key: str, config_dir: str | None) -> list[dict]:
+    """Every install entry for `name@marketplace` — one per scope (and per
+    projectPath). Raises on an unreadable registry: a failed read must never
+    look like "nothing installed"."""
+    return json.loads(registry_path(config_dir).read_text()).get("plugins", {}).get(key, [])
+
+
 def shipped_wheel(plugin: str, package: str, config_dir: str | None) -> tuple[Path | None, str]:
     """The CLI wheel the assembler shipped inside this plugin's user-scope install.
 
@@ -86,10 +98,9 @@ def shipped_wheel(plugin: str, package: str, config_dir: str | None) -> tuple[Pa
     Returns (wheel, "") or (None, reason) — the reason is printed when the pull
     falls back to git, so a missing wheel is never a silent downgrade.
     """
-    base = Path(config_dir or os.environ.get("CLAUDE_CONFIG_DIR") or Path.home() / ".claude")
-    registry = base / "plugins" / "installed_plugins.json"
+    registry = registry_path(config_dir)
     try:
-        installs = json.loads(registry.read_text()).get("plugins", {}).get(f"{plugin}@batterie", [])
+        installs = registry_installs(f"{plugin}@batterie", config_dir)
     except (OSError, json.JSONDecodeError) as exc:
         return None, f"cannot read {registry}: {exc}"
     user = [i for i in installs if i.get("scope") == "user"]
@@ -135,6 +146,24 @@ def owning_config_dir(output: str) -> str | None:
     if not m:
         return None
     return m.group(1) or None
+
+
+def project_scope_paths(installs: list[dict]) -> list[str]:
+    """projectPaths of every project-scope entry. A bare `claude plugin update`
+    touches only the user scope, so these are what the pull must visit
+    separately (bds-wesumo, bds-getaka)."""
+    return [i["projectPath"] for i in installs
+            if i.get("scope") == "project" and i.get("projectPath")]
+
+
+def scope_disagreement(installs: list[dict]) -> str | None:
+    """None when every install entry carries one version; otherwise a line
+    naming each scope's version — the pull's value check, so a green publish
+    can't leave an older copy loadable on the machine that shipped it."""
+    if len({i.get("version") for i in installs}) <= 1:
+        return None
+    return ", ".join(f"{i.get('scope')}{' ' + i['projectPath'] if i.get('projectPath') else ''}"
+                     f"={i.get('version')}" for i in installs)
 
 
 def bump_version(version: str, level: str) -> str:
@@ -213,6 +242,44 @@ def checked(cp: subprocess.CompletedProcess | None, what: str) -> subprocess.Com
             print(cp.stderr, file=sys.stderr, end="")
         die(f"{what} failed (exit {cp.returncode})")
     return cp
+
+
+def converge_project_scopes(key: str, *, env: dict | None, dry: bool) -> None:
+    """Bring every project-scope copy of `key` level with the user scope just
+    pulled, then assert the scopes agree (bds-wesumo, bds-getaka).
+
+    Run after the user-scope update. The command resolves the project from
+    cwd, so each entry is updated from its own projectPath. A `$HOME` project's
+    config dir IS the user config dir, so a scope-targeted command there can
+    rewrite user settings.json (an uninstall once deleted enabledPlugins,
+    2026-08-17) — snapshot it and put it back if it moved."""
+    if dry:
+        print(f"  DRY  (then: update each project-scope copy of {key} from its projectPath)")
+        return
+    config_dir = (env or {}).get("CLAUDE_CONFIG_DIR")
+    try:
+        installs = registry_installs(key, config_dir)
+    except (OSError, json.JSONDecodeError) as exc:
+        die(f"cannot read {registry_path(config_dir)} to check {key}'s scopes: {exc}")
+    for path in project_scope_paths(installs):
+        if not Path(path).is_dir():
+            print(f"  note: project scope {path} no longer exists — skipped")
+            continue
+        settings = registry_path(config_dir).parent.parent / "settings.json"
+        guard = Path(path).resolve() == Path.home().resolve() and settings.is_file()
+        before = settings.read_bytes() if guard else None
+        checked(run(["claude", "plugin", "update", key, "--scope", "project"],
+                    cwd=Path(path), capture=True, env=env),
+                f"plugin update {key} (project scope {path})")
+        if guard and settings.read_bytes() != before:
+            settings.write_bytes(before)
+            print(f"  WARNING: the project-scope update at {path} rewrote "
+                  f"{settings} — restored it")
+    bad = scope_disagreement(registry_installs(key, config_dir))
+    if bad:
+        die(f"{key} scopes disagree after the pull ({bad}) — this machine can "
+            f"still load an older copy than the one just shipped")
+    print(f"  {key}: every scope current")
 
 
 def list_dispatch_runs() -> list[dict] | None:
@@ -628,6 +695,10 @@ def main() -> int:
                       f"plugin update skipped (CLI reinstall still runs)")
             elif verdict == "fail":
                 checked(cp, "plugin update")
+            else:
+                converge_project_scopes(f"{name}@batterie", env=claude_env, dry=dry)
+        else:
+            converge_project_scopes(f"{name}@batterie", env=claude_env, dry=dry)
         # Flavour siblings shipped in the same assemble run: pull them too,
         # tolerantly — a host without the sibling (or its private marketplace)
         # skips with a printed note, never silently and never fatally.
@@ -648,6 +719,9 @@ def main() -> int:
                           f"sibling pull skipped")
                 elif verdict == "fail":
                     checked(cp, f"plugin update {sib_name}")
+                else:
+                    converge_project_scopes(f"{sib_name}@{sib_market}",
+                                            env=claude_env, dry=dry)
         if cli:
             binary, extras = cli
             # bds-timule: reinstall from the wheel the assemble run just shipped

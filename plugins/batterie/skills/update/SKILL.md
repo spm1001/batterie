@@ -60,7 +60,13 @@ except Exception as e:
 
 fam = family_marketplaces()
 mkt = lambda key: key.rsplit("@", 1)[1] if "@" in key else ""
-suite_plugins = {k: v[0] for k, v in plugins.items() if mkt(k) in fam and v}
+# One key can carry several install entries — a user-scope one plus a
+# project-scope one per projectPath (bds-getaka). Headline the user entry; list
+# the rest beneath it so step 2 updates every scope, not just the one a bare
+# "claude plugin update" touches.
+user_entry = lambda v: next((e for e in v if e.get("scope") == "user"), v[0])
+suite_plugins = {k: user_entry(v) for k, v in plugins.items() if mkt(k) in fam and v}
+other_scopes = {k: [e for e in plugins[k] if e is not suite_plugins[k]] for k in suite_plugins}
 
 # A family-NAMED marketplace that didn't resolve as family means the discovery
 # above has a gap (an unrecognised source shape): its plugins would vanish from
@@ -95,6 +101,9 @@ else:
         # is in play, so the single-marketplace view is unchanged.
         label = key if multi else key.rsplit("@", 1)[0]
         print(f"- {label}: v{info['version']} (sha: {info['gitCommitSha'][:12]})")
+        for e in other_scopes[key]:
+            where = f" {e['projectPath']}" if e.get("projectPath") else ""
+            print(f"  ↳ {e.get('scope', '?')} scope{where}: v{e.get('version', '?')} (sha: {(e.get('gitCommitSha') or '')[:12]})")
 
     # CLI version check — keyed by plugin base-name (a CLI's source repo is the
     # same whichever marketplace shipped the plugin).
@@ -142,11 +151,22 @@ claude plugin update <name>@<marketplace>
 
 A plugin must be updated from the marketplace it was installed from, so keep the suffix. In the single-marketplace case every key ends `@batterie` (e.g. `claude plugin update bon@batterie`). Run them sequentially — each must complete before the next starts. Report the output of each.
 
+**Then update every `↳ project scope` line the snapshot showed** (bds-getaka). The bare command only ever touches the **user**-scope install, whatever directory it runs from — it says so ("at user scope") — so a project-scope copy stays silently behind. For each one, run from its `projectPath`:
+
+```
+cd <projectPath> && claude plugin update <name>@<marketplace> --scope project
+```
+
+Don't remove these duplicates instead: on a machine with a second config dir (the commis seat), a session launched at `$HOME` re-mints a project-scope entry for every enabled plugin, so a removal is undone by the next such session (measured 2026-08-31, carte-tikije). Why it matters: on 2026-09-23 tube's `/home/modha` copies sat at 1.85.20 — before CLIs shipped as wheels — while user scope was on 1.86.5, and sessions launched at `~` are the estate's normal pattern.
+
+**Guard when `<projectPath>` is the home directory:** a `$HOME` project's config dir is the user config dir, so scope-targeted commands there can edit **user** `settings.json` (a `--scope project` *uninstall* once deleted user `enabledPlugins` entries, 2026-08-17). Take `git -C ~/.claude status --short settings.json` before and after, or a copy of the file where `~/.claude` isn't git-tracked, and restore anything that changed.
+
 ### 3. Check what changed
 
-After all updates, read `~/.claude/plugins/installed_plugins.json` again. For each batterie plugin, compare the **version** and **gitCommitSha** against the "before" snapshot above. Report:
-- Which plugins had version changes (old → new)
+After all updates, read `~/.claude/plugins/installed_plugins.json` again. For each batterie plugin, compare the **version** and **gitCommitSha** of **every install entry** (each scope separately) against the "before" snapshot above. Report:
+- Which plugins had version changes (old → new), per scope
 - Which were already up to date
+- **Any plugin whose scopes still disagree after the run** — say so loudly; that is the failure this step exists to catch, not a detail
 
 **Registry-drop guard (bds-vegowo).** Also diff the *set of keys*: every batterie plugin present in the "before" snapshot must still be present in the after-state. A plugin registry entry can vanish silently — Claude Desktop has been caught bulk-rewriting `installed_plugins.json` and emptying `@batterie` entries while leaving the plugin cache intact — and the loss is invisible (the plugin's skills just stop loading, no error, no log) until you happen to look. This update run is exactly when a human is looking. So if any batterie plugin from the "before" list is **absent** from the after-state, **warn loudly** — it's a silent registry drop, not a normal update — and offer the known fix (it restores the entry cleanly from the intact cache):
 
@@ -168,7 +188,7 @@ claude plugin install <name>@<marketplace>
 }
 ```
 
-Each plugin key maps to a **list** of installations (one per scope). Use `v[0]` to get the user-scope entry.
+Each plugin key maps to a **list** of installations — one `user`-scope entry plus one `project`-scope entry per `projectPath`. Pick the user entry by its `scope` field, not by position.
 
 ### 4. Converge the CLIs onto the wheels the plugins ship
 

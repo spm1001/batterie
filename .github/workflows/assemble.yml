@@ -43,12 +43,33 @@ jobs:
         # mode (mapped but never cloned, silently SKIPped every run) can't
         # recur. batterie-de-savoir is in the mapping too (suite plugin) and
         # doubles as the lint-script source.
+        #
+        # Private sources clone over SSH with a per-repo deploy key; the rest
+        # clone anonymously. The workshop repos went private on 2026-09-23
+        # (their handoffs and notes were public), and a private repo cloned
+        # anonymously fails here rather than being skipped. A new private
+        # source needs a DEPLOY_KEY_<REPO> line below plus its secret.
+        env:
+          DEPLOY_KEY_BATTERIE_DE_SAVOIR: ${{ secrets.BDS_DEPLOY_KEY }}
+          DEPLOY_KEY_TROUSSE: ${{ secrets.TROUSSE_DEPLOY_KEY }}
+          DEPLOY_KEY_ARETE: ${{ secrets.ARETE_DEPLOY_KEY }}
         run: |
           repos=$(grep -E '^[a-z-]+:[a-z-]+$' batterie/assemble.sh | cut -d: -f2 | sort -u)
           test -n "$repos"
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          ssh-keyscan github.com >> ~/.ssh/known_hosts 2>/dev/null
           for repo in $repos; do
-            git clone --depth=1 --quiet "https://github.com/spm1001/$repo.git"
-            echo "  OK $repo"
+            var="DEPLOY_KEY_$(printf '%s' "$repo" | tr 'a-z-' 'A-Z_')"
+            key="${!var:-}"
+            if [ -n "$key" ]; then
+              printf '%s\n' "$key" > ~/.ssh/dk_$repo && chmod 600 ~/.ssh/dk_$repo
+              GIT_SSH_COMMAND="ssh -i $HOME/.ssh/dk_$repo -o IdentitiesOnly=yes" \
+                git clone --depth=1 --quiet "git@github.com:spm1001/$repo.git"
+              echo "  OK $repo (deploy key)"
+            else
+              git clone --depth=1 --quiet "https://github.com/spm1001/$repo.git"
+              echo "  OK $repo"
+            fi
           done
 
       - name: Install uv

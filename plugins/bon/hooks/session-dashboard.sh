@@ -284,6 +284,20 @@ CURRENT_BRANCH=$(git branch --show-current 2>/dev/null || echo "")
 #   next day: explicit day boundary
 # Language is observational, not performative ("welcome back" would activate
 # sycophancy-adjacent vectors per the paper's Finding 9).
+# --- Last assistant timestamp: the anchor for this turn's gap ---
+# Read it NOW, from the transcript. At this prompt, the newest assistant entry
+# is the reply to the previous prompt, which is exactly when the human stopped
+# reading. The state file's last_ts was captured one prompt earlier, so using
+# it lagged a turn: after a real 5h break the NEXT prompt, minutes later,
+# repeated "Returning after ~5h" (the traps.md "not a clock" incidents,
+# diagnosed 2026-09-23). The state value stays only as a fallback.
+LAST_TS=""
+if [ -n "$TRANSCRIPT" ] && [ -f "$TRANSCRIPT" ]; then
+    LAST_TS=$(_reverse "$TRANSCRIPT" \
+        | jq -r 'select(.type == "assistant") | .timestamp // empty' 2>/dev/null \
+        | head -1 || true)
+fi
+[ -n "$LAST_TS" ] && PREV_TS="$LAST_TS"
 GAP_MSG=""
 if [ -n "$PREV_TS" ] && [ "$PREV_TS" != "" ] && [ "$PREV_TS" != "null" ]; then
     # Parse ISO timestamp to epoch
@@ -306,14 +320,6 @@ if [ -n "$PREV_TS" ] && [ "$PREV_TS" != "" ] && [ "$PREV_TS" != "null" ]; then
             GAP_MSG="Returning after ~${GAP_MINS}m."
         fi
     fi
-fi
-
-# --- Last assistant timestamp (for next turn's gap calc) ---
-LAST_TS=""
-if [ -n "$TRANSCRIPT" ] && [ -f "$TRANSCRIPT" ]; then
-    LAST_TS=$(_reverse "$TRANSCRIPT" \
-        | jq -r 'select(.type == "assistant") | .timestamp // empty' 2>/dev/null \
-        | head -1 || true)
 fi
 
 # --- Compaction detection ---

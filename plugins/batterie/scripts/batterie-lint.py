@@ -193,6 +193,17 @@ def lint_plugin(name: str, plugin_dir: Path) -> list[str]:
                     if not rel.exists():
                         fails.append(f"{name}: hook script missing: {script_path}")
 
+    # ── Hooks declared in exactly one place (bds-nukeca) ──────────
+    # Claude Code auto-loads hooks/hooks.json; a plugin.json that ALSO
+    # carries a "hooks" key (inline or pointing at that same file) is the
+    # shape behind i-have-adhd's "Duplicate hooks file detected" refusal
+    # (their ed6a0a2). Pick one home.
+    if "hooks" in pj and (plugin_root / "hooks" / "hooks.json").exists():
+        fails.append(
+            f"{name}: hooks declared twice — plugin.json has a 'hooks' key AND "
+            "hooks/hooks.json exists; keep one"
+        )
+
     # ── SKILL.md files ────────────────────────────────────────────
     skills_dir = plugin_root / "skills"
     if skills_dir.is_dir():

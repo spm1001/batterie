@@ -1,9 +1,10 @@
 #!/bin/bash
-# SessionStart hook: ensure bon CLI is available. Install-if-MISSING only —
-# no version-drift check here. Post single-version cutover the vendored
-# plugin.json carries the stamped SUITE version, not bon's own, so any
-# version comparison at session start is structurally false (bds-japoca).
-# Freshness is /batterie:update's job (commit-based). Silent when fine.
+# SessionStart hook: ensure the bon CLI is available and no older than the
+# wheel this plugin ships. The comparison is against the WHEEL's filename,
+# never plugin.json: plugin.json carries the stamped SUITE version, not bon's
+# own, so comparing against it is structurally false (bds-japoca). The wheel
+# is built from source by the assembler and named for bon's own version.
+# Silent when fine.
 
 export PATH="$HOME/.local/bin:$PATH"
 FIXED=""
@@ -41,6 +42,7 @@ elif _WHEELS=("$(dirname "$HOOK_DIR")"/wheels/bon-*.whl) && [ -f "${_WHEELS[0]}"
     # clean machine installs from the public marketplace alone, and the source
     # repo can stay private.
     INSTALL_SRC="${_WHEELS[0]}[dolt]"
+    WHEEL="${_WHEELS[0]}"
 else
     # Maintainer fallback: the source repo is private, so this works only with
     # GitHub credentials. Reached when a plugin copy predates shipped wheels.
@@ -57,6 +59,25 @@ if ! command -v bon &>/dev/null; then
         FIXED="${FIXED}• bon CLI installed (v${LANDED})\n"
     else
         ISSUES="${ISSUES}• bon CLI not found and auto-install failed (full error: ${UPDATE_LOG}). Run manually:\n\n  uv tool install \"$INSTALL_SRC\" --force --reinstall --no-cache\n"
+    fi
+fi
+
+# Check 2: CLI older than the shipped wheel → reinstall from it (local file,
+# no network). Upgrade only: a maintainer's newer from-source install is never
+# replaced. Without this, the skills auto-update while the CLI keeps its first
+# install forever on any machine where nobody runs /batterie:update. A family
+# Mac was found on CLI 1.68.1 under 1.86.12 skills on 2026-09-23 (bon-rikaka).
+if [ -n "${WHEEL:-}" ] && command -v bon &>/dev/null; then
+    WANT=$(basename "$WHEEL" | sed -E 's/^bon-([0-9]+\.[0-9]+\.[0-9]+).*/\1/')
+    HAVE=$(bon --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+    OLDEST=$(printf '%s\n%s\n' "${HAVE:-0.0.0}" "$WANT" | sort -V | head -1)
+    if [ "${HAVE:-0.0.0}" != "$WANT" ] && [ "$OLDEST" = "${HAVE:-0.0.0}" ]; then
+        if uv tool install "$INSTALL_SRC" --force --reinstall --no-cache >"$UPDATE_LOG" 2>&1; then
+            LANDED=$(bon --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' || echo "unknown")
+            FIXED="${FIXED}• bon CLI updated v${HAVE:-unknown} → v${LANDED} from the plugin's own wheel\n"
+        else
+            ISSUES="${ISSUES}• bon CLI is v${HAVE:-unknown}, older than the plugin's v${WANT}, and the update failed (full error: ${UPDATE_LOG}). Run manually:\n\n  uv tool install \"$INSTALL_SRC\" --force --reinstall --no-cache\n"
+        fi
     fi
 fi
 

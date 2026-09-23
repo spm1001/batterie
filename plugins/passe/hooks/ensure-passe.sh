@@ -10,6 +10,7 @@
 
 export PATH="$HOME/.local/bin:$PATH"
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-}"
+HOOK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 FIXED=""
 ISSUES=""
 
@@ -20,9 +21,15 @@ mkdir -p "$(dirname "$UPDATE_LOG")" 2>/dev/null
 # Resolve install source
 if [ -n "$PLUGIN_ROOT" ] && [ -f "$PLUGIN_ROOT/pyproject.toml" ]; then
     INSTALL_SRC="$PLUGIN_ROOT"
+elif _WHEELS=("$(dirname "$HOOK_DIR")"/wheels/passe-*.whl) && [ -f "${_WHEELS[0]}" ]; then
+    # The marketplace plugin ships no pyproject.toml, but the assembler builds
+    # this CLI into a wheel beside this hook (bds-timule, 2026-09-23) — so a
+    # clean machine installs from the public marketplace alone, and the source
+    # repo can stay private.
+    INSTALL_SRC="${_WHEELS[0]}"
 else
-    # Vendored marketplace plugin ships no pyproject.toml (post-2026-06-10 cutover),
-    # so install from the source repo over git — the bare name is not published on PyPI.
+    # Maintainer fallback: the source repo is private, so this works only with
+    # GitHub credentials. Reached when a plugin copy predates shipped wheels.
     INSTALL_SRC="passe @ git+https://github.com/spm1001/passe"
 fi
 

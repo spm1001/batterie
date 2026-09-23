@@ -18,14 +18,12 @@ allowed-tools: ["Bash(accomplis:*)", Read, AskUserQuestion]
 
 ### 1. Install the CLI (if missing)
 
-Install from the **source repo** — the marketplace cache ships no `pyproject.toml`, so a cache/`CLAUDE_PLUGIN_ROOT` install fails ("does not appear to be a Python project"):
+Install from the **wheel the plugin ships** — the marketplace copy has no `pyproject.toml`, but the assembler builds the CLI into `wheels/` two levels above this skill's base directory (the path the harness prints when the skill loads):
 ```bash
-# Local clone if present, else git+https:
-[ -f ~/repos/spm1001/accomplis/pyproject.toml ] \
-  && uv tool install ~/repos/spm1001/accomplis --force --reinstall --no-cache \
-  || uv tool install 'accomplis @ git+https://github.com/spm1001/accomplis' --force --reinstall --no-cache
+uv tool install <skill-base-dir>/../../wheels/accomplis-*.whl --force --reinstall --no-cache
 export PATH="$HOME/.local/bin:$PATH"
 ```
+A maintainer with a clone installs from `~/repos/spm1001/accomplis` instead; the repo is private, so `git+https` works only with GitHub credentials.
 
 The SessionStart hook (`ensure-accomplis.sh`) already runs this logic automatically — you usually don't need to install by hand.
 

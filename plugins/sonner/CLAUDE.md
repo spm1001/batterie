@@ -44,7 +44,7 @@ One module for the tool itself is a deliberate choice — this is a doorbell, no
 
 sonner ships as a batterie plugin: `.claude-plugin/plugin.json` (SessionStart hook only), `hooks/ensure-sonner.sh` (symlinks `instructions.md` → `~/.claude/rules/sonner.md`, installs the CLI if missing), `instructions.md` (the thin always-on shard), `skills/peer-messaging/`. Three things to hold:
 
-- **The assembler's skill-plugin copy-list ships no Python** — no `pyproject.toml`, no `src/`. The hook therefore installs from `git+https://github.com/spm1001/sonner` when running vendored (repo is public, stdlib-only), and from `$PLUGIN_ROOT` in a source checkout. Don't add a dependency without re-checking that path.
+- **The assembler's skill-plugin copy-list ships no Python** — no `pyproject.toml`, no `src/`. The hook therefore installs from the wheel the assembler builds into the vendored plugin (`wheels/sonner-*.whl`, bds-timule, 2026-09-23), from `$PLUGIN_ROOT` in a source checkout, and from `git+https://github.com/spm1001/sonner` only as a maintainer fallback — the repo is private, so that path needs GitHub credentials. Dependencies resolve from PyPI, so any new one must be on PyPI.
 - **The vendored plugin.json version is the SUITE version** — the assembler stamps it. This repo's own `0.1.0` is local-dev-only; release via `/batterie:publish`, never a hand-bump.
 - **A shard/skill/hook edit here is vendored content** — it ships only on a suite bump, and takes effect in sessions only after restart (guidance is session-cached).
 

@@ -26,11 +26,18 @@ fi
 
 # Resolve install source. A source checkout carries pyproject.toml; the
 # vendored marketplace plugin does not (skill-plugin copy list ships no
-# Python), so fall back to git — spm1001/sonner is public and stdlib-only,
-# so this works on a clean machine with nothing but uv.
+# Python), but it does carry a wheel the assembler builds (bds-timule).
 if [ -n "$PLUGIN_ROOT" ] && [ -f "$PLUGIN_ROOT/pyproject.toml" ]; then
     INSTALL_SRC="$PLUGIN_ROOT"
+elif _WHEELS=("$(dirname "$HOOK_DIR")"/wheels/sonner-*.whl) && [ -f "${_WHEELS[0]}" ]; then
+    # The marketplace plugin ships no pyproject.toml, but the assembler builds
+    # this CLI into a wheel beside this hook (bds-timule, 2026-09-23) — so a
+    # clean machine installs from the public marketplace alone, and the source
+    # repo can stay private.
+    INSTALL_SRC="${_WHEELS[0]}"
 else
+    # Maintainer fallback: the source repo is private, so this works only with
+    # GitHub credentials. Reached when a plugin copy predates shipped wheels.
     INSTALL_SRC="git+https://github.com/spm1001/sonner"
 fi
 

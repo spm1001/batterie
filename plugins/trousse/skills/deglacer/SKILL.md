@@ -49,8 +49,10 @@ Anything the table below doesn't name is new, not impossible. Sample its keys (`
 `deglacer` is the CC JSONL extraction CLI, installed as a uv tool. Use it instead of raw jq for structured extraction.
 
 ```bash
-# Install (once) — from the source repo (local clone, else git+https):
-uv tool install 'deglacer @ git+https://github.com/spm1001/deglacer'
+# Install (once) — from the wheel trousse ships, two levels above this skill's
+# base directory (the path the harness prints when the skill loads):
+uv tool install <skill-base-dir>/../../wheels/deglacer-*.whl
+# Maintainer fallback (private repo, needs GitHub credentials): ~/repos/spm1001/deglacer
 
 # Use:
 deglacer SESSION.jsonl

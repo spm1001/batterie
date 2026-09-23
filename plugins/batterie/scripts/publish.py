@@ -65,6 +65,7 @@ CLI_REPOS = {
     "bon": ("bon", "[dolt]"),
     "passe": ("passe", ""),
     "accomplis": ("accomplis", ""),
+    "sonner": ("sonner", ""),
 }
 
 # Flavour siblings: one source repo, several published plugins. The assemble
@@ -75,6 +76,29 @@ CLI_REPOS = {
 FLAVOUR_SIBLINGS = {
     "mise": [("mise-home", "batterie-home")],
 }
+
+
+def shipped_wheel(plugin: str, package: str, config_dir: str | None) -> tuple[Path | None, str]:
+    """The CLI wheel the assembler shipped inside this plugin's user-scope install.
+
+    Since bds-timule (2026-09-23) the assembler builds each plugin CLI into
+    plugins/<name>/wheels/, so installs never need the (private) source repo.
+    Returns (wheel, "") or (None, reason) — the reason is printed when the pull
+    falls back to git, so a missing wheel is never a silent downgrade.
+    """
+    base = Path(config_dir or os.environ.get("CLAUDE_CONFIG_DIR") or Path.home() / ".claude")
+    registry = base / "plugins" / "installed_plugins.json"
+    try:
+        installs = json.loads(registry.read_text()).get("plugins", {}).get(f"{plugin}@batterie", [])
+    except (OSError, json.JSONDecodeError) as exc:
+        return None, f"cannot read {registry}: {exc}"
+    user = [i for i in installs if i.get("scope") == "user"]
+    if not user:
+        return None, f"no user-scope {plugin}@batterie install in {registry}"
+    wheels = sorted(Path(user[0]["installPath"]).glob(f"wheels/{package}-*.whl"))
+    if len(wheels) != 1:
+        return None, f"{len(wheels)} {package} wheels under {user[0]['installPath']}/wheels (expected 1)"
+    return wheels[0], ""
 
 
 def die(msg: str) -> "NoReturn":  # type: ignore[name-defined]
@@ -626,15 +650,21 @@ def main() -> int:
                     checked(cp, f"plugin update {sib_name}")
         if cli:
             binary, extras = cli
-            # bds-zelobu / the weaning: reinstall from git+https (the artifact
-            # just pushed above, content-first), NOT the local working tree.
-            # Matches /batterie:update's default and the estate's go-forward
-            # doctrine (production installs from GitHub artifacts, never a
-            # working tree). The old working-tree spec (f"{repo}{extras}")
-            # silently flipped a git+https machine to file:// on every publish,
-            # so /batterie:update lost its commit-drift signal for that CLI.
-            # git+https@HEAD == what we just shipped, so no content is lost.
-            spec = f"{repo.name}{extras} @ git+https://github.com/spm1001/{repo.name}"
+            # bds-timule: reinstall from the wheel the assemble run just shipped
+            # inside the plugin we pulled above — the artifact every other
+            # machine installs, so this one converges on the same bytes. Never
+            # the local working tree (bds-zelobu: that silently flipped a
+            # machine's provenance on every publish). git+https remains only
+            # as a loud fallback: the source repos are private, so it works on
+            # a maintainer machine with GitHub credentials and nowhere else.
+            owner_dir = (claude_env or {}).get("CLAUDE_CONFIG_DIR")
+            wheel, why = (None, "dry run") if dry else shipped_wheel(name, binary, owner_dir)
+            if wheel:
+                spec = f"{wheel}{extras}"
+            else:
+                print(f"  note: no shipped {binary} wheel ({why}) — falling "
+                      f"back to git+https (needs GitHub credentials)")
+                spec = f"{repo.name}{extras} @ git+https://github.com/spm1001/{repo.name}"
             # --no-cache is load-bearing: uv reuses a cached *build* and
             # `uv cache clean` does NOT clear it, so a bump that leaves src/
             # byte-identical (plugin.json-only) silently reinstalls the old

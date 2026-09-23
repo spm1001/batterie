@@ -5,7 +5,7 @@ Instructions for Claude when working in this repository.
 ## What This Is
 
 accomplis is a Python CLI for Todoist with GTD coaching. Two parts:
-- **CLI** (`accomplis/`) — MCP-free Todoist API access, installed via `uv tool install` from the source repo (`~/repos/spm1001/accomplis`, else `git+https`)
+- **CLI** (`accomplis/`) — MCP-free Todoist API access, installed via `uv tool install` from the wheel the plugin ships (`wheels/accomplis-*.whl`, built by the assembler — bds-timule), or from `~/repos/spm1001/accomplis` on a maintainer machine. The repo is private, so `git+https` needs GitHub credentials
 - **Skill** (`SKILL.md` + `references/`) — GTD semantics and coaching
 
 ## Versioning & releasing (suite-managed)
@@ -61,7 +61,7 @@ Entry points defined in `pyproject.toml`:
 - `accomplis` → `accomplis.cli:main`
 - `accomplis-flatten` → `accomplis.flatten:main`
 
-Install: `uv tool install ~/repos/spm1001/accomplis` (else `uv tool install 'accomplis @ git+https://github.com/spm1001/accomplis'`)
+Install: `uv tool install ~/repos/spm1001/accomplis` (anywhere else, the plugin's `wheels/accomplis-*.whl`)
 Reinstall after changes: `uv tool install --force --reinstall --no-cache ~/repos/spm1001/accomplis`
 
 ## Working with Bon

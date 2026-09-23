@@ -170,36 +170,33 @@ claude plugin install <name>@<marketplace>
 
 Each plugin key maps to a **list** of installations (one per scope). Use `v[0]` to get the user-scope entry.
 
-### 4. Detect CLI drift — by commit, never by version number
+### 4. Converge the CLIs onto the wheels the plugins ship
 
-Two batterie plugins ship CLI tools installed via `uv tool install`:
+Four batterie plugins install a CLI with `uv tool install`, and since bds-timule (2026-09-23) the assembler builds each one into a wheel inside the plugin itself — `<installPath>/wheels/<package>-*.whl`. The source repos are private, so the wheel is the install source for everyone; the git URL is a maintainer fallback that only works with GitHub credentials.
 
-| Plugin | CLI binary | Package | Source repo | Extras |
-|--------|-----------|---------|-------------|--------|
-| bon | `bon` | `bon` | `spm1001/bon` | `[dolt]` |
-| accomplis | `accomplis` | `accomplis` | `spm1001/accomplis` | |
+| Plugin | CLI binary / package | Extras |
+|--------|----------------------|--------|
+| bon | `bon` | `[dolt]` |
+| accomplis | `accomplis` | |
+| passe | `passe` | |
+| sonner | `sonner` | |
 
-(passe left the suite 2026-07-07 — its CLI installs standalone and its shard/tunnel live in `spm1001/passe-partout`; this skill no longer manages it.)
+Plus **deglacer**, shipped in trousse's `wheels/`: converge it the same way *if it is already installed* (`command -v deglacer`), never install it unasked.
 
-**Do NOT compare the plugin version against the CLI version.** Post-cutover (bds-suwoho) every vendored plugin.json carries the stamped **suite** version while each CLI reports its own source-repo number — those differ by design, so a version comparison fires a false reinstall on every run (bds-zojide / bds-japoca). The truthful drift signal is the **git commit**.
+**Do NOT compare the plugin version against the CLI version.** Every vendored plugin.json carries the stamped **suite** version while each CLI reports its own number — they differ by design (bds-zojide / bds-japoca). The truthful signal is whether the installed CLI came from the wheel this plugin now ships.
 
-For each CLI in the table:
+For each CLI whose plugin is installed:
 
-1. **Installed commit:** read `commit_id` from the tool's provenance record:
-   ```
-   cat ~/.local/share/uv/tools/<plugin>/lib/python*/site-packages/*.dist-info/direct_url.json
-   ```
-   (the dist-info dir uses the package name with underscores, e.g. `accomplis-…`; the glob handles it).
-2. **Origin commit:** `git ls-remote https://github.com/<source-repo> HEAD`.
+1. **Shipped wheel:** the plugin's user-scope `installPath` from `installed_plugins.json` (step 3), then `ls <installPath>/wheels/<package>-*.whl`. Exactly one is expected.
+2. **Installed provenance:** `cat ~/.local/share/uv/tools/<package>/lib/python*/site-packages/*.dist-info/direct_url.json`.
 3. Decide:
-   - `commit_id` **equals** origin HEAD → current, skip (report "up to date").
-   - `commit_id` **differs**, or the CLI is **not in PATH** → reinstall **from git** (command below).
-   - `direct_url.json` has **no `commit_id`** (a `file://` URL — this machine deliberately installs from a local working tree) → reinstall from that same working-tree path. **Provenance is sticky:** never switch a machine's install source just because a `~/repos` clone happens to exist or not — a clone present for editing must not silently become the operational install (bds-zojide).
-4. Reinstall commands — `--no-cache` is load-bearing: uv reuses a cached *build* of the source and `uv cache clean` does NOT clear it, so a src-light change silently reinstalls the old wheel (bds-vanuta; verified 2026-06-17):
-   - **Git** (the default): `uv tool install "<pkg>[<extras>] @ git+https://github.com/<source-repo>" --force --reinstall --no-cache` — PEP 508 form, extras go **before** the `@`.
-   - **Working-tree** (only when step 3 says provenance is a local dir): `uv tool install "~/repos/<source-repo>[<extras>]" --force --reinstall --no-cache`.
-   Always include extras from the table (bon is always `[dolt]` — PyMySQL is tiny and harmless; always installing it avoids silent breakage when any project uses the Dolt backend). **Never install from `installPath` or a bare PyPI name** — the plugin cache ships no `pyproject.toml` and none of these CLIs are on PyPI.
-5. After any reinstall, **re-read `<cli> --version` and report the version that actually landed** — never report an expected number (a claim the probe hasn't confirmed). The CLI's number is its own source-repo version, not the suite number; matching is neither expected nor checked.
+   - `url` is `file://<the shipped wheel>` → current, skip ("up to date").
+   - `url` is a `file://….whl` elsewhere (an older plugin version's copy) → current if that file still exists and `cmp -s` says it is byte-identical to the shipped wheel (hatchling builds are reproducible, so an unchanged CLI rebuilds to the same bytes); otherwise reinstall.
+   - `url` carries `vcs_info` (an old git install) or the CLI is **not on PATH** → reinstall from the shipped wheel.
+   - `url` carries `dir_info` (a local working tree — a maintainer machine installing from `~/repos` on purpose) → reinstall from that same path. **Provenance is sticky:** a clone present for editing must never silently become the operational install, nor the reverse (bds-zojide).
+   - The plugin ships **no** `wheels/` (a copy older than bds-timule) → say so and fall back to `uv tool install "<package>[<extras>] @ git+https://github.com/spm1001/<package>"`, which needs GitHub credentials.
+4. Reinstall: `uv tool install "<shipped wheel><extras>" --force --reinstall --no-cache` — e.g. `uv tool install "/…/bon/1.85.30/wheels/bon-1.85.19-py3-none-any.whl[dolt]" …`. Extras follow the path directly. `--no-cache` is load-bearing (bds-vanuta). Never install from a bare PyPI name: none of these CLIs is on PyPI.
+5. After any reinstall, **re-read `<cli> --version` and report the version that actually landed** (sonner has no `--version`; report "installed"). The CLI's number is its own, not the suite number.
 
 ### 5. Summarise
 

@@ -44,6 +44,6 @@ sonner supersedes it. Guidance still naming `send_message` or `mesh_peers` is st
 
 | Your Default | What I Need |
 |-------------|-------------|
-| `uv tool install <tool>` | `uv tool install ~/repos/spm1001/<tool>` for batterie CLI tools |
+| `uv tool install <tool>` from PyPI or git | batterie CLIs install from the wheel their plugin ships (`<plugin dir>/wheels/`) — the SessionStart hooks and `/batterie:update` do it for you; the source repos are private |
 | Individual skill permissions | `Skill(*)` in settings.json covers all skills |
 | Hand-run the bump→commit→push→assemble→update dance to ship a shard | `/batterie:publish` — one verb does the whole dance (run from the source repo's working tree) |

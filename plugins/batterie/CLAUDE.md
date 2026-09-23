@@ -56,7 +56,8 @@ The plugin version is one number; the **CLIs** (`bon` / `passe` / `accomplis --v
 
 - `/batterie:version` shows the suite number as headline, each CLI's own `--version` as a **footnote** — a CLI number *below* the suite number is expected, not drift.
 - **Session hooks are install-if-missing only** — no version-drift check at session start (that produced a false reinstall every session). They install a *missing* CLI and report the version that actually landed.
-- **`/batterie:update`'s CLI-drift check is commit-based** — installed commit (`direct_url.json` in the tool's dist-info) vs `git ls-remote` HEAD of the source repo, no version semantics. Install source is provenance-sticky: a `~/repos` clone appearing doesn't flip an install onto the working tree.
+- **CLIs install from wheels the plugins ship (bds-timule, 2026-09-23).** `assemble.sh`'s `WHEELS` map builds bon, accomplis, passe, sonner (and deglacer into trousse, jeton into mise) into `plugins/<name>/wheels/`, so a CLI change is vendored content like any other and rides the suite bump. The source repos are private; hooks, `/batterie:update` and `publish.py`'s pull all install from the shipped wheel, with `git+https` only as a loud maintainer fallback. `/batterie:update`'s drift check reads `direct_url.json`: installed from this plugin's shipped wheel (or a byte-identical older copy) → current; anything else → reinstall from the wheel. Provenance stays sticky for local working-tree installs.
+- **Vendored mise resolves jeton from its shipped wheel** — the assembler rewrites the vendored `pyproject.toml`'s `[tool.uv.sources]` git line to the wheel path and relocks, failing the build if the lock still names a spm1001 git repo.
 
 ### Surfaces
 

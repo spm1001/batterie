@@ -15,7 +15,7 @@ mkdir -p "$(dirname "$UPDATE_LOG")" 2>/dev/null
 
 # --- Instruction shard ---
 # Copy into <config dir>/rules/ so always-on rules load every session.
-# Idempotent — ln -sf overwrites stale symlinks from old plugin versions.
+# Idempotent — temp+mv replaces whatever entry is there, a stale symlink included.
 HOOK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_ROOT="$(dirname "$HOOK_DIR")"
 if [ -f "$PLUGIN_ROOT/instructions.md" ]; then

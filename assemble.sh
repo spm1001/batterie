@@ -49,6 +49,20 @@ sonner:sonner
 passe:passe
 arete:arete
 "
+# The one marketplace field no plugin.json carries (bds-dekava). `=`, not `:`,
+# on purpose: assemble.yml's clone list greps every `name:repo` line in this
+# file, so a colon here would try to clone a repo called "productivity".
+# A PLUGINS entry with no category here fails the run.
+CATEGORIES="
+batterie=productivity
+bon=productivity
+trousse=workflow
+mise=integration
+accomplis=productivity
+sonner=integration
+passe=automation
+arete=productivity
+"
 # sonnette DELISTED 2026-08-24 (son-pilalu, Sameer's call): superseded by sonner,
 # which shipped two suite versions earlier. Its conductor-channel MCP traffic
 # stopped 2026-07-19 (measured, harness-ergonomics data/calls-2026-08-16.csv.gz)
@@ -67,9 +81,11 @@ arete:arete
 # rationale left the guidance shard, skills and hooks with no rot-proof
 # install route — tube's shard died for a week via a Cowork-sandbox symlink.
 # The plugin route plus a hook-generated shard (passe df1dbbc) is durable.
-# De-registration is manual by design: the assembler never deletes a dest
-# dir for an unmapped plugin, so retiring one means removing it from this
-# list, marketplace.json, and plugins/ together.
+# De-registration is ONE edit since bds-dekava (2026-09-23): drop the plugin
+# from PLUGINS (and CATEGORIES). The run then prunes its plugins/ dir and
+# regenerates marketplace.json without it — the two can no longer disagree with
+# this list (the accomplis rename stranded the marketplace for ~30 min on
+# 2026-08-02 because both were hand-kept).
 
 # Wheels shipped inside plugins (bds-timule, 2026-09-23): plugin:source_repo.
 # Each source repo is built into a wheel that lands in plugins/<plugin>/wheels/,
@@ -454,6 +470,54 @@ if [ ! -f "$MARKETPLACE_README" ]; then
   exit 1
 fi
 cp "$MARKETPLACE_README" "$BATTERIE_DIR/README.md"
+
+# marketplace.json is GENERATED (bds-dekava, 2026-09-23), never hand-kept:
+# entries in PLUGINS order, each read from the just-vendored (and stamped)
+# plugins/<name>/.claude-plugin/plugin.json — description, keywords, and
+# homepage from its repository field (already pointed at the README for
+# private sources by stamp_repository) — plus the CATEGORIES map. Then any
+# plugins/ dir PLUGINS no longer names is pruned, so a delisted or renamed
+# plugin cannot linger as a frozen copy. The batterie-home manifest has its
+# own generator further down. Fails loud on a plugin without a category.
+PLUGIN_NAMES=$(for e in $PLUGINS; do echo "${e%%:*}"; done)
+for d in "$BATTERIE_DIR"/plugins/*/; do
+  n=$(basename "$d")
+  if ! printf '%s\n' $PLUGIN_NAMES | grep -qx "$n"; then
+    rm -rf "$d"
+    echo "  PRUNED plugins/$n (not in PLUGINS)"
+  fi
+done
+write_public_marketplace() {
+  python3 - "$1" "$PLUGIN_NAMES" "$CATEGORIES" <<'PYEOF'
+import json, sys
+root, names, cats = sys.argv[1], sys.argv[2].split(), sys.argv[3].split()
+category = dict(c.split("=", 1) for c in cats)
+entries = []
+for n in names:
+    if n not in category:
+        sys.stderr.write(f"FAIL: plugin {n} has no CATEGORIES entry in assemble.sh\n")
+        sys.exit(1)
+    pj = json.load(open(f"{root}/plugins/{n}/.claude-plugin/plugin.json"))
+    entry = {"name": n, "source": f"./plugins/{n}",
+             "description": pj["description"], "category": category[n]}
+    if pj.get("repository"):
+        entry["homepage"] = pj["repository"]
+    if pj.get("keywords"):
+        entry["keywords"] = pj["keywords"]
+    entries.append(entry)
+manifest = {
+    "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+    "name": "batterie",
+    "description": "Kitchen tools for knowledge work — plugins for GTD tracking, session lifecycle, Google Workspace, browser automation, and more",
+    "owner": {"name": "Sameer Modha", "email": "sameer@modha.dev"},
+    "plugins": entries,
+}
+with open(f"{root}/.claude-plugin/marketplace.json", "w") as f:
+    json.dump(manifest, f, indent=2, ensure_ascii=False)
+    f.write("\n")
+PYEOF
+}
+write_public_marketplace "$BATTERIE_DIR"
 
 # Invariant check 1 (fail): every relative-source plugin in marketplace.json
 # must have vendored content — a manifest entry over nothing is how the

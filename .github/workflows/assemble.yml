@@ -288,3 +288,58 @@ jobs:
       # workflow silent for >3 days), so the pings became a second copy of one
       # fact. Secrets ASSEMBLE_HC_URL / BATTERIE_HOME_HC_URL were deleted the
       # same day. History of the steps: git log -S bds-bidasi.
+
+  # ---- Install smoke (bds-dekava, 2026-09-23) ------------------------------
+  # Installs every plugin from the marketplace the assemble job just pushed, in
+  # a throwaway config, the way a teammate's CLI would: catches a manifest the
+  # current Claude Code rejects — a malformed plugin.json or marketplace.json,
+  # a declared plugin that will not install — which the husk and parity guards
+  # cannot see. Measured 2026-09-23: a plugin.json with "hooks": 42 goes red;
+  # a duplicate hooks declaration does NOT (it only bites at session load), so
+  # that class stays with batterie-lint's check (bds-nukeca).
+  # A separate job on purpose: it runs the latest @anthropic-ai/claude-code
+  # from npm, so it gets read-only permissions and none of the deploy keys or
+  # the planetmodha cred. It runs after the push, so it detects rather than
+  # prevents — a red here means the live marketplace needs a look. It cannot
+  # fire SessionStart hooks (no session), so CLI installs are not covered.
+  install-smoke:
+    needs: assemble
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout the assembled marketplace
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          ref: main
+
+      - name: Install Claude Code
+        run: npm install -g @anthropic-ai/claude-code
+
+      - name: Every plugin installs, enables and validates
+        run: |
+          export HOME="$RUNNER_TEMP/home" CLAUDE_CONFIG_DIR="$RUNNER_TEMP/home/cfg"
+          mkdir -p "$CLAUDE_CONFIG_DIR"
+          claude --version
+          claude plugin validate "$GITHUB_WORKSPACE"
+          claude plugin marketplace add "$GITHUB_WORKSPACE"
+          mp=$(python3 -c "import json; print(json.load(open('.claude-plugin/marketplace.json'))['name'])")
+          names=$(python3 -c "import json; print(' '.join(p['name'] for p in json.load(open('.claude-plugin/marketplace.json'))['plugins']))")
+          test -n "$names"
+          fail=0
+          for n in $names; do
+            claude plugin validate "plugins/$n" > /dev/null || { echo "::error::plugin validate failed: $n"; fail=1; }
+            claude plugin install "$n@$mp" || { echo "::error::install failed: $n@$mp"; fail=1; }
+          done
+          claude plugin list --json > "$RUNNER_TEMP/list.json"
+          python3 - "$RUNNER_TEMP/list.json" "$mp" $names <<'PYEOF' || fail=1
+          import json, sys
+          listed, mp, names = sys.argv[1], sys.argv[2], sys.argv[3:]
+          enabled = {p["id"] for p in json.load(open(listed)) if p.get("enabled")}
+          missing = [n for n in names if f"{n}@{mp}" not in enabled]
+          for n in missing:
+              print(f"::error::{n}@{mp} is not installed and enabled")
+          print(f"{len(names) - len(missing)}/{len(names)} plugins installed and enabled")
+          sys.exit(1 if missing else 0)
+          PYEOF
+          exit $fail

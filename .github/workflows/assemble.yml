@@ -53,6 +53,12 @@ jobs:
           DEPLOY_KEY_BATTERIE_DE_SAVOIR: ${{ secrets.BDS_DEPLOY_KEY }}
           DEPLOY_KEY_TROUSSE: ${{ secrets.TROUSSE_DEPLOY_KEY }}
           DEPLOY_KEY_ARETE: ${{ secrets.ARETE_DEPLOY_KEY }}
+          # bds-timule: the CLI sources, private once their wheels ship here.
+          DEPLOY_KEY_BON: ${{ secrets.BON_DEPLOY_KEY }}
+          DEPLOY_KEY_ACCOMPLIS: ${{ secrets.ACCOMPLIS_DEPLOY_KEY }}
+          DEPLOY_KEY_PASSE: ${{ secrets.PASSE_DEPLOY_KEY }}
+          DEPLOY_KEY_SONNER: ${{ secrets.SONNER_DEPLOY_KEY }}
+          DEPLOY_KEY_DEGLACER: ${{ secrets.DEGLACER_DEPLOY_KEY }}
         run: |
           repos=$(grep -E '^[a-z-]+:[a-z-]+$' batterie/assemble.sh | cut -d: -f2 | sort -u)
           test -n "$repos"

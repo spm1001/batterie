@@ -71,6 +71,81 @@ arete:arete
 # dir for an unmapped plugin, so retiring one means removing it from this
 # list, marketplace.json, and plugins/ together.
 
+# Wheels shipped inside plugins (bds-timule, 2026-09-23): plugin:source_repo.
+# Each source repo is built into a wheel that lands in plugins/<plugin>/wheels/,
+# so every CLI and library a plugin needs installs from THIS public repo and the
+# workshop repos can go private — batterie is the one public strand (Sameer:
+# "a spider web when it should be a rope"). The SessionStart hooks install from
+# these wheels; git+https survives only as a maintainer fallback. Repos listed
+# here but absent from PLUGINS (deglacer, jeton) are cloned by assemble.yml,
+# whose clone list greps every `name:repo` line in this file — keep the shape.
+# Hatchling wheels are reproducible, so an unchanged source rebuilds to the same
+# bytes and the ratchet stays quiet; a changed source is content drift like any
+# other and rides the suite bump.
+WHEELS="
+bon:bon
+accomplis:accomplis
+passe:passe
+sonner:sonner
+trousse:deglacer
+mise:jeton
+"
+
+# Build the wheels mapped to $1 into $2/wheels/ (wiped first, so a renamed or
+# retired wheel cannot linger). uv build writes a `*` .gitignore into its output
+# dir, which would make git silently skip the wheel — so build into a temp dir
+# and copy only the .whl across. Exactly one wheel per source, or fail loud.
+build_wheels() {
+  local plugin="$1" dest="$2" entry repo tmp whl n
+  rm -rf "$dest/wheels"
+  for entry in $WHEELS; do
+    [ "${entry%%:*}" = "$plugin" ] || continue
+    repo="${entry##*:}"
+    [ -f "$SOURCE_DIR/$repo/pyproject.toml" ] || { echo "FAIL: wheel source $repo has no pyproject.toml (for $plugin)" >&2; exit 1; }
+    tmp=$(mktemp -d)
+    if ! uv build --wheel --quiet -o "$tmp" "$SOURCE_DIR/$repo" >"$tmp/build.log" 2>&1; then
+      echo "FAIL: uv build of $repo (wheel for $plugin) failed:" >&2; cat "$tmp/build.log" >&2; exit 1
+    fi
+    n=$(find "$tmp" -maxdepth 1 -name '*.whl' | wc -l)
+    [ "$n" -eq 1 ] || { echo "FAIL: $repo built $n wheels, expected 1" >&2; exit 1; }
+    whl=$(find "$tmp" -maxdepth 1 -name '*.whl')
+    mkdir -p "$dest/wheels"
+    cp "$whl" "$dest/wheels/"
+    rm -rf "$tmp"
+    repoint_uv_source "$dest" "$(basename "$whl")"
+  done
+}
+
+# If the vendored plugin is a uv project whose [tool.uv.sources] fetches this
+# wheel's package from git, point it at the shipped wheel instead and relock —
+# mise's jeton is the case: `uv run --project` would otherwise clone jeton from
+# GitHub on every host. Targeted line edit, not a TOML rewrite (same reason as
+# stamp_version). No matching source line → nothing to do.
+repoint_uv_source() {
+  local dest="$1" whl="$2" changed
+  [ -f "$dest/pyproject.toml" ] || return 0
+  changed=$(python3 - "$dest/pyproject.toml" "$whl" <<'PYEOF'
+import re, sys
+path, whl = sys.argv[1], sys.argv[2]
+pkg = whl.split("-")[0].replace("_", "[-_]")
+text = open(path).read()
+new, n = re.subn(rf'(?m)^({pkg})\s*=\s*\{{\s*git\s*=[^}}]*\}}[ \t]*$',
+                 lambda m: f'{m.group(1)} = {{ path = "wheels/{whl}" }}', text)
+if n > 1:
+    sys.stderr.write(f"FAIL: {n} uv source lines for {pkg} in {path}\n"); sys.exit(1)
+if n:
+    open(path, "w").write(new)
+print(n)
+PYEOF
+) || exit 1
+  if [ "$changed" = 1 ]; then
+    uv lock --quiet --directory "$dest" || { echo "FAIL: uv lock after repointing $whl in $dest" >&2; exit 1; }
+    if grep -q 'git = "https://github.com/spm1001/' "$dest/uv.lock"; then
+      echo "FAIL: $dest/uv.lock still fetches from a spm1001 git repo after repointing $whl" >&2; exit 1
+    fi
+  fi
+}
+
 # Private-marketplace manifest (bds-mumise): which plugin, which transform,
 # where it lands. Kept as plain variables — two marketplaces don't earn a
 # data-driven loop; the shared machinery is the vendor loop above the guards
@@ -253,6 +328,11 @@ print('yes' if d.get('mcpServers') else 'no')
       fi
     done
   fi
+
+  # Wheels after the copy (the MCP branch's rsync --delete clears wheels/, which
+  # the source never has) and before the ratchet, so a rebuilt wheel counts as
+  # content like everything else (bds-timule).
+  build_wheels "$plugin" "$dest"
 
   # Parity guard (BOTH branches): a copy rule must never eat plugin content.
   # Whatever capability dirs the source ships, the vendored package ships.

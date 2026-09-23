@@ -127,10 +127,10 @@ Show the full picture — outcomes with progress and their actions — **as text
 
 Run `bon list`, capture to a temp file, Read and output:
 ```bash
-OUT=$(mktemp /tmp/bon-hierarchy-XXXXXX); bon list > "$OUT"; echo "$OUT"
+OUT=$(mktemp "${TMPDIR:-/tmp}/bon-hierarchy.XXXXXX"); bon list > "$OUT"; echo "$OUT"
 ```
 
-Keep the X's at the END of the template. macOS's BSD `mktemp` only randomises trailing X's, so a `-XXXXXX.txt` template creates the literal file `bon-hierarchy-XXXXXX.txt` on the first run and fails with "File exists" on every run after that. That turned the guard below into a fixed, machine-wide path on every Mac, reported by a family Mac on 2026-09-23.
+**The X's stay at the end, which is why there is no `.txt`.** macOS's BSD `mktemp` only randomises a run of X's at the very end of the template. With a suffix after them it creates the file at the literal path and exits 0, so the guard below silently becomes the fixed shared path it exists to prevent. Then it compounds: the literal file persists, every later call exits 1 with an empty string, and `bon list > ""` hands the next Claude a blank path. GNU `mktemp` accepts the suffix, so this was invisible from Linux. `TMPDIR` is per-user on macOS, which makes the path collision-proof by construction as well as by randomness. (Asha's fix, f359706 on her fork, 27 Aug. It had nowhere to land until 2026-09-23.)
 
 Read the path it echoes. The path must be unique per session: a fixed
 `/tmp/bon-hierarchy.txt` is shared by every concurrent `/open`, and on

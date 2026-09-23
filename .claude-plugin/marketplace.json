@@ -10,24 +10,26 @@
     {
       "name": "batterie",
       "source": "./plugins/batterie",
-      "description": "Suite-level utilities — cross-plugin updates and maintenance.",
+      "description": "Suite-level utilities for the Batterie de Savoir suite — cross-plugin updates and maintenance",
       "category": "productivity",
       "homepage": "https://github.com/spm1001/batterie#readme",
       "keywords": [
         "update",
         "maintenance",
-        "utilities"
+        "batterie"
       ]
     },
     {
       "name": "bon",
       "source": "./plugins/bon",
-      "description": "GTD-native work tracker — outcomes, actions, tactical steps. Includes session lifecycle (/open, /close).",
+      "description": "GTD-native work tracker for AI coding agents — outcomes, actions, tactical steps. Includes the /open and /close session lifecycle.",
       "category": "productivity",
       "homepage": "https://github.com/spm1001/batterie#readme",
       "keywords": [
         "gtd",
-        "tracking"
+        "tracking",
+        "productivity",
+        "work-management"
       ]
     },
     {
@@ -37,38 +39,44 @@
       "category": "workflow",
       "homepage": "https://github.com/spm1001/batterie#readme",
       "keywords": [
-        "session",
-        "hooks",
-        "review"
+        "review",
+        "skills",
+        "isolation",
+        "testing",
+        "hooks"
       ]
     },
     {
       "name": "mise",
       "source": "./plugins/mise",
-      "description": "Google Workspace MCP — search Drive, fetch Gmail, act on documents. Requires Google OAuth.",
+      "description": "Google Workspace MCP server — search Drive, fetch Gmail, act on documents",
       "category": "integration",
       "homepage": "https://github.com/spm1001/mise-en-space",
       "keywords": [
         "google",
         "workspace",
+        "drive",
+        "gmail",
         "mcp"
       ]
     },
     {
       "name": "accomplis",
       "source": "./plugins/accomplis",
-      "description": "Todoist with GTD coaching — outcomes, weekly review, pattern detection.",
+      "description": "Todoist CLI with GTD coaching — outcomes, weekly review, pattern detection",
       "category": "productivity",
       "homepage": "https://github.com/spm1001/batterie#readme",
       "keywords": [
         "todoist",
-        "gtd"
+        "gtd",
+        "productivity",
+        "coaching"
       ]
     },
     {
       "name": "sonner",
       "source": "./plugins/sonner",
-      "description": "Repo-addressed peer messaging — ring a repo and a Claude answers. CLI + peer-messaging skill.",
+      "description": "Ring a repo, and a Claude answers — repo-addressed peer messaging for Claude Code sessions. CLI plus the peer-messaging skill.",
       "category": "integration",
       "homepage": "https://github.com/spm1001/batterie#readme",
       "keywords": [
@@ -81,27 +89,29 @@
     {
       "name": "passe",
       "source": "./plugins/passe",
-      "description": "Fast browser automation via Chrome DevTools Protocol — fetch pages, screenshots, forms, network capture. Auto-installs the passe CLI on first session.",
+      "description": "Fast browser automation via Chrome DevTools Protocol — fetch pages, screenshots, forms, network capture. Needs a Chrome running with remote debugging; the passe CLI installs itself on first session.",
       "category": "automation",
       "homepage": "https://github.com/spm1001/batterie#readme",
       "keywords": [
         "browser",
         "automation",
         "cdp",
-        "chrome"
+        "chrome",
+        "testing"
       ]
     },
     {
       "name": "arete",
       "source": "./plugins/arete",
-      "description": "Move lists in and out of MindNode — a pasted list becomes a mind map, and a map comes back as Markdown. Skill only; the CLI is macOS-only.",
+      "description": "Move lists in and out of MindNode — a pasted list becomes a mind map, and a map comes back as Markdown. Ships the mindnode-mapping skill; the CLI is macOS-only.",
       "category": "productivity",
       "homepage": "https://github.com/spm1001/batterie#readme",
       "keywords": [
         "mindnode",
         "mind-map",
         "opml",
-        "outline"
+        "outline",
+        "macos"
       ]
     }
   ]

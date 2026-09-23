@@ -1,7 +1,7 @@
 {
   "name": "trousse",
-  "version": "1.86.9",
-  "description": "Session lifecycle, code review, data analysis, and behavioral skills for Claude Code. Best with: bon",
+  "version": "1.86.10",
+  "description": "Code review through three lenses, blank-slate Claudes for cold reads and evals, driving a real interactive session, and skill authoring.",
   "author": {
     "name": "Sameer Modha",
     "url": "https://github.com/spm1001"
@@ -9,13 +9,11 @@
   "repository": "https://github.com/spm1001/batterie#readme",
   "license": "MIT",
   "keywords": [
-    "session",
-    "lifecycle",
-    "hooks",
     "review",
     "skills",
-    "bigquery",
-    "analysis"
+    "isolation",
+    "testing",
+    "hooks"
   ],
   "hooks": {
     "SessionStart": [

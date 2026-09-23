@@ -1,7 +1,7 @@
 {
   "name": "passe",
-  "version": "1.86.9",
-  "description": "Fast browser automation via Chrome DevTools Protocol. Requires: passe CLI (auto-installed on first session), Chrome with CDP",
+  "version": "1.86.10",
+  "description": "Fast browser automation via Chrome DevTools Protocol — fetch pages, screenshots, forms, network capture. Needs a Chrome running with remote debugging; the passe CLI installs itself on first session.",
   "author": {
     "name": "Sameer Modha",
     "url": "https://github.com/spm1001"

@@ -127,8 +127,10 @@ Show the full picture — outcomes with progress and their actions — **as text
 
 Run `bon list`, capture to a temp file, Read and output:
 ```bash
-OUT=$(mktemp /tmp/bon-hierarchy-XXXXXX.txt); bon list > "$OUT"; echo "$OUT"
+OUT=$(mktemp /tmp/bon-hierarchy-XXXXXX); bon list > "$OUT"; echo "$OUT"
 ```
+
+Keep the X's at the END of the template. macOS's BSD `mktemp` only randomises trailing X's, so a `-XXXXXX.txt` template creates the literal file `bon-hierarchy-XXXXXX.txt` on the first run and fails with "File exists" on every run after that. That turned the guard below into a fixed, machine-wide path on every Mac, reported by a family Mac on 2026-09-23.
 
 Read the path it echoes. The path must be unique per session: a fixed
 `/tmp/bon-hierarchy.txt` is shared by every concurrent `/open`, and on

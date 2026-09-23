@@ -8,7 +8,7 @@ When `.bon/` exists, invoke `Skill(open)` at session start and before bon CLI co
 
 Bon is the default tracker. Check bon briefs for staleness before executing — the open skill's "Three legs of staleness" names the method, and it is three commands, not an investigation.
 
-When a skill or tool fails during real work: file a Field Report bon item in the repo that owns it.
+When a skill or tool fails during real work: file a Field Report bon item in the repo that owns it. **Check for an existing one first.** Search that board's open items for the same failure (`bon list | grep -i "field report"`, then grep the symptom). If one is already there, add this sighting to it with `bon edit ID --append-how "SEEN AGAIN <date>, <host>: <what happened>"` instead of filing a twin. A persistent failure should grow one report with a count of sightings, not a new report every session.
 
 ## Overrides
 

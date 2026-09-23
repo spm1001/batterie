@@ -413,6 +413,19 @@ print('yes' if d.get('mcpServers') else 'no')
   fi
 done
 
+# The public face (bds-mokava, 2026-09-23): most source repos are private, so
+# this repo's README is the only place a stranger or teammate can read what the
+# suite is. It is authored in batterie-de-savoir (marketplace/README.md, plugin
+# table rendered from brigade.toml) and copied verbatim — a hand edit here is
+# overwritten. Outside plugins/, so the ratchet never sees it; a missing source
+# is a failed checkout, not something to paper over.
+MARKETPLACE_README="$SOURCE_DIR/batterie-de-savoir/marketplace/README.md"
+if [ ! -f "$MARKETPLACE_README" ]; then
+  echo "FAIL: $MARKETPLACE_README missing — the marketplace README is generated there" >&2
+  exit 1
+fi
+cp "$MARKETPLACE_README" "$BATTERIE_DIR/README.md"
+
 # Invariant check 1 (fail): every relative-source plugin in marketplace.json
 # must have vendored content — a manifest entry over nothing is how the
 # gueridon "could not sync" and the batterie-0.1.6 husk happened.

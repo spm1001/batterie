@@ -12,7 +12,7 @@
       "source": "./plugins/batterie",
       "description": "Suite-level utilities — cross-plugin updates and maintenance.",
       "category": "productivity",
-      "homepage": "https://github.com/spm1001/batterie",
+      "homepage": "https://github.com/spm1001/batterie#readme",
       "keywords": [
         "update",
         "maintenance",
@@ -24,7 +24,7 @@
       "source": "./plugins/bon",
       "description": "GTD-native work tracker — outcomes, actions, tactical steps. Includes session lifecycle (/open, /close).",
       "category": "productivity",
-      "homepage": "https://github.com/spm1001/bon",
+      "homepage": "https://github.com/spm1001/batterie#readme",
       "keywords": [
         "gtd",
         "tracking"
@@ -33,9 +33,9 @@
     {
       "name": "trousse",
       "source": "./plugins/trousse",
-      "description": "Utility skills — code review, diagrams, screenshots, data analysis, architecture review, and more.",
+      "description": "Code review through three lenses, blank-slate Claudes for cold reads and evals, driving a real interactive session, and skill authoring.",
       "category": "workflow",
-      "homepage": "https://github.com/spm1001/trousse",
+      "homepage": "https://github.com/spm1001/batterie#readme",
       "keywords": [
         "session",
         "hooks",
@@ -59,7 +59,7 @@
       "source": "./plugins/accomplis",
       "description": "Todoist with GTD coaching — outcomes, weekly review, pattern detection.",
       "category": "productivity",
-      "homepage": "https://github.com/spm1001/accomplis",
+      "homepage": "https://github.com/spm1001/batterie#readme",
       "keywords": [
         "todoist",
         "gtd"
@@ -70,7 +70,7 @@
       "source": "./plugins/sonner",
       "description": "Repo-addressed peer messaging — ring a repo and a Claude answers. CLI + peer-messaging skill.",
       "category": "integration",
-      "homepage": "https://github.com/spm1001/sonner",
+      "homepage": "https://github.com/spm1001/batterie#readme",
       "keywords": [
         "messaging",
         "peer",
@@ -83,7 +83,7 @@
       "source": "./plugins/passe",
       "description": "Fast browser automation via Chrome DevTools Protocol — fetch pages, screenshots, forms, network capture. Auto-installs the passe CLI on first session.",
       "category": "automation",
-      "homepage": "https://github.com/spm1001/passe",
+      "homepage": "https://github.com/spm1001/batterie#readme",
       "keywords": [
         "browser",
         "automation",
@@ -96,7 +96,7 @@
       "source": "./plugins/arete",
       "description": "Move lists in and out of MindNode — a pasted list becomes a mind map, and a map comes back as Markdown. Skill only; the CLI is macOS-only.",
       "category": "productivity",
-      "homepage": "https://github.com/spm1001/arete",
+      "homepage": "https://github.com/spm1001/batterie#readme",
       "keywords": [
         "mindnode",
         "mind-map",

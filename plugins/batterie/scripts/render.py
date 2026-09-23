@@ -40,6 +40,9 @@ TOML_PATH = ROOT / "brigade.toml"
 README = ROOT / "README.md"
 DOCS_INDEX = ROOT / "docs" / "index.md"
 FOR_AGENTS = ROOT / "docs" / "for-agents.md"
+# The public marketplace's README: generated here, copied to the root of
+# spm1001/batterie by assemble.sh on every run (bds-mokava, 2026-09-23).
+MARKETPLACE_README = ROOT / "marketplace" / "README.md"
 
 # ---------------------------------------------------------------------------
 # Load registry
@@ -75,6 +78,12 @@ README_ROW = env.from_string(
 DOCS_ROW = env.from_string(
     "| [**{{ name }}**](tools/{{ slug }}) "
     "| {{ station }} | {{ what }} | {{ maturity_label }} |"
+)
+
+# Marketplace plugin row — only tools that ship as a plugin, no repo links
+# (most source repos are private; the marketplace is the public face)
+PLUGIN_ROW = env.from_string(
+    "| **{{ plugin }}** | {{ station }} | {{ what }} | {{ needs }} |"
 )
 
 # Vocabulary row
@@ -129,6 +138,23 @@ def render_brigade_table_docs() -> str:
             station=t["station"],
             what=t["what"],
             maturity_label=MATURITY_EMOJI[t["maturity"]],
+        ))
+    return "\n".join(rows)
+
+
+def render_plugin_table() -> str:
+    rows = [
+        "| Plugin | Station | What it does | Needs |",
+        "|--------|---------|--------------|-------|",
+    ]
+    for t in tools:
+        if "plugin" not in t:
+            continue
+        rows.append(PLUGIN_ROW.render(
+            plugin=t["plugin"],
+            station=t["station"],
+            what=t["what"],
+            needs=t.get("needs") or "—",
         ))
     return "\n".join(rows)
 
@@ -276,6 +302,10 @@ def main() -> None:
 
     update_file(DOCS_INDEX, {
         "brigade-table": render_brigade_table_docs(),
+    })
+
+    update_file(MARKETPLACE_README, {
+        "plugin-table": render_plugin_table(),
     })
 
     update_file(FOR_AGENTS, {

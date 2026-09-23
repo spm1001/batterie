@@ -70,6 +70,9 @@ EXPECTED = {
     render.DOCS_INDEX: {
         "brigade-table": render.render_brigade_table_docs,
     },
+    render.MARKETPLACE_README: {
+        "plugin-table": render.render_plugin_table,
+    },
     render.FOR_AGENTS: {
         "vocabulary": render.render_vocabulary,
         "tool-routing": render.render_tool_routing,

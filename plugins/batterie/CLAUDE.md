@@ -7,7 +7,8 @@ This repo has **two jobs**: it is the **documentation umbrella** for the Batteri
 - `brigade.toml` — single source of truth for all tool metadata
 - `scripts/render.py` — regenerates GENERATED sections in docs from the registry
 - `scripts/lint.py` — detects drift between registry and docs (exit 1 if stale)
-- `docs/` — Jekyll site, published to GitHub Pages
+- `docs/` — Jekyll site. **Not currently published:** this repo is private and its Pages site is off (the old URL 404s), so `docs/` is read by us and our Claudes only
+- `marketplace/README.md` — **the suite's public face.** `assemble.sh` copies it to the root of the public `spm1001/batterie` on every run; its plugin table renders from `brigade.toml` (tools with a `plugin` field, with a `needs` column). Most source repos are private, so this is the only page a teammate or stranger can read (bds-mokava, 2026-09-23)
 
 ## The one rule
 
@@ -24,6 +25,7 @@ Two adjacent guards (2026-07-26, bds-naceje): `lint.py` also fails if any regist
 | File | Status |
 |------|--------|
 | Brigade tables in `README.md`, `docs/index.md` | **Generated** — run render.py |
+| Plugin table in `marketplace/README.md` | **Generated** — run render.py (the prose around it is hand-authored) |
 | Vocabulary, routing, deps, repos in `docs/for-agents.md` | **Generated** — run render.py |
 | `docs/tools/*.md` — individual tool pages | **Hand-authored** — never generated |
 | `docs/getting-started.md` | **Hand-authored** |

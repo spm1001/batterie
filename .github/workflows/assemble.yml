@@ -59,6 +59,7 @@ jobs:
           DEPLOY_KEY_PASSE: ${{ secrets.PASSE_DEPLOY_KEY }}
           DEPLOY_KEY_SONNER: ${{ secrets.SONNER_DEPLOY_KEY }}
           DEPLOY_KEY_DEGLACER: ${{ secrets.DEGLACER_DEPLOY_KEY }}
+          DEPLOY_KEY_JETON: ${{ secrets.JETON_DEPLOY_KEY }}   # bds-sipaba
         run: |
           repos=$(grep -E '^[a-z-]+:[a-z-]+$' batterie/assemble.sh | cut -d: -f2 | sort -u)
           test -n "$repos"

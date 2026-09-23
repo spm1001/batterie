@@ -1,6 +1,6 @@
 {
   "name": "bon",
-  "version": "1.86.18",
+  "version": "1.86.19",
   "description": "GTD-native work tracker for AI coding agents \u2014 outcomes, actions, tactical steps. Includes the /open and /close session lifecycle.",
   "author": {
     "name": "Sameer Modha",

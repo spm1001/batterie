@@ -193,7 +193,8 @@ PYEOF
 # stub is (re)generated with $SUITE_VERSION on every assemble, a shipped
 # changelog can never predate the release — the "stale changelog" failure class
 # is inexpressible, not merely caught. Uniform across ALL plugins (batterie
-# included) — no special case; the real changelog is browsable at the URL below.
+# included) — no special case. It points at the marketplace README rather than
+# the canonical changelog, whose repo is private (bds-juwone, 2026-09-23).
 write_changelog_stub() {
   dest_dir="$1"; version="$2"
   cat > "$dest_dir/CHANGELOG.md" <<EOF
@@ -202,11 +203,38 @@ write_changelog_stub() {
 This plugin ships as part of the **Batterie de Savoir** suite and carries the
 single suite version — currently **$version**.
 
-The suite has one canonical changelog. This file is a generated pointer, so it
-can never fall behind the version this plugin ships at:
+What each plugin does and needs is in the marketplace README:
 
-  https://github.com/spm1001/batterie-de-savoir/blob/main/CHANGELOG.md
+  $MARKETPLACE_HOME
+
+The suite's release notes stay with its private source repo; this file is a
+generated stub, so it can never fall behind the version this plugin ships at.
 EOF
+}
+
+# Point a vendored plugin.json's "repository" at the marketplace README unless
+# its source repo is public (bds-juwone, 2026-09-23). Most source repos are
+# private, so their URLs 404 for teammates and strangers alike. Deny by
+# default: a source missing from PUBLIC_SOURCES gets the README, so a repo that
+# goes private later cannot leave a dead link behind — one that goes public
+# merely keeps pointing at the README until it is added here. Targeted string
+# edit, same reason as stamp_version; plugin.json is already filtered from the
+# ratchet, and a plugin.json with no "repository" field is left alone.
+MARKETPLACE_HOME="https://github.com/spm1001/batterie#readme"
+PUBLIC_SOURCES="mise-en-space gueridon"
+stamp_repository() {
+  case " $PUBLIC_SOURCES " in *" $2 "*) return 0 ;; esac
+  python3 - "$1" "$MARKETPLACE_HOME" <<'PYEOF'
+import re, sys
+path, home = sys.argv[1], sys.argv[2]
+text = open(path).read()
+text2, n = re.subn(r'("repository"\s*:\s*")[^"]*(")',
+                   lambda m: m.group(1) + home + m.group(2), text)
+if n > 1:
+    sys.stderr.write(f"FAIL: stamp_repository matched {n} repository fields in {path}\n")
+    sys.exit(1)
+open(path, "w").write(text2)
+PYEOF
 }
 
 echo "Assembling plugins from $SOURCE_DIR (suite version $SUITE_VERSION, last published ${OLD_SUITE_VERSION:-none})"
@@ -351,6 +379,7 @@ print('yes' if d.get('mcpServers') else 'no')
   # (local-dev / CLI footnote only). Done here, after vendoring + the parity
   # guard, so the version read below reflects the stamp.
   stamp_version "$dest/.claude-plugin/plugin.json" "$SUITE_VERSION"
+  stamp_repository "$dest/.claude-plugin/plugin.json" "$repo"
 
   # Shipped CHANGELOG is a generated stub pointing at the canonical suite
   # changelog (bds-mawitu) — regenerated with the suite version every run, so it

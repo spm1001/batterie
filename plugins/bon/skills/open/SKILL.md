@@ -419,6 +419,7 @@ bon edit ID --note "..."     # Repair a closing note (done items only)
 bon edit ID --parent NEW     # Move action to another outcome ('none' = standalone)
 bon convert ID               # Action → outcome, or outcome → standalone action
 bon convert ID --outcome P   # Outcome → action under P (demote + re-home in one move)
+bon restore ID               # An item vanished from a JSONL board? Bring it back from git history — never hand-edit items.jsonl
 bon move ID --to REPO        # Move to another repo's board (path or ~/repos name);
                              # filed where you're cd'd ≠ where it belongs — move is cheap
 

@@ -363,7 +363,7 @@ Use HANDOFF_FILE from the script output verbatim — it generates `YYYY-MM-DD-HH
 
 #### Ledger line — in the same change as the handoff
 
-Append your handoff's line to `LEDGER.md` in the directory you wrote the handoff to (bon-supuko; the notes convention, now core). This is what lets the next `/open` sweep EVERY unprocessed handoff instead of just the newest — without your line, an interleaved close's baton is silently dropped by latest-wins. Format, newest first under the header:
+Append your handoff's line to `LEDGER.md` in the directory you wrote the handoff to (bon-supuko; the notes convention, now core). This is what lets the next `/open` sweep EVERY unprocessed handoff instead of just the newest — without your line, an interleaved close's baton is silently dropped by latest-wins. Format, newest first — as its own line after the header paragraph's blank line. Don't anchor an Edit on the first `- [ ]` in the file: the header itself contains one in backticks, and on 2026-09-25 a close spliced its line into the middle of the header sentence, which the next sweep flagged as unparseable.
 
 ```markdown
 - [ ] {DATE} [{filename}]({filename}) — {purpose line}

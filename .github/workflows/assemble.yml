@@ -194,9 +194,13 @@ jobs:
         # blocks the public bus) and before the quarantine step (a quarantine
         # day still publishes both, held at last-published). Skips cleanly when
         # the key or the family output is absent.
-        # The target must already be the family marketplace (or empty): the
-        # rsync --delete below replaces the whole tree, so pushing into a repo
-        # that holds some other marketplace would silently swap it out.
+        # The target must be the family marketplace, empty, or its one
+        # predecessor: the rsync --delete below replaces the whole tree, so
+        # pushing into a repo that holds some other marketplace would silently
+        # swap it out. 'batterie-home' is admitted because the renamed repo
+        # still holds the retired mise-home marketplace until this step's first
+        # run replaces it — that first run IS the go-live. Delete the
+        # batterie-home case once family-kit holds 'family'.
         env:
           DEPLOY_KEY: ${{ secrets.BATTERIE_HOME_DEPLOY_KEY }}
         run: |
@@ -212,10 +216,12 @@ jobs:
           export GIT_SSH_COMMAND="ssh -i ~/.ssh/family_kit_deploy -o IdentitiesOnly=yes"
           git clone --depth=1 --quiet git@github.com:spm1001/family-kit.git /tmp/family-kit
           target=$(python3 -c "import json; print(json.load(open('/tmp/family-kit/.claude-plugin/marketplace.json'))['name'])" 2>/dev/null || echo none)
-          if [ "$target" != family ] && [ "$target" != none ]; then
-            echo "::error::spm1001/family-kit holds marketplace '$target', not 'family' — refusing to replace it. Publish the first family build by hand (batterie CLAUDE.md, Two outputs)."
-            exit 1
-          fi
+          case "$target" in
+            family|none) ;;
+            batterie-home) echo "First family publish: replacing the retired mise-home marketplace (bds-cofico)." ;;
+            *) echo "::error::spm1001/family-kit holds marketplace '$target', not 'family' — refusing to replace it."
+               exit 1 ;;
+          esac
           rsync -a --delete --exclude .git batterie/dist/family/ /tmp/family-kit/
           cd /tmp/family-kit
           if [ -z "$(git status --porcelain)" ]; then

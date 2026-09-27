@@ -799,8 +799,9 @@ check_mcp_entrypoints "$BATTERIE_DIR"
 # A second kit, standing alone (no dependency on batterie@batterie): one
 # marketplace and one plugin, both named `family`, holding
 #   mise/  the public kit's just-vendored mise component, its engine UNMODIFIED.
-#          Three deltas: the bundled ITV client (credentials.json) and mise's
-#          own hooks/ are dropped, the Planet Modha client lands beside the
+#          Four deltas: the bundled ITV client (credentials.json), mise's own
+#          hooks/ and its developer CLAUDE.md (which names both kits' tool ids,
+#          and no plugin loads) are dropped, the Planet Modha client lands beside the
 #          engine as planetmodha-client.json, and the skill's tool ids follow
 #          the plugin (mcp__plugin_family_mise__).
 #   home/  the kit's own SessionStart hook and more-tools skill, from family/kit/.
@@ -823,7 +824,7 @@ if [ -n "${FAMILY_OAUTH_CLIENT:-}" ]; then
   FAMILY_KIT="$FAMILY_OUT/plugins/$FAMILY_NAME"
   rm -rf "$FAMILY_OUT"
   mkdir -p "$FAMILY_KIT/.claude-plugin" "$FAMILY_OUT/.claude-plugin"
-  rsync -a --exclude .venv --exclude __pycache__ --exclude '*.pyc' --exclude /credentials.json --exclude /hooks \
+  rsync -a --exclude .venv --exclude __pycache__ --exclude '*.pyc' --exclude /credentials.json --exclude /hooks --exclude /CLAUDE.md \
     "$KIT_DIR/mise/" "$FAMILY_KIT/mise/"
   cp "$FAMILY_OAUTH_CLIENT" "$FAMILY_KIT/mise/planetmodha-client.json"
   rsync -a "$BATTERIE_DIR/family/kit/" "$FAMILY_KIT/home/"

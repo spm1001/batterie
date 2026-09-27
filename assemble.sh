@@ -799,9 +799,10 @@ check_mcp_entrypoints "$BATTERIE_DIR"
 # A second kit, standing alone (no dependency on batterie@batterie): one
 # marketplace and one plugin, both named `family`, holding
 #   mise/  the public kit's just-vendored mise component, its engine UNMODIFIED.
-#          Four deltas: the bundled ITV client (credentials.json), mise's own
-#          hooks/ and its developer CLAUDE.md (which names both kits' tool ids,
-#          and no plugin loads) are dropped, the Planet Modha client lands beside the
+#          Five deltas: the bundled ITV client (credentials.json), mise's own
+#          hooks/, its developer CLAUDE.md (which names both kits' tool ids,
+#          and no plugin loads) and its component .claude-plugin/ (claude.ai's
+#          validator refuses a nested plugin.json) are dropped, the Planet Modha client lands beside the
 #          engine as planetmodha-client.json, and the skill's tool ids follow
 #          the plugin (mcp__plugin_family_mise__).
 #   home/  the kit's own SessionStart hook and more-tools skill, from family/kit/.
@@ -824,7 +825,7 @@ if [ -n "${FAMILY_OAUTH_CLIENT:-}" ]; then
   FAMILY_KIT="$FAMILY_OUT/plugins/$FAMILY_NAME"
   rm -rf "$FAMILY_OUT"
   mkdir -p "$FAMILY_KIT/.claude-plugin" "$FAMILY_OUT/.claude-plugin"
-  rsync -a --exclude .venv --exclude __pycache__ --exclude '*.pyc' --exclude /credentials.json --exclude /hooks --exclude /CLAUDE.md \
+  rsync -a --exclude .venv --exclude __pycache__ --exclude '*.pyc' --exclude /credentials.json --exclude /hooks --exclude /CLAUDE.md --exclude /.claude-plugin \
     "$KIT_DIR/mise/" "$FAMILY_KIT/mise/"
   cp "$FAMILY_OAUTH_CLIENT" "$FAMILY_KIT/mise/planetmodha-client.json"
   rsync -a "$BATTERIE_DIR/family/kit/" "$FAMILY_KIT/home/"
@@ -881,6 +882,9 @@ for p in fam.rglob("*"):
     if p.is_file() and p.suffix in (".md", ".json", ".py", ".sh"):
         if "mcp__plugin_batterie_" in p.read_text(errors="ignore"):
             fails.append(f"{p.relative_to(fam)} still names a batterie tool id")
+for d in fam.rglob(".claude-plugin"):
+    if d.parent != fam:
+        fails.append(f"{d.relative_to(fam)} is a nested manifest dir — claude.ai's validator refuses a plugin.json below the plugin root")
 for f in fails:
     print(f"FAIL: family — {f}", file=sys.stderr)
 sys.exit(1 if fails else 0)

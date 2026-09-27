@@ -47,7 +47,9 @@ _tmp="$(mktemp "$RULES_DIR/family.md.XXXXXX")"
     if [ -f "$RULES_DIR/mise.md" ] && grep -q '"batterie@batterie"' "$REG" 2>/dev/null; then
         :
     elif [ -f "$ENGINE/instructions.md" ]; then
-        cat "$ENGINE/instructions.md"
+        # From its first section on: the engine shard's own title block says
+        # mise's hook writes it, which is not true here.
+        sed -n '/^## /,$p' "$ENGINE/instructions.md"
     fi
 } > "$_tmp"
 mv -f "$_tmp" "$RULES_DIR/family.md"

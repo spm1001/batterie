@@ -12,16 +12,21 @@ Not to be confused with **batterie-de-savoir** — the two are a **source/artifa
 
 **Prefer the bot for publishing.** Local assemble runs read the source repos' *working trees* — uncommitted or untracked files get vendored and shipped. (A never-committed tafelmusik `.mcp.json` pointing at `ws://hezza:3456` reached clients this way; the runner's clean clones removed it on 2026-06-04.) Local runs are for preview; let the daily workflow do the committing where possible.
 
-| Plugin | Source repo |
+**One plugin, `batterie@batterie`, since the kit fold (bds-jakemi).** The marketplace lists exactly one plugin, named after its ring, because claude.ai and Desktop mishandle catalogue changes (deletions above all) — with a fixed catalogue, adding or retiring a tool is a version bump inside the kit. Each source repo is a **component**, vendored whole into `plugins/batterie/<component>/` exactly as it used to be vendored into `plugins/<name>/`. The kit's root `.claude-plugin/plugin.json` is generated from the component manifests: a `skills` array of `./<component>/skills/`, the union of their hooks with each command prefixed `CLAUDE_PLUGIN_ROOT="…/<component>"` so every hook still sees its own subtree, and their MCP servers re-rooted (so mise's tools are `mcp__plugin_batterie_mise__*`). Skill bodies have `${CLAUDE_PLUGIN_ROOT}` re-rooted to `${CLAUDE_PLUGIN_ROOT}/<component>` under a guard. The ratchet quarantines per component subtree, and refuses a component's first appearance without a suite bump. Bare skill names are linted unique and clear of Claude Code built-ins (`builtin-names.txt`, pinned from the docs' command table). Design: batterie-de-savoir `docs/plans/jakemi-fold-design-2026-09-27.md`; what the release breaks outside the source repos: `docs/plans/jakemi-consumer-sweep-2026-09-27.md` there.
+
+| Component | Source repo |
 |--------|-------------|
-| batterie (suite-level) | batterie-de-savoir (repo root) |
+| suite (update, version, the batterie shard; also the kit's identity) | batterie-de-savoir (repo root) |
 | bon | bon |
 | trousse | trousse |
 | mise | mise-en-space |
 | accomplis | accomplis |
 | sonner | sonner |
 | passe | passe |
-| arete | arete |
+
+arete left for Sameer's own kit with the fold (macOS + MindNode, Sameer-only), as did trousse's hublot and the suite's publish skill.
+
+**Leak scan (bds-tevuhe).** `leak-scan.py` scans every text file of both outputs for email addresses, OAuth client ids and secrets, tokens, private keys, ITV hostnames and a private personal-term list (`LEAK_SCAN_TERMS`, materialised from the `LEAK_SCAN_TERMS_TXT` secret; without it that layer is inert and the scan says so every run). A canary goes through every class first and the run fails if any class misses it. RFC 2606 domains are never hits; every other accepted hit carries a reason in `leak-scan-allow.txt`, and an allow line that matched nothing is reported as possibly stale. A leak is a hard fail, like the husk guards.
 
 Retired from distribution: garde-manger (decommissioned 2026-06-03), tafelmusik (unvendored 2026-06-10 — too experimental to publish; the source repo lives on), **sonnette (delisted 2026-08-24, `son-pilalu`, Sameer's call — superseded by sonner; the aboyeur source repo keeps the code and its bundle-freshness CI guard, only distribution stopped)**. passe was delisted 2026-07-07 (`bds-wobari`) and **relisted 2026-07-26** (`passe-mezigo`, Sameer's call) — the standalone-CLI rationale left its shard, skills and hooks with no rot-proof install route; see the note beside the PLUGINS map in `assemble.sh`.
 

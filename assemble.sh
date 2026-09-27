@@ -5,17 +5,17 @@
 # ONE pipeline, TWO outputs (bds-nagoru / bds-mumise):
 #   PUBLIC  "batterie"      → this repo (plugins/ + .claude-plugin/marketplace.json,
 #                             committed + pushed by assemble.yml — the update bus).
-#   PRIVATE "batterie-home" → a LOCAL dir (default dist/batterie-home, gitignored),
-#                             mise only, transformed to mise-home via
-#                             transforms/make-mise-flavour.sh with the planetmodha
-#                             cred. Emitted ONLY when MISE_HOME_CRED is set; the
-#                             flavour derives from the just-vendored PUBLIC mise,
-#                             so both marketplaces carry identical runtime bytes
-#                             and the same suite version — they cannot drift.
-#                             Never committed here (it carries the planetmodha
-#                             credential); assemble.yml pushes it to the private
-#                             spm1001/batterie-home repo over a write deploy key
-#                             (bds-susugu — cred + key arrive as Actions secrets).
+#   FAMILY  "family"        → a LOCAL dir (default dist/family, gitignored):
+#                             family@family, a second kit standing alone — the
+#                             public kit's mise component unmodified plus the
+#                             Planet Modha client, wired by mcpServers.mise.env
+#                             (bds-cofico; it retired make-mise-flavour.sh).
+#                             Emitted ONLY when FAMILY_OAUTH_CLIENT is set; it
+#                             derives from the just-vendored PUBLIC mise, so both
+#                             kits carry identical engine bytes and the same
+#                             suite version. Never committed here; assemble.yml
+#                             pushes it to the private spm1001/family-kit
+#                             (formerly batterie-home) over a write deploy key.
 #
 # Every vendored plugin is stamped with ONE suite version (the batterie/suite
 # plugin's — bds-suwoho), so all published plugins carry an identical number.
@@ -171,12 +171,11 @@ PYEOF
   fi
 }
 
-# Private-marketplace manifest (bds-mumise): which plugin, which transform,
-# where it lands. Kept as plain variables — two marketplaces don't earn a
-# data-driven loop; the shared machinery is the vendor loop above the guards
-# below, which both outputs pass through.
-HOME_OUT="${ASSEMBLE_HOME_OUT:-$BATTERIE_DIR/dist/batterie-home}"
-HOME_NAME="batterie-home"
+# The family kit (bds-cofico): its name and where it lands. Plain variables —
+# two kits don't earn a data-driven loop; the shared machinery is the vendor
+# loop and the guards, which both outputs pass through.
+FAMILY_OUT="${ASSEMBLE_FAMILY_OUT:-$BATTERIE_DIR/dist/family}"
+FAMILY_NAME="family"
 
 # The single suite version (bds-suwoho): one number stamped onto every
 # vendored plugin so all published plugins carry an identical version. It
@@ -433,9 +432,9 @@ print('yes' if d.get('mcpServers') else 'no')
 
   # Single-version stamp (bds-suwoho) on the COMPONENT manifest too. Claude
   # Code never reads it (the kit root's is the plugin manifest), but it is the
-  # input write_kit_manifest reads hooks and servers from, and the family
-  # flavour derives mise-home from mise's — whose version must be the suite's
-  # (bds-jupize's coherence check below). And no shipped file may point at a
+  # input write_kit_manifest reads hooks and servers from, and the family kit
+  # copies mise's — whose version must be the suite's (the coherence check in
+  # the family block below). And no shipped file may point at a
   # private repo (bds-juwone), manifests included.
   stamp_version "$dest/.claude-plugin/plugin.json" "$SUITE_VERSION"
   stamp_repository "$dest/.claude-plugin/plugin.json" "$repo"
@@ -656,7 +655,7 @@ write_changelog_stub "$KIT_DIR" "$SUITE_VERSION"
 # skill directory whose frontmatter name disagrees fails too — the directory is
 # what Claude Code surfaces.
 check_skill_names() {
-  python3 - "$KIT_DIR" "$BATTERIE_DIR/builtin-names.txt" <<'PYEOF'
+  python3 - "${1:-$KIT_DIR}" "$BATTERIE_DIR/builtin-names.txt" <<'PYEOF'
 import re, sys
 from pathlib import Path
 kit_dir, builtin_file = Path(sys.argv[1]), Path(sys.argv[2])
@@ -796,185 +795,131 @@ check_mcp_entrypoints "$BATTERIE_DIR"
 # (Run once, after the family output below, over both trees — one allowlist, one
 # stale-entry report.)
 
-# ---- PRIVATE marketplace: batterie-home (bds-mumise) -------------------------
-# Derived from the just-vendored PUBLIC mise — already stamped, already through
-# the husk/parity + ratchet machinery above — so the two marketplaces carry
-# identical runtime bytes by construction (if public mise was quarantined this
-# run, the flavour inherits last-published: still coherent, never divergent).
-# The transform rewrites only identity strings + swaps the OAuth client, and
-# its built-in guard fails loudly on any leftover ITV-identifying string.
-# Gated on MISE_HOME_CRED: CI public runs skip this until bds-susugu wires
-# cred delivery; a local run with the cred produces both outputs.
-if [ -n "${MISE_HOME_CRED:-}" ]; then
+# ---- FAMILY marketplace: family@family (bds-cofico) --------------------------
+# A second kit, standing alone (no dependency on batterie@batterie): one
+# marketplace and one plugin, both named `family`, holding
+#   mise/  the public kit's just-vendored mise component, its engine UNMODIFIED.
+#          Three deltas: the bundled ITV client (credentials.json) and mise's
+#          own hooks/ are dropped, the Planet Modha client lands beside the
+#          engine as planetmodha-client.json, and the skill's tool ids follow
+#          the plugin (mcp__plugin_family_mise__).
+#   home/  the kit's own SessionStart hook and more-tools skill, from family/kit/.
+# The engine is told which Workspace it serves through mcpServers.mise.env
+# (the mise-nujina seam) rather than by rewriting its strings, so this retires
+# transforms/make-mise-flavour.sh. mise's own SessionStart hooks are not wired
+# (they carry ITV identity and never see the server's env), and not shipped
+# either — an unwired hook naming the wrong kit's tool ids is a trap for
+# whoever wires it next. home/hooks does the shard, the dependency sync and the
+# no-sign-in notice instead.
+# Dropping the ITV client is deny by default: a surface that ever launches the
+# server without the env would otherwise sign a family member in to ITV's
+# client, where "no OAuth client configured" is the honest answer.
+# Derived from the just-vendored public mise, so both kits carry identical
+# engine bytes and the same suite version. Gated on FAMILY_OAUTH_CLIENT.
+if [ -n "${FAMILY_OAUTH_CLIENT:-}" ]; then
   echo ""
-  echo "Assembling private marketplace '$HOME_NAME' → $HOME_OUT"
-  [ -f "$MISE_HOME_CRED" ] || { echo "FAIL: MISE_HOME_CRED=$MISE_HOME_CRED not found" >&2; exit 1; }
-  rm -rf "$HOME_OUT"
-  mkdir -p "$HOME_OUT/plugins" "$HOME_OUT/.claude-plugin"
-  "$BATTERIE_DIR/transforms/make-mise-flavour.sh" \
-    "$KIT_DIR/mise" "$HOME_OUT/plugins/mise-home" home "$MISE_HOME_CRED"
-  # The mise component's skill bodies were re-rooted to ${CLAUDE_PLUGIN_ROOT}/mise
-  # for the kit; mise-home is a stand-alone plugin, so a re-rooted path there
-  # would point one level too deep. None exist today — fail if one appears.
-  if grep -rq 'CLAUDE_PLUGIN_ROOT}/mise' "$HOME_OUT/plugins/mise-home/skills" 2>/dev/null; then
-    echo "FAIL: mise-home skills carry a kit-re-rooted \${CLAUDE_PLUGIN_ROOT}/mise path — derive the flavour before reroot_markdown, or drop the reference" >&2
-    exit 1
-  fi
+  echo "Assembling family marketplace '$FAMILY_NAME' → $FAMILY_OUT"
+  [ -f "$FAMILY_OAUTH_CLIENT" ] || { echo "FAIL: FAMILY_OAUTH_CLIENT=$FAMILY_OAUTH_CLIENT not found" >&2; exit 1; }
+  FAMILY_KIT="$FAMILY_OUT/plugins/$FAMILY_NAME"
+  rm -rf "$FAMILY_OUT"
+  mkdir -p "$FAMILY_KIT/.claude-plugin" "$FAMILY_OUT/.claude-plugin"
+  rsync -a --exclude .venv --exclude __pycache__ --exclude '*.pyc' --exclude /credentials.json --exclude /hooks \
+    "$KIT_DIR/mise/" "$FAMILY_KIT/mise/"
+  cp "$FAMILY_OAUTH_CLIENT" "$FAMILY_KIT/mise/planetmodha-client.json"
+  rsync -a "$BATTERIE_DIR/family/kit/" "$FAMILY_KIT/home/"
+  cp "$BATTERIE_DIR/family/repo/README.md" "$BATTERIE_DIR/family/repo/CLAUDE.md" "$FAMILY_OUT/"
+  write_changelog_stub "$FAMILY_KIT" "$SUITE_VERSION"
 
-  # Family stub (bds-rikeno): batterie-home carries ONLY mise-home — the one
-  # plugin that MUST be private (it holds the planetmodha Google cred). The rest
-  # of the suite is public, so rather than mirror public content into a private
-  # repo (which would drag along each plugin's CLI-auto-install + rules-injection
-  # SessionStart hooks — per-session noise for tools family never asked for), we
-  # ship the onboarding guide with the flavour. "Ask a Claude" is the support
-  # model; this is the trail it follows. (Whole-suite mirror was built + rejected
-  # 2026-07-12 — the hook footprint made it heavier than the one command it saved.)
-  #
-  # An ON-DEMAND SKILL, not an append to instructions.md (2026-07-26): that shard
-  # auto-loads via ~/.claude/rules/ in EVERY session on EVERY machine carrying
-  # mise-home — including Sameer's own ITV work sessions, where twenty lines of
-  # family install guidance is pure standing noise. A skill keeps the whole point
-  # of making it always-on (its description sits in the skill picker every
-  # session, so a family Claude still finds it unprompted and can offer) at one
-  # line of standing context instead of twenty. Do NOT move it back into
-  # instructions.md — the ratchet below fails the build if it returns.
-  MH_SKILL="$HOME_OUT/plugins/mise-home/skills/batterie-suite"
-  mkdir -p "$MH_SKILL"
-  cat > "$MH_SKILL/SKILL.md" <<'STUBEOF'
----
-name: batterie-suite
-description: Offers the planetmodha family the rest of the Batterie suite — load BEFORE suggesting or installing any Claude plugin on a family machine. Names the one tool that fits what they just asked for, says what it needs (an account, a CLI, an API token) before they commit, and gives the two commands that add it. Triggers on 'what else can you do', 'are there other tools', 'is there a plugin for that', 'how do I install X', 'can you track my to-dos', 'can you review my code', 'can you draw me a diagram'. (user)
----
+  # Manifest + skill ids. The server entry is the PUBLIC kit's generated one
+  # (read, not retyped, so the launch command cannot drift between kits) plus
+  # the env; the tool-id rewrite and the skill's picker marker are the only
+  # text edits, each asserted.
+  python3 - "$KIT_DIR" "$FAMILY_KIT" "$FAMILY_NAME" "$SUITE_VERSION" "$MARKETPLACE_HOME" <<'PYEOF' || exit 1
+import json, re, sys
+from pathlib import Path
+pub_kit, fam, name, version, home = Path(sys.argv[1]), Path(sys.argv[2]), sys.argv[3], sys.argv[4], sys.argv[5]
+fails = []
+pub = json.load(open(pub_kit / ".claude-plugin/plugin.json"))
+srv = pub.get("mcpServers", {}).get("mise")
+if not srv or "env" in srv:
+    sys.exit("FAIL: family — the public kit's mcpServers.mise is missing or already carries env; the family wiring needs a designed merge")
+srv = {**srv, "env": {
+    "MISE_EN_SPACE_OAUTH_CLIENT": "${CLAUDE_PLUGIN_ROOT}/mise/planetmodha-client.json",
+    "MISE_EN_SPACE_DATA_DIR": "${CLAUDE_PLUGIN_DATA}",
+}}
+manifest = {
+    "name": name,
+    "displayName": "Family",
+    "version": version,
+    "description": "Google Workspace tools for the Planet Modha family — search Drive, read Gmail, act on documents and calendars, signed in with the family's own Google account",
+    "author": pub.get("author", {"name": "Sameer Modha"}),
+    "repository": home,
+    "license": pub.get("license", "MIT"),
+    "keywords": ["google", "workspace", "mcp", "family"],
+    "skills": ["./mise/skills/", "./home/skills/"],
+    "hooks": {"SessionStart": [{"matcher": "", "hooks": [
+        {"type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/home/hooks/session-start.sh"}]}]},
+    "mcpServers": {"mise": srv},
+}
+with open(fam / ".claude-plugin/plugin.json", "w") as f:
+    json.dump(manifest, f, indent=2, ensure_ascii=False)
+    f.write("\n")
 
-# The rest of the Batterie suite (planetmodha family)
+skill = fam / "mise/skills/mise/SKILL.md"
+text = skill.read_text()
+text, n = re.subn(r"mcp__plugin_batterie_mise__", f"mcp__plugin_{name}_mise__", text)
+if n == 0:
+    fails.append("mise skill names no mcp__plugin_batterie_mise__ tool id to rewrite — its allowed-tools would not match this kit")
+marker = ("[Planet Modha (planetmodha.com) — the family Google Workspace; an ITV (itv.com) "
+          "mise, if also installed, acts on a different Workspace.] ")
+text, m = re.subn(r"(?m)^description:\s*", lambda _: "description: " + marker, text, count=1)
+if m != 1:
+    fails.append("mise skill has no description: line to mark")
+skill.write_text(text)
+for p in fam.rglob("*"):
+    if p.is_file() and p.suffix in (".md", ".json", ".py", ".sh"):
+        if "mcp__plugin_batterie_" in p.read_text(errors="ignore"):
+            fails.append(f"{p.relative_to(fam)} still names a batterie tool id")
+for f in fails:
+    print(f"FAIL: family — {f}", file=sys.stderr)
+sys.exit(1 if fails else 0)
+PYEOF
 
-This is the planetmodha family install. **mise-home** lives in the private
-`batterie-home` marketplace only because it carries the family's Google login —
-**everything else in the suite is public** and free to add.
-
-## When to use
-
-- They ask for a capability mise-home doesn't cover — to-dos, code review, diagrams, data analysis.
-- They ask what else this Claude can do, or whether a plugin exists for something.
-- You're about to suggest installing anything: check here first for what it needs.
-
-## When not to use
-
-- **mise-home itself is misbehaving** — that's an auth or MCP problem, not a missing plugin. Nothing here helps.
-- They already have the tool installed and want to *use* it — go straight to its own skill.
-- They're on an ITV machine. This is the planetmodha family path; ITV colleagues have their own commons.
-
-## Adding a tool
-
-```
-claude plugin marketplace add spm1001/batterie
-claude plugin install <name>@batterie
-```
-
-The marketplace only needs adding once; after that, install as many as they want.
-
-## What's there, and the honest per-tool guide
-
-- **trousse** — utility skills (diagrams, code review, data analysis). Works immediately, nothing to set up. Good default add.
-- **batterie** — keeps their plugins current (`/batterie:update`). Worth having.
-- **accomplis** — Todoist with GTD coaching. Needs the `accomplis` CLI *and* a Todoist account + API token. Worth it if they already live in Todoist.
-- **bon** — a power-user GTD work-tracker. Needs the `bon` CLI and a local store. Suits someone who wants to track work across sessions; ask before setting it up.
-
-## How to offer it
-
-Name the one tool that fits what they just asked for, say what it needs up
-front, and let them choose. Offering beats installing: a tool that turns out to
-want an account they don't have is worse than no tool. One good suggestion lands
-better than the whole list.
-STUBEOF
-  [ -s "$MH_SKILL/SKILL.md" ] || { echo "FAIL: family onboarding skill not written → $MH_SKILL/SKILL.md" >&2; exit 1; }
-  echo "  OK family onboarding skill → mise-home/skills/batterie-suite"
-
-  # Ratchet (2026-07-26): the guide must never return to the always-on shard.
-  # rules/*.md loads unconditionally in every session, so an append here is a
-  # standing-context regression on Sameer's work machine, not a cosmetic one.
-  if grep -q 'planetmodha family' "$HOME_OUT/plugins/mise-home/instructions.md" 2>/dev/null; then
-    echo "FAIL: family onboarding is back in mise-home/instructions.md — it belongs in skills/batterie-suite/ (always-on context regression)" >&2
-    exit 1
-  fi
-
-  # marketplace.json is generated (a derived artifact of a derived artifact —
-  # nothing hand-maintained to drift). NB the marketplace NAME sets the
-  # @suffix in plugin keys; the updater matches by the REPO the marketplace
-  # is served from (spm1001/batterie-*), which is bds-picefu's concern.
-  python3 - "$HOME_OUT" "$HOME_NAME" <<'PYEOF'
+  python3 - "$FAMILY_OUT" "$FAMILY_NAME" <<'PYEOF'
 import json, sys
 out, name = sys.argv[1], sys.argv[2]
+pj = json.load(open(f"{out}/plugins/{name}/.claude-plugin/plugin.json"))
 manifest = {
     "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
     "name": name,
-    "description": "Batterie de Savoir — planetmodha family flavour (mise-home: Google Workspace MCP against the planetmodha estate)",
+    "description": "The Planet Modha family's private kit: Google Workspace tools on the family's own Google account",
     "owner": {"name": "Sameer Modha", "email": "sameer@modha.dev"},
-    "plugins": [{
-        "name": "mise-home",
-        "displayName": "Mise Home",
-        "source": "./plugins/mise-home",
-        "description": "Google Workspace MCP for the planetmodha estate — search Drive, fetch Gmail, act on documents. Requires planetmodha Google OAuth.",
-        "category": "integration",
-        "homepage": "https://github.com/spm1001/mise-en-space",
-        "keywords": ["google", "workspace", "mcp", "family"],
-    }],
+    "plugins": [{"name": name, "displayName": pj["displayName"], "source": f"./plugins/{name}",
+                 "description": pj["description"], "category": "integration",
+                 "keywords": pj["keywords"]}],
 }
 with open(f"{out}/.claude-plugin/marketplace.json", "w") as f:
-    json.dump(manifest, f, indent=2)
+    json.dump(manifest, f, indent=2, ensure_ascii=False)
     f.write("\n")
 PYEOF
 
-  # The private repo is a pure artifact — make the output self-describing so
-  # a Claude landing there knows not to hand-edit and where the source lives.
-  cat > "$HOME_OUT/README.md" <<'READMEEOF'
-# batterie-home — Private Family Marketplace (generated)
-
-Private Claude plugin marketplace for the planetmodha estate. Carries ONLY
-`mise-home` — the planetmodha-credentialled flavour of mise. Family members
-get everything else (bon, trousse, accomplis, batterie) from the PUBLIC
-marketplace `spm1001/batterie`; `/batterie:update` spans both automatically
-(it matches marketplaces by source repo: `spm1001/batterie` or
-`spm1001/batterie-*`).
-
-**Every file here is GENERATED** by `spm1001/batterie`'s `assemble.sh`
-(the private output of the shared pipeline — bds-mumise). Never hand-edit;
-change mise-en-space or the transform (`transforms/make-mise-flavour.sh`
-in spm1001/batterie) and re-assemble. The vendored `credentials.json` is an
-installed-app OAuth client (secret public by design); this repo stays
-private for the Teams Directory requirement, not for the credential.
-READMEEOF
-  cat > "$HOME_OUT/CLAUDE.md" <<'CLAUDEEOF'
-# batterie-home — Agent Guide
-
-Generated artifact repo — the private output of `spm1001/batterie`'s
-`assemble.sh` (one pipeline, two marketplaces; see that repo's CLAUDE.md,
-"Two outputs, one pipeline"). **Never hand-edit anything here.** To change
-mise-home: change mise-en-space (runtime) or spm1001/batterie's
-`transforms/make-mise-flavour.sh` (identity/cred), re-assemble with
-`MISE_HOME_CRED` set, and push the fresh `dist/batterie-home` here.
-CLAUDEEOF
-
-  # Same guards as the public output, same code — the leak scan included: the
-  # family repo is private, but family members are not the public either.
-  check_manifest "$HOME_OUT"
-  check_mcp_entrypoints "$HOME_OUT"
-
-  # Version coherence (bds-jupize): the flavour must carry exactly the version
-  # the public vendored mise shipped this run — same number on both outputs.
-  pub_v=$(python3 -c "import json; print(json.load(open('$KIT_DIR/mise/.claude-plugin/plugin.json'))['version'])")
-  home_v=$(python3 -c "import json; print(json.load(open('$HOME_OUT/plugins/mise-home/.claude-plugin/plugin.json'))['version'])")
-  if [ "$pub_v" != "$home_v" ]; then
-    echo "FAIL: version skew — public mise $pub_v vs mise-home $home_v" >&2
-    exit 1
+  # The same guards as the public output, from the same code.
+  check_manifest "$FAMILY_OUT"
+  check_mcp_entrypoints "$FAMILY_OUT"
+  check_skill_names "$FAMILY_KIT" || exit 1
+  [ -x "$FAMILY_KIT/home/hooks/session-start.sh" ] || { echo "FAIL: family hook not executable" >&2; exit 1; }
+  if [ -e "$FAMILY_KIT/mise/credentials.json" ]; then
+    echo "FAIL: family kit still ships the bundled ITV client" >&2; exit 1
   fi
-  echo "  OK mise-home ← plugins/$KIT/mise ($home_v, transformed, cred: $(basename "$MISE_HOME_CRED"))"
+  fam_v=$(python3 -c "import json; print(json.load(open('$FAMILY_KIT/mise/.claude-plugin/plugin.json'))['version'])")
+  [ "$fam_v" = "$SUITE_VERSION" ] || { echo "FAIL: version skew — family mise $fam_v vs suite $SUITE_VERSION" >&2; exit 1; }
+  echo "  OK $FAMILY_NAME ← plugins/$KIT/mise + family/ ($SUITE_VERSION, client: $(basename "$FAMILY_OAUTH_CLIENT"))"
 else
-  echo "  SKIP private marketplace '$HOME_NAME' — MISE_HOME_CRED not set (public-only run)"
+  echo "  SKIP family marketplace '$FAMILY_NAME' — FAMILY_OAUTH_CLIENT not set (public-only run)"
 fi
 
 SCAN_DIRS="$BATTERIE_DIR/plugins $BATTERIE_DIR/README.md $BATTERIE_DIR/.claude-plugin/marketplace.json"
-[ -n "${MISE_HOME_CRED:-}" ] && SCAN_DIRS="$SCAN_DIRS $HOME_OUT/plugins"
+[ -n "${FAMILY_OAUTH_CLIENT:-}" ] && SCAN_DIRS="$SCAN_DIRS $FAMILY_OUT"
 uv run --quiet --script "$BATTERIE_DIR/leak-scan.py" $SCAN_DIRS || { echo "FAIL: leak scan" >&2; exit 1; }
 
 # Invariant check 2 (warn only): vendored content not in the manifest is

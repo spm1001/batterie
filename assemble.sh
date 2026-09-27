@@ -916,8 +916,8 @@ PYEOF
   if [ -e "$FAMILY_KIT/mise/credentials.json" ]; then
     echo "FAIL: family kit still ships the bundled ITV client" >&2; exit 1
   fi
-  fam_v=$(python3 -c "import json; print(json.load(open('$FAMILY_KIT/mise/.claude-plugin/plugin.json'))['version'])")
-  [ "$fam_v" = "$SUITE_VERSION" ] || { echo "FAIL: version skew — family mise $fam_v vs suite $SUITE_VERSION" >&2; exit 1; }
+  fam_v=$(python3 -c "import json; print(json.load(open('$FAMILY_KIT/.claude-plugin/plugin.json'))['version'])")
+  [ "$fam_v" = "$SUITE_VERSION" ] || { echo "FAIL: version skew — family kit $fam_v vs suite $SUITE_VERSION" >&2; exit 1; }
   echo "  OK $FAMILY_NAME ← plugins/$KIT/mise + family/ ($SUITE_VERSION, client: $(basename "$FAMILY_OAUTH_CLIENT"))"
 else
   echo "  SKIP family marketplace '$FAMILY_NAME' — FAMILY_OAUTH_CLIENT not set (public-only run)"

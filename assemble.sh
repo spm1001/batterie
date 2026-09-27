@@ -878,7 +878,7 @@ The marketplace only needs adding once; after that, install as many as they want
 - **trousse** — utility skills (diagrams, code review, data analysis). Works immediately, nothing to set up. Good default add.
 - **batterie** — keeps their plugins current (`/batterie:update`). Worth having.
 - **accomplis** — Todoist with GTD coaching. Needs the `accomplis` CLI *and* a Todoist account + API token. Worth it if they already live in Todoist.
-- **bon** — a power-user GTD work-tracker. Needs the `bon` CLI and a local store. Suits someone who wants to track work across sessions (e.g. Isaac); ask before setting it up.
+- **bon** — a power-user GTD work-tracker. Needs the `bon` CLI and a local store. Suits someone who wants to track work across sessions; ask before setting it up.
 
 ## How to offer it
 

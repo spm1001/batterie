@@ -20,6 +20,20 @@
 # Every vendored plugin is stamped with ONE suite version (the batterie/suite
 # plugin's — bds-suwoho), so all published plugins carry an identical number.
 #
+# ONE PLUGIN, batterie@batterie (bds-jakemi, 2026-09-27). The public shelf is
+# one marketplace holding one plugin named after its ring, because claude.ai
+# and Desktop mishandle catalogue changes (deletions above all — sonnette stayed
+# installed on claude.ai after it was delisted); with a fixed catalogue, adding
+# or retiring a tool is an ordinary version bump inside the kit. Each source
+# repo is a COMPONENT vendored whole into plugins/batterie/<component>/, exactly
+# as it used to be vendored into plugins/<name>/ — five components ship a
+# hooks/session-start.sh and every hook finds its root from its own path, so
+# keeping each tree whole means no hook or script changes shape. The kit's
+# root .claude-plugin/plugin.json is GENERATED from the component manifests
+# (write_kit_manifest below): a skills array, the union of their hooks with
+# each command re-rooted, and their MCP servers re-rooted. Design:
+# batterie-de-savoir docs/plans/jakemi-fold-design-2026-09-27.md.
+#
 # Failure model is two-tier. STRUCTURAL faults (husk/parity guard, manifest
 # invariant, MCP entry-point) hard-exit 1 immediately — corrupt content is
 # never published. A VERSION-RATCHET lag (content changed but the suite
@@ -35,33 +49,27 @@ set -euo pipefail
 BATTERIE_DIR="$(cd "$(dirname "$0")" && pwd)"
 SOURCE_DIR="$(dirname "$BATTERIE_DIR")"
 
-# plugin_name:repo_dir pairs
-# batterie (suite-level plugin) is sourced from batterie-de-savoir's root —
-# its .claude-plugin/ also holds that repo's marketplace.json, hence the
-# rsync --exclude below.
-PLUGINS="
-batterie:batterie-de-savoir
+# The kit: one plugin, named after the ring, and its one marketplace field no
+# plugin.json carries (bds-dekava). No colon in these on purpose: assemble.yml's
+# clone list greps every `name:repo` line in this file.
+KIT="batterie"
+KIT_CATEGORY="productivity"
+
+# component:repo_dir pairs, in load order. Each lands in plugins/$KIT/<component>/.
+# `suite` is batterie-de-savoir's own content (update, version, the batterie
+# shard) — its .claude-plugin/ also supplies the kit's identity (name,
+# description, keywords) to write_kit_manifest. The component name is the
+# kitchen name the CLI, shard and wheel already carry; it never reaches a
+# user-visible id, which is batterie:<skill> and mcp__plugin_batterie_<server>.
+# arete left for the sameer kit with the fold (Sameer-only: macOS + MindNode).
+COMPONENTS="
+suite:batterie-de-savoir
 bon:bon
 trousse:trousse
 mise:mise-en-space
 accomplis:accomplis
 sonner:sonner
 passe:passe
-arete:arete
-"
-# The one marketplace field no plugin.json carries (bds-dekava). `=`, not `:`,
-# on purpose: assemble.yml's clone list greps every `name:repo` line in this
-# file, so a colon here would try to clone a repo called "productivity".
-# A PLUGINS entry with no category here fails the run.
-CATEGORIES="
-batterie=productivity
-bon=productivity
-trousse=workflow
-mise=integration
-accomplis=productivity
-sonner=integration
-passe=automation
-arete=productivity
 "
 # sonnette DELISTED 2026-08-24 (son-pilalu, Sameer's call): superseded by sonner,
 # which shipped two suite versions earlier. Its conductor-channel MCP traffic
@@ -81,19 +89,20 @@ arete=productivity
 # rationale left the guidance shard, skills and hooks with no rot-proof
 # install route — tube's shard died for a week via a Cowork-sandbox symlink.
 # The plugin route plus a hook-generated shard (passe df1dbbc) is durable.
-# De-registration is ONE edit since bds-dekava (2026-09-23): drop the plugin
-# from PLUGINS (and CATEGORIES). The run then prunes its plugins/ dir and
-# regenerates marketplace.json without it — the two can no longer disagree with
-# this list (the accomplis rename stranded the marketplace for ~30 min on
-# 2026-08-02 because both were hand-kept).
+# Retiring a component is ONE edit: drop it from COMPONENTS. The run prunes its
+# plugins/$KIT/<component>/ dir and regenerates the kit manifest without it —
+# an ordinary version bump for every client, which is the point of one plugin.
+# (bds-dekava made de-registration one edit when there were eight plugins; the
+# accomplis rename had stranded the marketplace for ~30 min on 2026-08-02
+# because marketplace.json and the map were both hand-kept.)
 
-# Wheels shipped inside plugins (bds-timule, 2026-09-23): plugin:source_repo.
-# Each source repo is built into a wheel that lands in plugins/<plugin>/wheels/,
+# Wheels shipped inside the kit (bds-timule, 2026-09-23): component:source_repo.
+# Each source repo is built into a wheel that lands in plugins/$KIT/<component>/wheels/,
 # so every CLI and library a plugin needs installs from THIS public repo and the
 # workshop repos can go private — batterie is the one public strand (Sameer:
 # "a spider web when it should be a rope"). The SessionStart hooks install from
 # these wheels; git+https survives only as a maintainer fallback. Repos listed
-# here but absent from PLUGINS (deglacer, jeton) are cloned by assemble.yml,
+# here but absent from COMPONENTS (deglacer, jeton) are cloned by assemble.yml,
 # whose clone list greps every `name:repo` line in this file — keep the shape.
 # Hatchling wheels are reproducible, so an unchanged source rebuilds to the same
 # bytes and the ratchet stays quiet; a changed source is content drift like any
@@ -174,13 +183,14 @@ HOME_NAME="batterie-home"
 # lives in the batterie/suite plugin's plugin.json; source repos keep their
 # own plugin.json versions for local dev + the CLI footnote, but those are
 # overwritten in the vendored copies below. BATTERIE_SRC_REPO is read from
-# the PLUGINS map so there's no second hardcoding of the source repo name.
-BATTERIE_SRC_REPO=$(echo "$PLUGINS" | awk -F: '$1=="batterie"{print $2}')
+# the COMPONENTS map so there's no second hardcoding of the source repo name.
+BATTERIE_SRC_REPO=$(echo "$COMPONENTS" | awk -F: '$1=="suite"{print $2}')
 SUITE_VERSION=$(python3 -c "import json; print(json.load(open('$SOURCE_DIR/$BATTERIE_SRC_REPO/.claude-plugin/plugin.json'))['version'])")
 # Last-published suite version, for the suite-level ratchet below: the
 # committed batterie plugin in HEAD is the canonical holder. Empty on a fresh
 # repo (no HEAD yet) — the ratchet treats empty as "can't compare, allow".
-OLD_SUITE_VERSION=$(git -C "$BATTERIE_DIR" show "HEAD:plugins/batterie/.claude-plugin/plugin.json" 2>/dev/null \
+KIT_DIR="$BATTERIE_DIR/plugins/$KIT"
+OLD_SUITE_VERSION=$(git -C "$BATTERIE_DIR" show "HEAD:plugins/$KIT/.claude-plugin/plugin.json" 2>/dev/null \
   | python3 -c "import json,sys; print(json.load(sys.stdin)['version'])" 2>/dev/null || echo "")
 
 # Stamp a vendored plugin.json's version to the suite version via a TARGETED
@@ -253,22 +263,52 @@ open(path, "w").write(text2)
 PYEOF
 }
 
-echo "Assembling plugins from $SOURCE_DIR (suite version $SUITE_VERSION, last published ${OLD_SUITE_VERSION:-none})"
+# Skill, command and agent bodies are the one place Claude Code substitutes
+# ${CLAUDE_PLUGIN_ROOT} inline — with the KIT root, not the component's. So a
+# component's Markdown gets every ${CLAUDE_PLUGIN_ROOT} re-rooted to
+# ${CLAUDE_PLUGIN_ROOT}/<component>, and a leftover bare root (braced or not)
+# fails the run: resolved against the kit root, it names a path that does not
+# exist, and a skill's primary route would silently fall through to its
+# cache-glob fallback — which finds a stale pre-fold copy. rsync restores the
+# source text on every run (checksums differ once rewritten), so this applies
+# exactly once per run and the ratchet compares like with like.
+reroot_markdown() {
+  python3 - "$1" "$2" <<'PYEOF'
+import re, sys
+from pathlib import Path
+root, comp = Path(sys.argv[1]), sys.argv[2]
+bad = []
+for sub in ("skills", "commands", "agents"):
+    for md in sorted((root / sub).rglob("*.md")) if (root / sub).is_dir() else []:
+        text = md.read_text()
+        new = re.sub(r"\$\{CLAUDE_PLUGIN_ROOT\}(?!/" + re.escape(comp) + r"(?![\w-]))",
+                     "${CLAUDE_PLUGIN_ROOT}/" + comp, text)
+        if new != text:
+            md.write_text(new)
+        if re.search(r"\$CLAUDE_PLUGIN_ROOT(?![\w{])", new):
+            bad.append(f"{md.relative_to(root)} uses $CLAUDE_PLUGIN_ROOT unbraced")
+for b in bad:
+    print(f"FAIL: {comp}: {b} — Claude Code only substitutes the braced form; write ${{CLAUDE_PLUGIN_ROOT}}", file=sys.stderr)
+sys.exit(1 if bad else 0)
+PYEOF
+}
+
+echo "Assembling $KIT from $SOURCE_DIR (suite version $SUITE_VERSION, last published ${OLD_SUITE_VERSION:-none})"
 
 RATCHET_FAILURES=""
 QUARANTINED=""
 
-for entry in $PLUGINS; do
-  plugin="${entry%%:*}"
+for entry in $COMPONENTS; do
+  plugin="${entry%%:*}"   # the component name (kept as $plugin: the WHEELS map and the quarantine file speak it)
   repo="${entry##*:}"
   src="$SOURCE_DIR/$repo"
 
   if [ ! -d "$src/.claude-plugin" ]; then
-    echo "  SKIP $plugin — no .claude-plugin/ in $src"
-    continue
+    echo "FAIL: component $plugin has no .claude-plugin/ in $src — a missing component would ship a kit with a hole in it" >&2
+    exit 1
   fi
 
-  dest="$BATTERIE_DIR/plugins/$plugin"
+  dest="$KIT_DIR/$plugin"
   mkdir -p "$dest"
 
   # MCP plugins need their full runtime source, not the skill-plugin file
@@ -389,19 +429,16 @@ print('yes' if d.get('mcpServers') else 'no')
     fi
   done
 
-  # Single-version stamp (bds-suwoho): overwrite this plugin's vendored
-  # plugin.json version with the suite version, so every published plugin
-  # carries one identical number. The source repo's own version is untouched
-  # (local-dev / CLI footnote only). Done here, after vendoring + the parity
-  # guard, so the version read below reflects the stamp.
+  reroot_markdown "$dest" "$plugin" || exit 1
+
+  # Single-version stamp (bds-suwoho) on the COMPONENT manifest too. Claude
+  # Code never reads it (the kit root's is the plugin manifest), but it is the
+  # input write_kit_manifest reads hooks and servers from, and the family
+  # flavour derives mise-home from mise's — whose version must be the suite's
+  # (bds-jupize's coherence check below). And no shipped file may point at a
+  # private repo (bds-juwone), manifests included.
   stamp_version "$dest/.claude-plugin/plugin.json" "$SUITE_VERSION"
   stamp_repository "$dest/.claude-plugin/plugin.json" "$repo"
-
-  # Shipped CHANGELOG is a generated stub pointing at the canonical suite
-  # changelog (bds-mawitu) — regenerated with the suite version every run, so it
-  # cannot go stale. It's written before the ratchet's git-status read below, so
-  # like the stamped plugin.json it's filtered out of the content-drift check.
-  write_changelog_stub "$dest" "$SUITE_VERSION"
 
   # Version + source SHA for the status line below — so any future "why is
   # X stale?" is answerable from the commit message alone (the May 2026
@@ -431,17 +468,28 @@ print('yes' if d.get('mcpServers') else 'no')
   # is safe for the post-loop structural invariants (marketplace, MCP) —
   # last-published already satisfied them. Applies ONLY to the version
   # ratchet; the husk/parity guard above stays a hard exit.
+  #
+  # Per COMPONENT since the fold (bds-jakemi): the subtree is the unit that
+  # reverts, and the kit manifest is generated after this loop from the
+  # (possibly reverted) component manifests, so a held-back component's hooks
+  # match its held-back files. A component with no last-published copy cannot
+  # be held back at all — that is a first appearance, and it needs the suite
+  # bump that /batterie:publish brings; fail rather than ship a kit without it.
   quarantined_this=0
   if [ -z "${ASSEMBLE_NO_RATCHET:-}" ]; then
-    content_changes=$(git -C "$BATTERIE_DIR" status --porcelain -- "plugins/$plugin" \
+    content_changes=$(git -C "$BATTERIE_DIR" status --porcelain -- "plugins/$KIT/$plugin" \
       | grep -v '\.claude-plugin/plugin\.json' | grep -v 'CHANGELOG\.md' | grep -c . || true)
     if [ -n "$OLD_SUITE_VERSION" ] && [ "$content_changes" -gt 0 ] && [ "$SUITE_VERSION" = "$OLD_SUITE_VERSION" ]; then
+      if [ -z "$(git -C "$BATTERIE_DIR" ls-tree -d HEAD "plugins/$KIT/$plugin")" ]; then
+        echo "FAIL: component $plugin is new in plugins/$KIT/ but the suite version is still $SUITE_VERSION — a first appearance cannot be quarantined; release it with /batterie:publish" >&2
+        exit 1
+      fi
       # Restore the laggard's vendored dir to EXACTLY last-published:
       # checkout restores tracked files; clean -fd drops newly-added drift
       # files checkout leaves behind (porcelain counts new files, so the
       # revert must drop them too — else `git add -A` would republish them).
-      git -C "$BATTERIE_DIR" checkout HEAD -- "plugins/$plugin"
-      git -C "$BATTERIE_DIR" clean -fdq -- "plugins/$plugin"
+      git -C "$BATTERIE_DIR" checkout HEAD -- "plugins/$KIT/$plugin"
+      git -C "$BATTERIE_DIR" clean -fdq -- "plugins/$KIT/$plugin"
       RATCHET_FAILURES="${RATCHET_FAILURES}  $plugin: $content_changes content change(s) but suite version still $SUITE_VERSION — bump the suite version ($BATTERIE_SRC_REPO/.claude-plugin/plugin.json)\n"
       QUARANTINED="${QUARANTINED}${plugin}\n"
       quarantined_this=1
@@ -471,46 +519,187 @@ if [ ! -f "$MARKETPLACE_README" ]; then
 fi
 cp "$MARKETPLACE_README" "$BATTERIE_DIR/README.md"
 
-# marketplace.json is GENERATED (bds-dekava, 2026-09-23), never hand-kept:
-# entries in PLUGINS order, each read from the just-vendored (and stamped)
-# plugins/<name>/.claude-plugin/plugin.json — description, keywords, and
-# homepage from its repository field (already pointed at the README for
-# private sources by stamp_repository) — plus the CATEGORIES map. Then any
-# plugins/ dir PLUGINS no longer names is pruned, so a delisted or renamed
-# plugin cannot linger as a frozen copy. The batterie-home manifest has its
-# own generator further down. Fails loud on a plugin without a category.
-PLUGIN_NAMES=$(for e in $PLUGINS; do echo "${e%%:*}"; done)
+# Prune: plugins/ holds the kit and nothing else, and the kit holds its
+# components, its generated manifest and its changelog stub and nothing else.
+# The first pass is what removes the eight pre-fold plugin dirs; the second
+# removes a retired component's subtree and the pre-fold batterie plugin's own
+# top-level skills/, hooks/ and scripts/ (now under suite/).
+COMPONENT_NAMES=$(for e in $COMPONENTS; do echo "${e%%:*}"; done)
 for d in "$BATTERIE_DIR"/plugins/*/; do
   n=$(basename "$d")
-  if ! printf '%s\n' $PLUGIN_NAMES | grep -qx "$n"; then
+  if [ "$n" != "$KIT" ]; then
     rm -rf "$d"
-    echo "  PRUNED plugins/$n (not in PLUGINS)"
+    echo "  PRUNED plugins/$n (folded into $KIT@$KIT)"
   fi
 done
+for d in "$KIT_DIR"/* "$KIT_DIR"/.[!.]*; do
+  [ -e "$d" ] || continue
+  n=$(basename "$d")
+  case "$n" in .claude-plugin|CHANGELOG.md) continue ;; esac
+  if ! printf '%s\n' $COMPONENT_NAMES | grep -qx "$n"; then
+    rm -rf "$d"
+    echo "  PRUNED plugins/$KIT/$n (not a component)"
+  fi
+done
+
+# The kit manifest is GENERATED from the component manifests (bds-jakemi),
+# after the loop so a quarantined component contributes its held-back hooks.
+# Identity (name, displayName, description, author, license, keywords) comes
+# from the suite component; version and repository are stamped below like any
+# plugin.json. Three merges, each deny-by-default so a manifest feature the
+# fold does not yet carry fails the run instead of being dropped in silence:
+#   skills      — an array of ./<component>/skills/ (adds to the default skills/)
+#   hooks       — the union of every component's hooks. Each command is
+#                 re-rooted and prefixed CLAUDE_PLUGIN_ROOT="…/<component>", so a
+#                 hook reading that variable sees its own subtree, as before the
+#                 fold. Hook commands are shell-form, which is what makes the
+#                 prefix an environment assignment.
+#   mcpServers  — every component's servers, strings re-rooted; a duplicate
+#                 server name across components fails (it would change a tool id).
+write_kit_manifest() {
+  python3 - "$KIT_DIR" "$KIT" "$COMPONENT_NAMES" <<'PYEOF'
+import json, re, sys
+from pathlib import Path
+
+kit_dir, kit, comps = Path(sys.argv[1]), sys.argv[2], sys.argv[3].split()
+ROOT = "${CLAUDE_PLUGIN_ROOT}"
+# Keys a component manifest may carry. Anything else (userConfig, channels,
+# dependencies, monitors, lspServers, commands, agents, skills, settings…)
+# needs a designed merge first.
+ALLOWED = {"name", "displayName", "identity", "version", "description", "author",
+           "repository", "homepage", "license", "keywords", "hooks", "mcpServers"}
+fails = []
+
+def reroot(s, comp):
+    return re.sub(r"\$\{CLAUDE_PLUGIN_ROOT\}(?!/" + re.escape(comp) + r"(?![\w-]))",
+                  ROOT + "/" + comp, s)
+
+suite = json.load(open(kit_dir / "suite/.claude-plugin/plugin.json"))
+manifest = {"name": kit}
+for k in ("displayName", "version", "description", "author", "repository", "license", "keywords"):
+    if k in suite:
+        manifest[k] = suite[k]
+skills, hooks, servers, owner = [], {}, {}, {}
+
+for comp in comps:
+    cdir = kit_dir / comp
+    pj = json.load(open(cdir / ".claude-plugin/plugin.json"))
+    extra = set(pj) - ALLOWED
+    if extra:
+        fails.append(f"{comp}: manifest keys {sorted(extra)} have no fold merge yet")
+    for d in ("commands", "agents"):
+        if (cdir / d).is_dir():
+            fails.append(f"{comp}: ships {d}/, which the fold does not wire yet")
+    for f in (".mcp.json", "hooks/hooks.json"):
+        if (cdir / f).exists():
+            fails.append(f"{comp}: ships {f}, which only loads at a plugin root")
+    if (cdir / "skills").is_dir():
+        skills.append(f"./{comp}/skills/")
+
+    h = pj.get("hooks") or {}
+    if not isinstance(h, dict):
+        fails.append(f"{comp}: hooks must be inline in plugin.json for the fold")
+        h = {}
+    for event, groups in h.items():
+        for g in groups:
+            new_hooks = []
+            for hk in g.get("hooks", []):
+                if hk.get("type") != "command" or "args" in hk:
+                    fails.append(f"{comp}: {event} hook is not a shell-form command")
+                    continue
+                cmd = reroot(hk["command"], comp)
+                m = re.match(r"^(\$\{CLAUDE_PLUGIN_ROOT\}/\S+)(.*)$", cmd)
+                if not m:
+                    fails.append(f"{comp}: {event} hook command does not start with its plugin root: {hk['command']}")
+                    continue
+                new_hooks.append({**hk, "command":
+                    f'CLAUDE_PLUGIN_ROOT="{ROOT}/{comp}" "{m.group(1)}"{m.group(2)}'})
+            hooks.setdefault(event, []).append({**g, "hooks": new_hooks})
+
+    for name, cfg in (pj.get("mcpServers") or {}).items():
+        if name in servers:
+            fails.append(f"{comp}: MCP server '{name}' already declared by {owner[name]}")
+            continue
+        def walk(v):
+            if isinstance(v, str): return reroot(v, comp)
+            if isinstance(v, list): return [walk(x) for x in v]
+            if isinstance(v, dict): return {k: walk(x) for k, x in v.items()}
+            return v
+        servers[name], owner[name] = walk(cfg), comp
+
+if skills: manifest["skills"] = skills
+if hooks: manifest["hooks"] = hooks
+if servers: manifest["mcpServers"] = servers
+for f in fails:
+    print(f"FAIL: kit manifest — {f}", file=sys.stderr)
+if fails:
+    sys.exit(1)
+(kit_dir / ".claude-plugin").mkdir(exist_ok=True)
+with open(kit_dir / ".claude-plugin/plugin.json", "w") as f:
+    json.dump(manifest, f, indent=2, ensure_ascii=False)
+    f.write("\n")
+PYEOF
+}
+write_kit_manifest || exit 1
+stamp_version "$KIT_DIR/.claude-plugin/plugin.json" "$SUITE_VERSION"
+stamp_repository "$KIT_DIR/.claude-plugin/plugin.json" "batterie"
+# Shipped CHANGELOG is a generated stub pointing at the canonical suite
+# changelog (bds-mawitu) — one, at the kit root. Like the stamped manifests it
+# is filtered out of the ratchet's content-drift check.
+write_changelog_stub "$KIT_DIR" "$SUITE_VERSION"
+
+# Bare skill names must be unique inside the kit and must not shadow a Claude
+# Code built-in: a built-in wins the bare name and the kit's skill then answers
+# only to its prefix (measured headless 2026-09-27: /code-review ran the
+# built-in 3/3). The built-in list is a pinned file beside this script, because
+# the names come from the harness, not from anything this repo can read. A
+# skill directory whose frontmatter name disagrees fails too — the directory is
+# what Claude Code surfaces.
+check_skill_names() {
+  python3 - "$KIT_DIR" "$BATTERIE_DIR/builtin-names.txt" <<'PYEOF'
+import re, sys
+from pathlib import Path
+kit_dir, builtin_file = Path(sys.argv[1]), Path(sys.argv[2])
+builtins = {l.split("#")[0].strip() for l in builtin_file.read_text().splitlines()} - {""}
+seen, fails = {}, []
+for sk in sorted(kit_dir.glob("*/skills/*/SKILL.md")):
+    comp, name = sk.parts[-4], sk.parent.name
+    m = re.search(r"^name:\s*(\S+)\s*$", sk.read_text(), re.M)
+    if not m or m.group(1) != name:
+        fails.append(f"{comp}/skills/{name}: frontmatter name {m.group(1) if m else 'missing'} ≠ directory")
+    if name in seen:
+        fails.append(f"bare name '{name}' shipped by both {seen[name]} and {comp}")
+    seen.setdefault(name, comp)
+    if name in builtins:
+        fails.append(f"bare name '{name}' ({comp}) shadows a Claude Code built-in")
+for f in fails:
+    print(f"FAIL: skill names — {f}", file=sys.stderr)
+if fails:
+    sys.exit(1)
+print(f"  OK {len(seen)} skill names unique, none a built-in: {' '.join(sorted(seen))}")
+PYEOF
+}
+check_skill_names || exit 1
+
+# marketplace.json is GENERATED (bds-dekava), never hand-kept: one entry, the
+# kit, read from its just-generated manifest.
 write_public_marketplace() {
-  python3 - "$1" "$PLUGIN_NAMES" "$CATEGORIES" <<'PYEOF'
+  python3 - "$1" "$KIT" "$KIT_CATEGORY" <<'PYEOF'
 import json, sys
-root, names, cats = sys.argv[1], sys.argv[2].split(), sys.argv[3].split()
-category = dict(c.split("=", 1) for c in cats)
-entries = []
-for n in names:
-    if n not in category:
-        sys.stderr.write(f"FAIL: plugin {n} has no CATEGORIES entry in assemble.sh\n")
-        sys.exit(1)
-    pj = json.load(open(f"{root}/plugins/{n}/.claude-plugin/plugin.json"))
-    entry = {"name": n, "source": f"./plugins/{n}",
-             "description": pj["description"], "category": category[n]}
-    if pj.get("repository"):
-        entry["homepage"] = pj["repository"]
-    if pj.get("keywords"):
-        entry["keywords"] = pj["keywords"]
-    entries.append(entry)
+root, kit, category = sys.argv[1], sys.argv[2], sys.argv[3]
+pj = json.load(open(f"{root}/plugins/{kit}/.claude-plugin/plugin.json"))
+entry = {"name": kit, "source": f"./plugins/{kit}",
+         "description": pj["description"], "category": category}
+if pj.get("repository"):
+    entry["homepage"] = pj["repository"]
+if pj.get("keywords"):
+    entry["keywords"] = pj["keywords"]
 manifest = {
     "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
-    "name": "batterie",
-    "description": "Kitchen tools for knowledge work — plugins for GTD tracking, session lifecycle, Google Workspace, browser automation, and more",
+    "name": kit,
+    "description": "Kitchen tools for knowledge work — one plugin for GTD tracking, session rituals, Google Workspace, browser automation, cross-session messaging and more",
     "owner": {"name": "Sameer Modha", "email": "sameer@modha.dev"},
-    "plugins": entries,
+    "plugins": [entry],
 }
 with open(f"{root}/.claude-plugin/marketplace.json", "w") as f:
     json.dump(manifest, f, indent=2, ensure_ascii=False)
@@ -571,17 +760,22 @@ for pj in sorted(root.glob("*/.claude-plugin/plugin.json")):
                 if not (plugin_dir / rel).exists():
                     failures.append(f"{where} references {rel} — not vendored")
 
-        if any(t in ("--project", "--directory") for t in tokens):
-            if not (plugin_dir / "pyproject.toml").exists():
-                failures.append(f"{where} uses uv --project/--directory but no pyproject.toml vendored")
+        # The project dir is the token after the flag, resolved against the
+        # plugin root — since the fold it is a component subtree (…/mise), not
+        # the plugin root itself.
+        for i, t in enumerate(tokens):
+            if t in ("--project", "--directory") and i + 1 < len(tokens):
+                proj = tokens[i + 1].replace("${CLAUDE_PLUGIN_ROOT}", str(plugin_dir))
+                if not (Path(proj) / "pyproject.toml").exists():
+                    failures.append(f"{where} uses uv {t} {tokens[i+1]} but no pyproject.toml is vendored there")
 
         for i, t in enumerate(tokens):
             if t == "-m" and i + 1 < len(tokens):
                 mod = tokens[i + 1].replace(".", "/")
-                if not ((plugin_dir / f"{mod}.py").exists()
-                        or (plugin_dir / mod / "__init__.py").exists()
-                        or (plugin_dir / "src" / f"{mod}.py").exists()
-                        or (plugin_dir / "src" / mod / "__init__.py").exists()):
+                bases = [plugin_dir] + [d for d in plugin_dir.iterdir() if d.is_dir()]
+                if not any((b / f"{mod}.py").exists() or (b / mod / "__init__.py").exists()
+                           or (b / "src" / f"{mod}.py").exists() or (b / "src" / mod / "__init__.py").exists()
+                           for b in bases):
                     failures.append(f"{where} runs -m {tokens[i+1]} — module not vendored")
 
 for f in failures:
@@ -608,7 +802,14 @@ if [ -n "${MISE_HOME_CRED:-}" ]; then
   rm -rf "$HOME_OUT"
   mkdir -p "$HOME_OUT/plugins" "$HOME_OUT/.claude-plugin"
   "$BATTERIE_DIR/transforms/make-mise-flavour.sh" \
-    "$BATTERIE_DIR/plugins/mise" "$HOME_OUT/plugins/mise-home" home "$MISE_HOME_CRED"
+    "$KIT_DIR/mise" "$HOME_OUT/plugins/mise-home" home "$MISE_HOME_CRED"
+  # The mise component's skill bodies were re-rooted to ${CLAUDE_PLUGIN_ROOT}/mise
+  # for the kit; mise-home is a stand-alone plugin, so a re-rooted path there
+  # would point one level too deep. None exist today — fail if one appears.
+  if grep -rq 'CLAUDE_PLUGIN_ROOT}/mise' "$HOME_OUT/plugins/mise-home/skills" 2>/dev/null; then
+    echo "FAIL: mise-home skills carry a kit-re-rooted \${CLAUDE_PLUGIN_ROOT}/mise path — derive the flavour before reroot_markdown, or drop the reference" >&2
+    exit 1
+  fi
 
   # Family stub (bds-rikeno): batterie-home carries ONLY mise-home — the one
   # plugin that MUST be private (it holds the planetmodha Google cred). The rest
@@ -750,13 +951,13 @@ CLAUDEEOF
 
   # Version coherence (bds-jupize): the flavour must carry exactly the version
   # the public vendored mise shipped this run — same number on both outputs.
-  pub_v=$(python3 -c "import json; print(json.load(open('$BATTERIE_DIR/plugins/mise/.claude-plugin/plugin.json'))['version'])")
+  pub_v=$(python3 -c "import json; print(json.load(open('$KIT_DIR/mise/.claude-plugin/plugin.json'))['version'])")
   home_v=$(python3 -c "import json; print(json.load(open('$HOME_OUT/plugins/mise-home/.claude-plugin/plugin.json'))['version'])")
   if [ "$pub_v" != "$home_v" ]; then
     echo "FAIL: version skew — public mise $pub_v vs mise-home $home_v" >&2
     exit 1
   fi
-  echo "  OK mise-home ← plugins/mise ($home_v, transformed, cred: $(basename "$MISE_HOME_CRED"))"
+  echo "  OK mise-home ← plugins/$KIT/mise ($home_v, transformed, cred: $(basename "$MISE_HOME_CRED"))"
 else
   echo "  SKIP private marketplace '$HOME_NAME' — MISE_HOME_CRED not set (public-only run)"
 fi

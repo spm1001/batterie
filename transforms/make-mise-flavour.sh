@@ -49,7 +49,8 @@ grep -rl --include='*.sh'                   'rules/mise.md'          "$OUT" | xa
 # neither output string contains the other's search pattern (`mcp__plugin_…` does
 # not contain `mcp__mise__`, and `mcp__plugin_mise-home_mise-home__` does not
 # either), so this cannot double-apply whichever way round they run.
-grep -rl --include='*.md' --include='*.py' 'mcp__plugin_mise_mise__' "$OUT" | xargs -r sed -i "s|mcp__plugin_mise_mise__|mcp__plugin_${NAME}_${NAME}__|g"
+# Since the kit fold (bds-jakemi) the public tool ids are mcp__plugin_batterie_mise__…
+grep -rl --include='*.md' --include='*.py' 'mcp__plugin_batterie_mise__' "$OUT" | xargs -r sed -i "s|mcp__plugin_batterie_mise__|mcp__plugin_${NAME}_${NAME}__|g"
 grep -rl --include='*.md' --include='*.py' 'mcp__mise__'             "$OUT" | xargs -r sed -i "s|mcp__mise__|mcp__${NAME}__|g"
 
 # 3. plugin.json + mcp-local.json: structured edits (name + rekey mcpServers).
@@ -165,8 +166,8 @@ if [ -f "$SKILL" ]; then
   # NOT contain the substring `mcp__mise__`, so the assert above cannot see a
   # leftover here. This is the form a real plugin session actually exposes, so an
   # un-rewritten one is the more costly of the two misses.
-  if grep -q 'mcp__plugin_mise_mise__' "$SKILL"; then
-    echo "  ✗ skill still references mcp__plugin_mise_mise__ (should be mcp__plugin_${NAME}_${NAME}__) — its tools won't be allowed"; FAIL=1
+  if grep -q 'mcp__plugin_batterie_mise__\|mcp__plugin_mise_mise__' "$SKILL"; then
+    echo "  ✗ skill still references the public plugin's tool prefix (should be mcp__plugin_${NAME}_${NAME}__) — its tools won't be allowed"; FAIL=1
   fi
   _ident=$(python3 -c "import json; print(json.load(open('$OUT/.claude-plugin/plugin.json'))['identity'])")
   if ! grep -qF "$_ident" "$SKILL"; then

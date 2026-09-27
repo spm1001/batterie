@@ -16,6 +16,7 @@
 #   echo "prompt" | ardoise.sh -p --stdin         # Print mode, stdin
 #   ardoise.sh --home ~/sbx /path/to/dir          # Persistent HOME (multi-step)
 #   ardoise.sh --keep -p "prompt"                 # Temp HOME, printed, not deleted
+#   ardoise.sh --tools Bash,Read --strict-mcp-config  # Interactive, claude flags pass through
 #
 # --home DIR : reuse (and keep) a named sandbox HOME across invocations — the
 #              recipe for multi-step tests (marketplace add -> install -> verify).
@@ -345,7 +346,10 @@ if [[ "$PRINT_MODE" == true ]]; then
             bash -c 'cd "$1" && shift && exec "$@"' _ "$START_DIR" "${CMD_PARTS[@]}" -- "$PROMPT"
     fi
 else
-    # Interactive mode: claude TUI, real TERM, chosen CWD
+    # Interactive mode: claude TUI, real TERM, chosen CWD. Claude flags pass through
+    # too (--model, --tools, --system-prompt, --strict-mcp-config ...), so a stripped
+    # sandbox can be talked to, not only scripted. The ${...+...} form keeps bash 3.2
+    # (stock macOS) quiet under set -u when no flags were given.
     exec env -i "${ENV_VARS[@]}" TERM="${TERM:-xterm-256color}" \
-        bash -c 'cd "$1" && exec claude' _ "$START_DIR"
+        bash -c 'cd "$1" && shift && exec claude "$@"' _ "$START_DIR" ${CLAUDE_ARGS[@]+"${CLAUDE_ARGS[@]}"}
 fi

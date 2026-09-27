@@ -786,6 +786,16 @@ PYEOF
 }
 check_mcp_entrypoints "$BATTERIE_DIR"
 
+# Leak scan (bds-tevuhe): nothing private reaches the public shelf. Every text
+# file in the assembled kit is scanned for email addresses, OAuth client ids
+# and secrets, tokens, private keys, ITV hostnames and the private personal-term
+# list (LEAK_SCAN_TERMS); leak-scan.py fires a canary through every class first
+# and fails if any class misses it, and every accepted hit carries a reason in
+# leak-scan-allow.txt. Hard fail, like the husk guards: a leak is corruption,
+# not a lag to quarantine.
+# (Run once, after the family output below, over both trees — one allowlist, one
+# stale-entry report.)
+
 # ---- PRIVATE marketplace: batterie-home (bds-mumise) -------------------------
 # Derived from the just-vendored PUBLIC mise — already stamped, already through
 # the husk/parity + ratchet machinery above — so the two marketplaces carry
@@ -945,7 +955,8 @@ mise-home: change mise-en-space (runtime) or spm1001/batterie's
 `MISE_HOME_CRED` set, and push the fresh `dist/batterie-home` here.
 CLAUDEEOF
 
-  # Same guards as the public output, same code.
+  # Same guards as the public output, same code — the leak scan included: the
+  # family repo is private, but family members are not the public either.
   check_manifest "$HOME_OUT"
   check_mcp_entrypoints "$HOME_OUT"
 
@@ -961,6 +972,10 @@ CLAUDEEOF
 else
   echo "  SKIP private marketplace '$HOME_NAME' — MISE_HOME_CRED not set (public-only run)"
 fi
+
+SCAN_DIRS="$BATTERIE_DIR/plugins"
+[ -n "${MISE_HOME_CRED:-}" ] && SCAN_DIRS="$SCAN_DIRS $HOME_OUT/plugins"
+uv run --quiet --script "$BATTERIE_DIR/leak-scan.py" $SCAN_DIRS || { echo "FAIL: leak scan" >&2; exit 1; }
 
 # Invariant check 2 (warn only): vendored content not in the manifest is
 # assembled-but-unpublished — probably an oversight, but listing it is a

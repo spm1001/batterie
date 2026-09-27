@@ -1,0 +1,20 @@
+# glob<TAB>class<TAB>match (or *)<TAB>reason — every accepted hit, with why. Globs are relative to the scanned dir, prefixed with its name.
+*/mise/credentials.json	oauth-client-id	*	mise's bundled installed-app OAuth client (ITV): public by design (installed-app/PKCE flow), and mise-en-space is a public repo
+*/mise/credentials.json	oauth-client-secret	*	the same installed-app client's secret — Google documents it as non-confidential for installed apps
+*/mise-home/credentials.json	oauth-client-id	*	the family flavour's planetmodha installed-app client: public by design; only reaches the private batterie-home
+*/mise-home/credentials.json	oauth-client-secret	*	the same family client's secret, non-confidential for installed apps
+*/apps-script/README.md	email	noreply-apps-scripts-notifications@google.com	Google's own system sender, documented publicly
+*/adapters/gmail.py	email	example@gmail.com	placeholder in a docstring
+*	email	team@company.com	placeholder domain in docs and tests
+*	email	manager@company.com	placeholder domain in docs and tests
+*	email	legal@company.com	placeholder domain in docs and tests
+*	email	finance@company.com	placeholder domain in docs and tests
+*	email	boss@company.com	placeholder domain in docs and tests
+*	email	team-announcements@yourcompany.com	placeholder domain in docs
+*	email	all-company@yourcompany.com	placeholder domain in docs
+*	email	a@x.com	placeholder in tests and docs
+*	email	someone@x.com	placeholder in docs
+*	email	notifications@app.com	placeholder in docs
+*	email	noreply@service.com	placeholder in docs
+*/skill-forge/references/sharing-scan.md	email	real.colleague@company.com	placeholder in the sharing scanner's own docs
+*/skill-forge/references/sharing-scan.md	email	GoogleDrive-your.email@company.com	placeholder path in the sharing scanner's own docs

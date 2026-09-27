@@ -235,8 +235,10 @@ else
 import json, sys
 with open(sys.argv[1]) as f:
     cfg = json.load(f)
+# mcpServers here is the USER-scope server list (claude mcp add --scope user): it leaked
+# every such server, with its tools, into the blank slate until 2026-09-27.
 for key in ["projects", "githubRepoPaths", "skillUsage", "clientDataCache",
-            "groveConfigCache"]:
+            "groveConfigCache", "mcpServers"]:
     cfg.pop(key, None)
 cfg["officialMarketplaceAutoInstallAttempted"] = True
 cfg["officialMarketplaceAutoInstalled"] = False

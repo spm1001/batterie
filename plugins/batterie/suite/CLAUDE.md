@@ -1,0 +1,114 @@
+# Batterie de Savoir — Agent Guide
+
+This repo has **two jobs**: it is the **documentation umbrella** for the Batterie de Savoir tool suite (docs, registry, generation scripts — no runnable tools), **and the source of the suite-level `batterie` plugin** that [`spm1001/batterie`](https://github.com/spm1001/batterie) assembles and distributes (see "The Marketplace Lives Elsewhere" below). The two repos are a source/artifact pair: author here, consume there. Retirement was assessed and rejected 2026-06-11 — "batterie is the marketplace anchor" is true of distribution only; this repo stays.
+
+## What this repo does
+
+- `brigade.toml` — single source of truth for all tool metadata
+- `scripts/render.py` — regenerates GENERATED sections in docs from the registry
+- `scripts/lint.py` — detects drift between registry and docs (exit 1 if stale)
+- `docs/` — Jekyll site. **Not currently published:** this repo is private and its Pages site is off (the old URL 404s), so `docs/` is read by us and our Claudes only
+- `marketplace/README.md` — **the suite's public face.** `assemble.sh` copies it to the root of the public `spm1001/batterie` on every run; its plugin table renders from `brigade.toml` (tools with a `plugin` field, with a `needs` column). Most source repos are private, so this is the only page a teammate or stranger can read (bds-mokava, 2026-09-23)
+
+## The one rule
+
+**Edit `brigade.toml`, then run `uv run --script scripts/render.py`.**
+
+Adding or changing a tool means touching exactly one file. The render script handles the rest. Never hand-edit content between GENERATED markers — it will be overwritten. Two marker formats exist: HTML comments (`<!-- GENERATED:*:START -->`) in README.md, and Liquid comments (`{% comment %}GENERATED:*:START{% endcomment %}`) in docs/ files. The dual format exists because kramdown treats HTML comments as block elements that break table parsing, while Jekyll strips Liquid comments before kramdown runs.
+
+To check for drift without writing: `uv run --script scripts/lint.py`
+
+Two adjacent guards (2026-07-26, bds-naceje): `lint.py` also fails if any registry slug lacks a hand-authored `docs/tools/<slug>.md` page (the generated index table links every slug — a missing page is a dead link on the live site). And every source repo's README skill table — including this repo's — is generated from `skills/*/SKILL.md` frontmatter by `scripts/render-skills.py` (canonical here; component repos' CI fetches it from raw main). Regenerate with `uv run --script scripts/render-skills.py <repo-root>`; see docs/MAINTAINING.md.
+
+## What's generated vs authored
+
+| File | Status |
+|------|--------|
+| Brigade tables in `README.md`, `docs/index.md` | **Generated** — run render.py |
+| Plugin table in `marketplace/README.md` | **Generated** — run render.py (the prose around it is hand-authored) |
+| Vocabulary, routing, deps, repos in `docs/for-agents.md` | **Generated** — run render.py |
+| `docs/tools/*.md` — individual tool pages | **Hand-authored** — never generated |
+| `docs/getting-started.md` | **Hand-authored** |
+| `docs/principles.md` | **Hand-authored** |
+| `docs/MAINTAINING.md` | **Hand-authored** |
+
+Tool pages are hand-authored by design. The registry holds one-liners; tool pages hold judgement.
+
+## Versioning convention
+
+**This is the canonical description of how the suite is versioned and released.** Component repos carry a thin pointer back here; this section (plus `.bon/understanding.md`) is the full picture.
+
+**One version number across the whole suite.** Since 2026-06-28 (suite 1.2.2) every published plugin — `batterie`, `bon`, `trousse`, `mise`, `accomplis` — carries the *same* version. The earlier "Debian model" (independent per-plugin numbers under a headline suite number) is **dead**: the suite is operated as a unit — the assembler re-vendors it whole daily, and `/batterie:update` pulls every plugin in one go — so per-plugin granularity was never consumed, only confusing.
+
+**Source of truth: the `batterie` plugin's `plugin.json` version (this repo) IS the suite version.** You never hand-edit it to release — `/ship` bumps it centrally (below).
+
+**How the one number reaches every plugin — the assembler stamps it.** `spm1001/batterie`'s `assemble.sh` vendors each source repo's plugin content, then *overwrites* every vendored `plugin.json` version with the suite version. Consequences:
+
+- **A source repo's own `plugin.json` version is local-dev-only** — hatchling reads it for the CLI `--version` footnote (below), but it's irrelevant to what ships. **Do NOT hand-bump a source `plugin.json` to "release"** — the stamp overwrites it. `/ship` is the only lever.
+- **The ratchet is suite-level.** If a plugin's vendored *content* changed but the *suite* version didn't bump, the assembler **quarantines** that plugin (keeps it at its last-good version) rather than shipping an unversioned change. So any vendored-content edit needs a suite bump to actually ship — see the GOTCHA below. **Since 2026-09-09 the assembler does that bump itself** (bds-hajeli): a quarantine day auto-bumps the suite patch version here, with a generated CHANGELOG line naming the laggards, and publishes them in a follow-on run — so an unpublished push ships by the next 07:00 UTC run instead of emailing red daily. `/ship` is still the way to ship *now* and to write the changelog line yourself.
+- `pyproject.toml` still uses `dynamic = ["version"]` reading `.claude-plugin/plugin.json` via a hatchling regex — never a hardcoded version. Repos on this pattern: **bon, mise-en-space, passe, trousse, accomplis**. A new tool with a `pyproject.toml` follows the same pattern.
+
+**Releasing: `/ship` from the edited repo's working tree.** It bumps the suite version centrally (this repo's `plugin.json`), commits, pushes, triggers `assemble.yml`, watches it green, and pulls this machine current. Editing a *non*-`batterie` source repo makes it a **2-repo push** (the content repo + the central suite bump). Never run `assemble.sh` locally — assembling is CI's job. (Engine: `scripts/publish.py`.)
+
+**One version → one changelog (bds-mawitu, suite 1.8.2).** There is a single canonical `CHANGELOG.md` in *this* repo (the suite anchor). At release, `publish.py` prepends a dated `## [<suite-version>] - <date>` entry with a one-line narrative — passed via `--changelog "line"` (the `/ship` skill prompts for it) and defaulting to the commit message, so an entry is *always* written and a shipped changelog can never predate its release. Shipped plugins do **not** carry their own changelog: `assemble.sh` writes each a small *generated stub* (suite version + pointer back to this repo's `CHANGELOG.md`) instead of vendoring per-repo ones. Because the stub is a pure function of the suite version — regenerated identically every run, like the stamped `plugin.json` version — it's filtered out of the ratchet's drift check (miss that filter and a generated artifact's first appearance quarantines every plugin at once). Editing `CHANGELOG.md` itself is free (source-only, not vendored).
+
+### The CLIs keep their own numbers (lazy convergence)
+
+The plugin version is one number; the **CLIs** (`bon` / `passe` / `accomplis --version`) are NOT stamped to it. A CLI's `--version` reads *the suite release that last **changed** that CLI* — `publish.py` lazy-stamps only the source repo being published (japoca, 2026-07-06). So CLIs converge toward the suite number over normal releases with no multi-repo dance every release (the dance the 2026-06-28 scope decision explicitly rejected). What a Claude should know:
+
+- `/batterie:version` shows the suite number as headline, each CLI's own `--version` as a **footnote** — a CLI number *below* the suite number is expected, not drift.
+- **Session hooks are install-if-missing only** — no version-drift check at session start (that produced a false reinstall every session). They install a *missing* CLI and report the version that actually landed.
+- **CLIs install from wheels the plugins ship (bds-timule, 2026-09-23).** `assemble.sh`'s `WHEELS` map builds bon, accomplis, passe, sonner (and deglacer into trousse, jeton into mise) into `plugins/<name>/wheels/`, so a CLI change is vendored content like any other and rides the suite bump. The source repos are private; hooks, `/batterie:update` and `publish.py`'s pull all install from the shipped wheel, with `git+https` only as a loud maintainer fallback. `/batterie:update`'s drift check reads `direct_url.json`: installed from this plugin's shipped wheel (or a byte-identical older copy) → current; anything else, local working-tree installs included, → reinstall from the wheel. Every machine runs what teammates run, maintainers too (Sameer, 2026-09-23 — running something different has bitten us before); there is deliberately no dev-mode that loads plugins or CLIs from `~/repos`.
+- **Vendored mise resolves jeton from its shipped wheel** — the assembler rewrites the vendored `pyproject.toml`'s `[tool.uv.sources]` git line to the wheel path and relocks, failing the build if the lock still names a spm1001 git repo.
+
+### Surfaces
+
+- **`/batterie:version`** — suite version (headline) + every installed plugin + CLI `--version` (footnotes). The canonical "what am I on?" answer.
+- **`/batterie:update`** — suite-version banner atop the update; **marketplace-aware** (`bds-lodita`): updates plugins across every batterie-family marketplace — the public one and the family-private Directory one.
+
+### GOTCHA — which edits need a suite bump
+
+The assembler's copy-list is `commands`, `skills`, `agents`, `hooks`, `scripts`, `.mcp.json`, `CLAUDE.md`, `instructions.md`, plus `.claude-plugin/` (read the list in `assemble.sh` when unsure — it, not feel, decides). Note **`scripts/` IS vendored**: a `scripts/lint.py` or `scripts/publish.py` edit is a content change, despite feeling like repo plumbing. So editing any of those in a source repo — **including this one** — is a *content change* the suite ratchet catches: it must ride a suite bump (ship it via `/ship`) or the assembler quarantines the plugin. A `docs/`, `.bon/`, `tests/` or `.github/` edit is **free** (not vendored). Rule of thumb: inside vendored content → rides a publish; docs-site, tests, CI or bon bookkeeping → doesn't.
+
+## Deliberate quirks — do not "fix" these
+
+- **jeton has no public README** — it's the renamed `itv-google-auth` library. A 404 when fetching its README is expected.
+- **`lint.py` imports `render.py` via `sys.path`** — intentional. Keeps one set of templates so lint tests exactly what render produces. Only safe because render.py's module-level code is side-effect-free (loads TOML, builds templates). Don't refactor by duplicating the rendering logic.
+- **`from = ["all"]` in `[[dependency]]`** — sentinel for "All tools" in the dependency direction table. Documented in brigade.toml's schema comment.
+- **Vocabulary and key-repos have static rows in separate tables** — GTD terms (Brigade, Outcome, Action, etc.) live in a "GTD & Brigade Terms" sub-table below the generated vocabulary table. The "This docs site" row lives in a separate mini-table below the generated key-repos table. Both are intentionally excluded from generation. The split exists because kramdown can't parse a table that spans across comment markers.
+
+## Local Jekyll preview
+
+Test rendering before pushing: `docker run --rm -v "$PWD/docs:/srv/jekyll" -p 4000:4000 jekyll/jekyll jekyll serve`. Saves deploy-wait-screenshot cycles — kramdown quirks (HTML comment blocks, SmartyPants em-dash conversion) only show up in the real Jekyll pipeline, not in GitHub's GFM preview.
+
+## Python version note
+
+This machine runs Python 3.9, which doesn't have `tomllib` (added in 3.11). The PEP 723 scripts declare `tomli; python_version < '3.11'` as a dependency — `uv run --script` handles this automatically. Don't validate TOML with bare `python3 -c "import tomllib"` — it'll fail. Use `uv run --with tomli python3 -c "import tomli; ..."` or just run the scripts via uv.
+
+## The Marketplace Lives Elsewhere
+
+**One plugin since the kit fold (bds-jakemi).** `spm1001/batterie` ships a single plugin, `batterie@batterie`. Every source repo — this one included — is a *component* vendored whole into `plugins/batterie/<component>/`; this repo's component is `suite`, and its `.claude-plugin/plugin.json` also supplies the kit's name, description and keywords. So "the batterie plugin" now means the whole kit, and the per-plugin prose below (eight plugins, `passe@batterie`, `<name>@batterie-de-savoir`) is history. Skill names follow `docs/plans/kit-skill-names-2026-09-27.md`; the design is `docs/plans/jakemi-fold-design-2026-09-27.md`. Releasing is the maintainer's `/ship` skill (Sameer's kit), which drives `scripts/publish.py` exactly as `/batterie:publish` did.
+
+This repo **stopped being a marketplace on 2026-06-10** (the bds-bajibo cutover — there is no `marketplace.json` here anymore). [`spm1001/batterie`](https://github.com/spm1001/batterie) is the single assembled marketplace, serving the **CLI and personal Desktop installs** (both accept a public repo). It vendors each plugin's content physically (Desktop's backend rejects external URL sources), reassembled daily by its GitHub Actions bot from the source repos. **The claude.ai *org/Teams* Directory is NOT a working surface for this repo — see "Repo visibility" below.**
+
+This repo remains a **source repo**: the suite-level `batterie` plugin (`.claude-plugin/plugin.json`, `skills/`, `hooks/`, `scripts/`, `instructions.md`) is vendored from here. To ship a change to it (or to any batterie source repo): **`/ship`** from the repo's working tree — it bumps the suite version, commits, pushes, triggers `assemble.yml`, watches it green, and pulls this machine current (`scripts/publish.py` is the engine). Under the hood, publish bumps the **suite** version (this repo's `plugin.json`) — *never* a source repo's own — and triggers the assemble (the daily bot also runs it, or `gh workflow run assemble.yml -R spm1001/batterie` fires it now). See **Versioning convention** above for the single-version mechanics. A commit landing in spm1001/batterie is what makes clients re-resolve plugins — its commit stream is the suite's update bus. **Not promptly on claude.ai, though (measured 2026-09-27):** the claude.ai copy of this marketplace, added to a personal account, refreshed about a day after a publish (~22 h once), or at once when someone pressed update in the app. The org-scope `batterie-home` refreshed 7 s after its commit. Detail: `~/notes/raw/2026-09-26-plugin-dependencies-measured.md` addendum 8.
+
+**passe left and rejoined the suite in July 2026.** Delisted 2026-07-07 as "browser infra, not a knowledge plugin" (`bds-wobari`), then **relisted 2026-07-26** (`passe-mezigo` on the passe board; assembler commit `c645c4d`) — `passe@batterie` installs normally again (the marketplace carries eight plugins as of 2026-09-23 — count from `marketplace.json`, not from prose) (the plugin auto-installs the CLI; its instruction shard is hook-generated). A machine that kept an "orphaned" `passe@batterie` install through the gap is simply current again; a machine swept during the gap (tube was, `bds-tujoro`) reinstalls with `claude plugin install passe@batterie`. Docs dated between those two dates may still teach the delisting — trust the assembler's `PLUGINS` map over prose.
+
+Anyone who installed plugins as `<name>@batterie-de-savoir` before the cutover migrates by add + reinstall + remove (plugin keys change with the marketplace name; a plain repoint isn't enough).
+
+### Repo visibility — deliberately PUBLIC (and what that costs)
+
+`spm1001/batterie` is **public on purpose** (decided 2026-06-20, `bds-kanuve`): ITV + public users install via `claude plugin marketplace add spm1001/batterie`, and personal Desktop installs (Customize → Add marketplace) also accept a public repo. The cost, accepted knowingly: **org/Teams Directory marketplaces require a _private or internal_ repo** — public is rejected by Anthropic policy (error: *"Only private and internal repositories can be used for marketplaces"* on the org sync endpoint; documented at code.claude.com/docs/en/plugin-marketplaces). "Internal" isn't available here — it needs a GitHub Org/Enterprise, and `spm1001` is a personal account.
+
+**So the Teams Directory one-click path is unavailable for this repo. Do NOT re-add the org marketplace (it errors on every sync), and do NOT flip the repo private to "fix Teams" — that breaks the CLI/personal path everyone actually uses.** Family-scale users get a *separate private* Directory marketplace — `spm1001/batterie-home`, built and owner-verified 2026-07-07 — carrying a planetmodha-cred flavour of mise (`mise-home`); the missing planetmodha OAuth cred for mise (not distribution) was always the blocker. Public plugins still come from here, and `/batterie:update` is marketplace-aware (`bds-lodita`) so one update spans both the public and the private marketplace. Tracked under `bds-niluga` (one non-admin family install remains to verify member-level access — `bds-bajaja`). (Separately, Desktop's *personal* marketplace can serve a stale pre-cutover snapshot — a server-side Anthropic cache bug tracked in `bds-hitoga`, not this visibility policy.)
+
+### Debugging Desktop marketplace
+
+- UI errors are opaque ("Marketplace sync failed")
+- Real errors: `~/Library/Logs/Claude/claude.ai-web.log` — shows per-plugin validation results
+- Sync status: `~/Library/Logs/Claude/main.log` — shows `failed_content` / `success` / `in_progress`
+
+## Open outcomes
+
+Tracked on the bon board, not hand-listed here (a hand-maintained list drifts — see `bds-naceje`). Run `bon list` for current outcomes and actions.

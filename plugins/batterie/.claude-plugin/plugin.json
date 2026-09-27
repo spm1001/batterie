@@ -1,7 +1,8 @@
 {
   "name": "batterie",
-  "version": "1.87.0",
-  "description": "Suite-level utilities for the Batterie de Savoir suite \u2014 cross-plugin updates and maintenance",
+  "displayName": "Batterie",
+  "version": "2.0.0",
+  "description": "Kitchen tools for knowledge work, in one plugin: session rituals and GTD tracking (bon), Google Workspace (mise), browser automation (passe), messaging between Claude sessions (sonner), Todoist coaching (accomplis), review and isolation tools (trousse), and keeping it all current",
   "author": {
     "name": "Sameer Modha",
     "url": "https://github.com/spm1001"
@@ -9,9 +10,22 @@
   "repository": "https://github.com/spm1001/batterie#readme",
   "license": "MIT",
   "keywords": [
-    "update",
-    "maintenance",
+    "gtd",
+    "google-workspace",
+    "browser",
+    "review",
+    "messaging",
+    "todoist",
     "batterie"
+  ],
+  "skills": [
+    "./suite/skills/",
+    "./bon/skills/",
+    "./trousse/skills/",
+    "./mise/skills/",
+    "./accomplis/skills/",
+    "./sonner/skills/",
+    "./passe/skills/"
   ],
   "hooks": {
     "SessionStart": [
@@ -20,10 +34,128 @@
         "hooks": [
           {
             "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/session-start.sh"
+            "command": "CLAUDE_PLUGIN_ROOT=\"${CLAUDE_PLUGIN_ROOT}/suite\" \"${CLAUDE_PLUGIN_ROOT}/suite/hooks/session-start.sh\""
+          }
+        ]
+      },
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "CLAUDE_PLUGIN_ROOT=\"${CLAUDE_PLUGIN_ROOT}/bon\" \"${CLAUDE_PLUGIN_ROOT}/bon/hooks/ensure-bon.sh\""
+          },
+          {
+            "type": "command",
+            "command": "CLAUDE_PLUGIN_ROOT=\"${CLAUDE_PLUGIN_ROOT}/bon\" \"${CLAUDE_PLUGIN_ROOT}/bon/hooks/session-start.sh\""
+          }
+        ]
+      },
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "CLAUDE_PLUGIN_ROOT=\"${CLAUDE_PLUGIN_ROOT}/trousse\" \"${CLAUDE_PLUGIN_ROOT}/trousse/hooks/session-start.sh\""
+          }
+        ]
+      },
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "CLAUDE_PLUGIN_ROOT=\"${CLAUDE_PLUGIN_ROOT}/mise\" \"${CLAUDE_PLUGIN_ROOT}/mise/hooks/ensure-mise.sh\""
+          },
+          {
+            "type": "command",
+            "command": "CLAUDE_PLUGIN_ROOT=\"${CLAUDE_PLUGIN_ROOT}/mise\" \"${CLAUDE_PLUGIN_ROOT}/mise/hooks/session-start.sh\""
+          }
+        ]
+      },
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "CLAUDE_PLUGIN_ROOT=\"${CLAUDE_PLUGIN_ROOT}/accomplis\" \"${CLAUDE_PLUGIN_ROOT}/accomplis/hooks/ensure-accomplis.sh\""
+          }
+        ]
+      },
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "CLAUDE_PLUGIN_ROOT=\"${CLAUDE_PLUGIN_ROOT}/sonner\" \"${CLAUDE_PLUGIN_ROOT}/sonner/hooks/ensure-sonner.sh\""
+          }
+        ]
+      },
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "CLAUDE_PLUGIN_ROOT=\"${CLAUDE_PLUGIN_ROOT}/passe\" \"${CLAUDE_PLUGIN_ROOT}/passe/hooks/ensure-passe.sh\""
+          },
+          {
+            "type": "command",
+            "command": "CLAUDE_PLUGIN_ROOT=\"${CLAUDE_PLUGIN_ROOT}/passe\" \"${CLAUDE_PLUGIN_ROOT}/passe/hooks/session-start.sh\""
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "CLAUDE_PLUGIN_ROOT=\"${CLAUDE_PLUGIN_ROOT}/bon\" \"${CLAUDE_PLUGIN_ROOT}/bon/hooks/session-end.sh\""
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "ExitPlanMode",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "CLAUDE_PLUGIN_ROOT=\"${CLAUDE_PLUGIN_ROOT}/bon\" \"${CLAUDE_PLUGIN_ROOT}/bon/hooks/plan-to-bon.sh\""
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "CLAUDE_PLUGIN_ROOT=\"${CLAUDE_PLUGIN_ROOT}/bon\" \"${CLAUDE_PLUGIN_ROOT}/bon/hooks/bon-tactical.sh\""
+          },
+          {
+            "type": "command",
+            "command": "CLAUDE_PLUGIN_ROOT=\"${CLAUDE_PLUGIN_ROOT}/bon\" \"${CLAUDE_PLUGIN_ROOT}/bon/hooks/session-dashboard.sh\"",
+            "timeout": 5
           }
         ]
       }
     ]
+  },
+  "mcpServers": {
+    "mise": {
+      "command": "uv",
+      "args": [
+        "run",
+        "--project",
+        "${CLAUDE_PLUGIN_ROOT}/mise",
+        "--extra",
+        "extraction",
+        "python3",
+        "${CLAUDE_PLUGIN_ROOT}/mise/server.py"
+      ]
+    }
   }
 }

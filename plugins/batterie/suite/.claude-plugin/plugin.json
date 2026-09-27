@@ -1,0 +1,34 @@
+{
+  "name": "batterie",
+  "version": "2.0.0",
+  "displayName": "Batterie",
+  "description": "Kitchen tools for knowledge work, in one plugin: session rituals and GTD tracking (bon), Google Workspace (mise), browser automation (passe), messaging between Claude sessions (sonner), Todoist coaching (accomplis), review and isolation tools (trousse), and keeping it all current",
+  "author": {
+    "name": "Sameer Modha",
+    "url": "https://github.com/spm1001"
+  },
+  "repository": "https://github.com/spm1001/batterie#readme",
+  "license": "MIT",
+  "keywords": [
+    "gtd",
+    "google-workspace",
+    "browser",
+    "review",
+    "messaging",
+    "todoist",
+    "batterie"
+  ],
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/session-start.sh"
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,72 @@
+{
+  "name": "bon",
+  "version": "2.0.0",
+  "description": "GTD-native work tracker for AI coding agents \u2014 outcomes, actions, tactical steps. Includes the /open and /close session lifecycle.",
+  "author": {
+    "name": "Sameer Modha",
+    "url": "https://github.com/spm1001"
+  },
+  "repository": "https://github.com/spm1001/batterie#readme",
+  "license": "MIT",
+  "keywords": [
+    "gtd",
+    "tracking",
+    "productivity",
+    "work-management"
+  ],
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/ensure-bon.sh"
+          },
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/session-start.sh"
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/session-end.sh"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "ExitPlanMode",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/plan-to-bon.sh"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/bon-tactical.sh"
+          },
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/session-dashboard.sh",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}

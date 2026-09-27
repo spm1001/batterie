@@ -1,7 +1,7 @@
 {
   "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
   "name": "batterie",
-  "description": "Kitchen tools for knowledge work — plugins for GTD tracking, session lifecycle, Google Workspace, browser automation, and more",
+  "description": "Kitchen tools for knowledge work — one plugin for GTD tracking, session rituals, Google Workspace, browser automation, cross-session messaging and more",
   "owner": {
     "name": "Sameer Modha",
     "email": "sameer@modha.dev"
@@ -10,108 +10,17 @@
     {
       "name": "batterie",
       "source": "./plugins/batterie",
-      "description": "Suite-level utilities for the Batterie de Savoir suite — cross-plugin updates and maintenance",
-      "category": "productivity",
-      "homepage": "https://github.com/spm1001/batterie#readme",
-      "keywords": [
-        "update",
-        "maintenance",
-        "batterie"
-      ]
-    },
-    {
-      "name": "bon",
-      "source": "./plugins/bon",
-      "description": "GTD-native work tracker for AI coding agents — outcomes, actions, tactical steps. Includes the /open and /close session lifecycle.",
+      "description": "Kitchen tools for knowledge work, in one plugin: session rituals and GTD tracking (bon), Google Workspace (mise), browser automation (passe), messaging between Claude sessions (sonner), Todoist coaching (accomplis), review and isolation tools (trousse), and keeping it all current",
       "category": "productivity",
       "homepage": "https://github.com/spm1001/batterie#readme",
       "keywords": [
         "gtd",
-        "tracking",
-        "productivity",
-        "work-management"
-      ]
-    },
-    {
-      "name": "trousse",
-      "source": "./plugins/trousse",
-      "description": "Code review through three lenses, blank-slate Claudes for cold reads and evals, driving a real interactive session, and skill authoring.",
-      "category": "workflow",
-      "homepage": "https://github.com/spm1001/batterie#readme",
-      "keywords": [
-        "review",
-        "skills",
-        "isolation",
-        "testing",
-        "hooks"
-      ]
-    },
-    {
-      "name": "mise",
-      "source": "./plugins/mise",
-      "description": "Google Workspace MCP server — search Drive, fetch Gmail, act on documents",
-      "category": "integration",
-      "homepage": "https://github.com/spm1001/mise-en-space",
-      "keywords": [
-        "google",
-        "workspace",
-        "drive",
-        "gmail",
-        "mcp"
-      ]
-    },
-    {
-      "name": "accomplis",
-      "source": "./plugins/accomplis",
-      "description": "Todoist CLI with GTD coaching — outcomes, weekly review, pattern detection",
-      "category": "productivity",
-      "homepage": "https://github.com/spm1001/batterie#readme",
-      "keywords": [
-        "todoist",
-        "gtd",
-        "productivity",
-        "coaching"
-      ]
-    },
-    {
-      "name": "sonner",
-      "source": "./plugins/sonner",
-      "description": "Ring a repo, and a Claude answers — repo-addressed peer messaging for Claude Code sessions. CLI plus the peer-messaging skill.",
-      "category": "integration",
-      "homepage": "https://github.com/spm1001/batterie#readme",
-      "keywords": [
-        "messaging",
-        "peer",
-        "cross-session",
-        "doorbell"
-      ]
-    },
-    {
-      "name": "passe",
-      "source": "./plugins/passe",
-      "description": "Fast browser automation via Chrome DevTools Protocol — fetch pages, screenshots, forms, network capture. Needs a Chrome running with remote debugging; the passe CLI installs itself on first session.",
-      "category": "automation",
-      "homepage": "https://github.com/spm1001/batterie#readme",
-      "keywords": [
+        "google-workspace",
         "browser",
-        "automation",
-        "cdp",
-        "chrome",
-        "testing"
-      ]
-    },
-    {
-      "name": "arete",
-      "source": "./plugins/arete",
-      "description": "Move lists in and out of MindNode — a pasted list becomes a mind map, and a map comes back as Markdown. Ships the mindnode-mapping skill; the CLI is macOS-only.",
-      "category": "productivity",
-      "homepage": "https://github.com/spm1001/batterie#readme",
-      "keywords": [
-        "mindnode",
-        "mind-map",
-        "opml",
-        "outline",
-        "macos"
+        "review",
+        "messaging",
+        "todoist",
+        "batterie"
       ]
     }
   ]

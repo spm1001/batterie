@@ -1,8 +1,8 @@
 # glob<TAB>class<TAB>match (or *)<TAB>reason — every accepted hit, with why. Globs are relative to the scanned dir, prefixed with its name.
-*/mise/credentials.json	oauth-client-id	*	mise's bundled installed-app OAuth client (ITV): public by design (installed-app/PKCE flow), and mise-en-space is a public repo
-*/mise/credentials.json	oauth-client-secret	*	the same installed-app client's secret — Google documents it as non-confidential for installed apps
-*/mise-home/credentials.json	oauth-client-id	*	the family flavour's planetmodha installed-app client: public by design; only reaches the private batterie-home
-*/mise-home/credentials.json	oauth-client-secret	*	the same family client's secret, non-confidential for installed apps
+*/mise/credentials.json	oauth-client-id	413373784317-oufchdsfo06f5dmei7qma6aq0v3758mj.apps.googleusercontent.com	mise's bundled installed-app OAuth client (ITV): public by design (installed-app/PKCE flow), and mise-en-space is a public repo — pinned, so a swapped-in client fails
+*/mise/credentials.json	oauth-client-secret	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	the same installed-app client's secret — Google documents it as non-confidential for installed apps — pinned
+*/mise-home/credentials.json	oauth-client-id	*	the family flavour's planetmodha installed-app client: public by design; only reaches the private batterie-home — NOT pinned yet: the real value lives only in the MISE_HOME_CRED_JSON secret; pin it from the first CI run
+*/mise-home/credentials.json	oauth-client-secret	*	the same family client's secret, non-confidential for installed apps — NOT pinned yet: the real value lives only in the MISE_HOME_CRED_JSON secret; pin it from the first CI run
 */apps-script/README.md	email	noreply-apps-scripts-notifications@google.com	Google's own system sender, documented publicly
 */adapters/gmail.py	email	example@gmail.com	placeholder in a docstring
 *	email	team@company.com	placeholder domain in docs and tests
@@ -18,3 +18,4 @@
 *	email	noreply@service.com	placeholder in docs
 */skill-forge/references/sharing-scan.md	email	real.colleague@company.com	placeholder in the sharing scanner's own docs
 */skill-forge/references/sharing-scan.md	email	GoogleDrive-your.email@company.com	placeholder path in the sharing scanner's own docs
+marketplace.json	email	sameer@modha.dev	the marketplace owner address, public by choice in every marketplace.json since June

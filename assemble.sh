@@ -973,7 +973,7 @@ else
   echo "  SKIP private marketplace '$HOME_NAME' — MISE_HOME_CRED not set (public-only run)"
 fi
 
-SCAN_DIRS="$BATTERIE_DIR/plugins"
+SCAN_DIRS="$BATTERIE_DIR/plugins $BATTERIE_DIR/README.md $BATTERIE_DIR/.claude-plugin/marketplace.json"
 [ -n "${MISE_HOME_CRED:-}" ] && SCAN_DIRS="$SCAN_DIRS $HOME_OUT/plugins"
 uv run --quiet --script "$BATTERIE_DIR/leak-scan.py" $SCAN_DIRS || { echo "FAIL: leak scan" >&2; exit 1; }
 

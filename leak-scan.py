@@ -35,6 +35,7 @@ import fnmatch
 import os
 import re
 import sys
+import zipfile
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -51,18 +52,25 @@ PATTERNS = {
     "slack-token": (r"\bxox[baprs]-[A-Za-z0-9-]{10,}", "slack xoxb-canary-canary-canary"),
     "anthropic-key": (r"\bsk-ant-[A-Za-z0-9_-]{20,}", "key sk-ant-canarycanarycanarycanary"),
     "private-key": (r"-----BEGIN (?:[A-Z]+ )?PRIVATE KEY-----", "-----BEGIN RSA PRIVATE KEY-----"),
-    "itv-host": (r"\b(?:[a-z0-9-]+\.)+itv\.com\b", "see https://canary-internal.itv.com/wiki"),
+    "itv-host": (r"(?i)\b(?:[a-z0-9-]+\.)+itv\.com\b", "see https://Canary-Internal.ITV.com/wiki"),
 }
 # RFC 2606 documentation domains are never a leak: examples and tests use them
 # on purpose. Anything else a doc invents (company.com, app.com…) goes on the
 # allowlist by name, so each one was looked at once.
 DOC_DOMAINS = re.compile(r"@(?:[a-z0-9-]+\.)*example\.(?:com|org|net)$", re.I)
-SKIP_SUFFIXES = {".whl", ".png", ".jpg", ".jpeg", ".gif", ".ico", ".pdf", ".zip", ".gz", ".lock", ".pyc"}
+SKIP_SUFFIXES = {".png", ".jpg", ".jpeg", ".gif", ".ico", ".pdf", ".zip", ".gz", ".pyc"}
+# Wheels carry the private repos' source, so they are opened and their text
+# members scanned, reported as <wheel>!<member>. uv.lock is scanned like any file.
 
 
 def load_terms():
     path = os.environ.get("LEAK_SCAN_TERMS")
     if not path:
+        # Locally an inert personal-term layer is a stated gap; in CI it would be
+        # a green run that never checked the one class only a private list can
+        # catch, so CI refuses to run without it (essayeur finding, 27 Sep).
+        if os.environ.get("CI") == "true":
+            sys.exit("FAIL: leak-scan — LEAK_SCAN_TERMS is not set in CI; add the LEAK_SCAN_TERMS_TXT secret (one private term per line)")
         return None
     terms = [l.strip() for l in Path(path).read_text().splitlines()]
     return [t for t in terms if t and not t.startswith("#")]
@@ -96,7 +104,12 @@ def load_allow():
         parts = line.split("\t")
         if len(parts) < 4 or not parts[3].strip():
             sys.exit(f"FAIL: {ALLOW_FILE.name}:{n} needs four tab-separated fields: glob, class, match, reason")
-        rules.append({"glob": parts[0], "cls": parts[1], "match": parts[2], "reason": parts[3], "line": n, "used": 0})
+        glob, cls, match = parts[0], parts[1], parts[2]
+        if cls == "*":
+            sys.exit(f"FAIL: {ALLOW_FILE.name}:{n} names class '*' — an allow line must name the one class it accepts")
+        if match == "*" and "*" in glob.rsplit("/", 1)[-1]:
+            sys.exit(f"FAIL: {ALLOW_FILE.name}:{n} accepts any match in files matching {glob!r} — a match of '*' needs a glob naming one file")
+        rules.append({"glob": glob, "cls": cls, "match": match, "reason": parts[3], "line": n, "used": 0})
     return rules
 
 
@@ -108,24 +121,58 @@ def allowed(rules, rel, cls, text):
     return False
 
 
+def canaries_not_allowlisted(rules, rx, terms):
+    """The allowlist must not be able to admit a canary: otherwise one broad line
+    silences a class while the self-test above still reports it firing."""
+    samples = {pid: s for pid, (_, s) in PATTERNS.items()}
+    if terms:
+        samples["personal-term"] = f"a note about {terms[0]} here"
+    leaked = []
+    for pid, s in samples.items():
+        hit = rx[pid].search(s).group(0)
+        if any(fnmatch.fnmatch("canary/probe.md", r["glob"]) and r["cls"] == pid and r["match"] in ("*", hit)
+               for r in rules):
+            leaked.append(pid)
+    if leaked:
+        print(f"FAIL: leak-scan — the allowlist would admit the canary for: {', '.join(leaked)}", file=sys.stderr)
+        return False
+    return True
+
+
+def texts(base):
+    """(relative name, text) for every scannable file under base, wheel members included."""
+    for f in sorted(base.rglob("*")):
+        if not f.is_file() or f.suffix in SKIP_SUFFIXES or ".git" in f.parts:
+            continue
+        rel = f"{base.name}/{f.relative_to(base)}"
+        if f.suffix == ".whl":
+            with zipfile.ZipFile(f) as z:
+                for member in z.namelist():
+                    try:
+                        yield f"{rel}!{member}", z.read(member).decode()
+                    except UnicodeDecodeError:
+                        continue
+            continue
+        try:
+            yield rel, f.read_text()
+        except (UnicodeDecodeError, OSError):
+            continue
+
+
 def main(dirs):
     terms = load_terms()
     rx = compile_all(terms)
     if not self_test(rx, terms):
         return 1
     rules = load_allow()
+    if not canaries_not_allowlisted(rules, rx, terms):
+        return 1
     hits, scanned = [], 0
     for d in dirs:
         base = Path(d)
-        for f in sorted(base.rglob("*")):
-            if not f.is_file() or f.suffix in SKIP_SUFFIXES or ".git" in f.parts:
-                continue
-            try:
-                text = f.read_text()
-            except (UnicodeDecodeError, OSError):
-                continue
+        items = [(base.name, base.read_text())] if base.is_file() else texts(base)
+        for rel, text in items:
             scanned += 1
-            rel = f"{base.name}/{f.relative_to(base)}"
             for n, line in enumerate(text.splitlines(), 1):
                 for cls, r in rx.items():
                     for m in r.finditer(line):

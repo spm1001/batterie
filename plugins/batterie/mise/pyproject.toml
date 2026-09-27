@@ -131,7 +131,7 @@ ignore_missing_imports = true
 format-command = "ruff format --stdin-filename {filename}"
 
 [tool.uv.sources]
-jeton = { path = "wheels/jeton-1.4.0-py3-none-any.whl" }
+jeton = { path = "wheels/jeton-1.4.1-py3-none-any.whl" }
 
 [dependency-groups]
 dev = [

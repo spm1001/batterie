@@ -813,14 +813,14 @@ wheels = [
 
 [[package]]
 name = "jeton"
-version = "1.4.0"
-source = { path = "wheels/jeton-1.4.0-py3-none-any.whl" }
+version = "1.4.1"
+source = { path = "wheels/jeton-1.4.1-py3-none-any.whl" }
 dependencies = [
     { name = "google-auth" },
     { name = "google-auth-oauthlib" },
 ]
 wheels = [
-    { filename = "jeton-1.4.0-py3-none-any.whl", hash = "sha256:69394876a94127dad7550efd4506e4899f82c830484d2deef340e4b0fb804946" },
+    { filename = "jeton-1.4.1-py3-none-any.whl", hash = "sha256:ad1ae5b83011908ee9f26ae17bc49c44fc3c1c85e5215adb42d08209b1eb5057" },
 ]
 
 [package.metadata]
@@ -1151,7 +1151,7 @@ dev = [
 requires-dist = [
     { name = "beautifulsoup4", marker = "extra == 'extraction'", specifier = ">=4.15.0" },
     { name = "httpx", extras = ["http2"], specifier = ">=0.28.1" },
-    { name = "jeton", path = "wheels/jeton-1.4.0-py3-none-any.whl" },
+    { name = "jeton", path = "wheels/jeton-1.4.1-py3-none-any.whl" },
     { name = "markdown", specifier = ">=3.10.3" },
     { name = "markitdown", extras = ["pdf"], marker = "extra == 'extraction'", specifier = ">=0.1.7" },
     { name = "mcp", extras = ["cli"], specifier = ">=2.0.0,<3.0.0" },

@@ -98,6 +98,22 @@ jobs:
             echo "MISE_HOME_CRED_JSON secret not set — private output will be skipped"
           fi
 
+      - name: Materialise the leak scan's private term list (bds-tevuhe)
+        # People's names and private repo names the leak scan must never let
+        # onto the public shelf. The list is itself private, so it lives in a
+        # secret, one term per line. Secret absent → leak-scan.py FAILS the
+        # assemble under CI=true: a run that never checked the one class only a
+        # private list can catch must not read as green.
+        env:
+          TERMS: ${{ secrets.LEAK_SCAN_TERMS_TXT }}
+        run: |
+          if [ -n "$TERMS" ]; then
+            printf '%s\n' "$TERMS" > /tmp/leak-scan-terms.txt
+            echo "LEAK_SCAN_TERMS=/tmp/leak-scan-terms.txt" >> "$GITHUB_ENV"
+          else
+            echo "LEAK_SCAN_TERMS_TXT secret not set — the leak scan will fail this run"
+          fi
+
       - name: Run assemble.sh
         run: |
           # Default Actions bash has -e but NOT -o pipefail: without it,

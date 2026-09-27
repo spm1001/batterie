@@ -79,7 +79,10 @@ def load_terms():
 def compile_all(terms):
     rx = {pid: re.compile(p) for pid, (p, _) in PATTERNS.items()}
     if terms:
-        rx["personal-term"] = re.compile(r"(?i)(?<![\w-])(?:" + "|".join(re.escape(t) for t in terms) + r")(?![\w-])")
+        # A space in a term also matches '.', '_' or '-', so "Jo Bloggs" catches
+        # jo.bloggs@, jo_bloggs and jo-bloggs (a dotted address slipped through, 27 Sep).
+        alts = (re.escape(t).replace(r"\ ", r"[\s._-]") for t in terms)
+        rx["personal-term"] = re.compile(r"(?i)(?<![\w-])(?:" + "|".join(alts) + r")(?![\w-])")
     return rx
 
 
@@ -87,6 +90,10 @@ def self_test(rx, terms):
     samples = {pid: s for pid, (_, s) in PATTERNS.items()}
     if terms:
         samples["personal-term"] = f"a note about {terms[0]} here"
+        spaced = next((t for t in terms if " " in t), None)
+        if spaced:
+            samples["personal-term (dotted)"] = f"mail {spaced.replace(' ', '.')}@example.com"
+            rx = {**rx, "personal-term (dotted)": rx["personal-term"]}
     missed = [pid for pid, s in samples.items() if not rx[pid].search(s)]
     if missed:
         print(f"FAIL: leak-scan self-test — no match on the canary for: {', '.join(missed)}", file=sys.stderr)

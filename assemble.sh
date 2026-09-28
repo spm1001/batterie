@@ -799,12 +799,13 @@ check_mcp_entrypoints "$BATTERIE_DIR"
 # A second kit, standing alone (no dependency on batterie@batterie): one
 # marketplace and one plugin, both named `family`, holding
 #   mise/  the public kit's just-vendored mise component, its engine UNMODIFIED.
-#          Five deltas: the bundled ITV client (credentials.json), mise's own
+#          Six deltas: the bundled ITV client (credentials.json), mise's own
 #          hooks/, its developer CLAUDE.md (which names both kits' tool ids,
 #          and no plugin loads) and its component .claude-plugin/ (claude.ai's
 #          validator refuses a nested plugin.json) are dropped, the Planet Modha client lands beside the
-#          engine as planetmodha-client.json, and the skill's tool ids follow
-#          the plugin (mcp__plugin_family_mise__).
+#          engine as planetmodha-client.json, the skill's tool ids follow
+#          the plugin (mcp__plugin_family_mise__), and pyproject.toml's version
+#          is pinned statically (hatch read it from the dropped manifest).
 #   home/  the kit's own SessionStart hook and more-tools skill, from family/kit/.
 # The engine is told which Workspace it serves through mcpServers.mise.env
 # (the mise-nujina seam) rather than by rewriting its strings, so this retires
@@ -878,6 +879,23 @@ text, m = re.subn(r"(?m)^description:\s*", lambda _: "description: " + marker, t
 if m != 1:
     fails.append("mise skill has no description: line to mark")
 skill.write_text(text)
+
+# mise's pyproject reads its version from .claude-plugin/plugin.json beside it,
+# which this kit drops (above), so uv's editable build of the server died on
+# every family machine from 2.0.2 (found 28 Sep, bds-vezafu follow-up). Pin the
+# suite version statically instead of pointing hatch at the kit root, so the
+# engine builds whatever directory it lands in.
+pp = fam / "mise/pyproject.toml"
+t = pp.read_text()
+t2 = t.replace('dynamic = ["version"]', f'version = "{version}"', 1)
+t2 = re.sub(r'\[tool\.hatch\.version\]\n(?:[^\[\n][^\n]*\n|\n)*?(?=\[)', "", t2, count=1)
+if 'dynamic = ["version"]' in t2 or "[tool.hatch.version]" in t2 or f'version = "{version}"' not in t2:
+    fails.append("mise/pyproject.toml — could not pin the version statically; the server would not build without the nested manifest")
+pp.write_text(t2)
+for pp in fam.rglob("pyproject.toml"):
+    m = re.search(r'\[tool\.hatch\.version\][^\[]*?\bpath\s*=\s*"([^"]+)"', pp.read_text())
+    if m and not (pp.parent / m.group(1)).is_file():
+        fails.append(f"{pp.relative_to(fam)} takes its version from {m.group(1)}, which the kit does not ship — uv cannot build it")
 for p in fam.rglob("*"):
     if p.is_file() and p.suffix in (".md", ".json", ".py", ".sh"):
         if "mcp__plugin_batterie_" in p.read_text(errors="ignore"):

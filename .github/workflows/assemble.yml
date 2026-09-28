@@ -157,9 +157,12 @@ jobs:
           echo "Changes detected:"
           git status --porcelain
           git add -A
+          # The version leads the subject because claude.ai's plugin library shows
+          # only the commit, never the version (Sameer, 28 Sep: "it only shows
+          # commit not version") — so the subject is what makes that screen readable.
           git -c user.name="github-actions[bot]" \
               -c user.email="github-actions[bot]@users.noreply.github.com" \
-              commit -m "Reassemble — $(date +%Y-%m-%d)
+              commit -m "Reassemble $(sed -n 's/.*"version": *"\([^"]*\)".*/\1/p' plugins/batterie/.claude-plugin/plugin.json | head -1) — $(date +%Y-%m-%d)
 
           $(grep -E ' (OK|SKIP|QUARANTINE) ' /tmp/assemble.log)"
           # bds-zofino: two publishes dispatch two assembles seconds apart,
@@ -231,7 +234,7 @@ jobs:
           git add -A
           git -c user.name="github-actions[bot]" \
               -c user.email="github-actions[bot]@users.noreply.github.com" \
-              commit -m "Reassemble family — $(date +%Y-%m-%d) (from spm1001/batterie ${GITHUB_SHA::7})"
+              commit -m "Reassemble family $(sed -n 's/.*"version": *"\([^"]*\)".*/\1/p' plugins/family/.claude-plugin/plugin.json | head -1) — $(date +%Y-%m-%d) (from spm1001/batterie ${GITHUB_SHA::7})"
           git push origin main
           echo "state=pushed" >> "$GITHUB_OUTPUT"
 

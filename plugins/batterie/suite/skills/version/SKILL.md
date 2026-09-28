@@ -9,15 +9,18 @@ allowed-tools: ["Bash"]
 !`python3 << 'PYEOF'
 import json, os, re, subprocess, shutil
 
-# Default to the real plugins dir. BATTERIE_PLUGINS_DIR is a test seam; unset in normal use.
+# Default to the real plugins dir — under CLAUDE_CONFIG_DIR when set, as Claude
+# Code itself reads it (and as /batterie:update does). BATTERIE_PLUGINS_DIR is a
+# test seam; unset in normal use.
 PLUGINS = os.environ.get("BATTERIE_PLUGINS_DIR") or os.path.join(
-    os.path.expanduser("~"), ".claude", "plugins")
+    os.environ.get("CLAUDE_CONFIG_DIR") or os.path.join(os.path.expanduser("~"), ".claude"), "plugins")
 
 def is_batterie_family(repo):
     # Suite marketplaces: spm1001/batterie (public) + spm1001/batterie-* (e.g. a
     # private flavour). Match by source repo so a cherry-picked single plugin and
-    # plugin renames still resolve — not by "contains the batterie plugin".
-    return repo == "spm1001/batterie" or repo.startswith("spm1001/batterie-")
+    # plugin renames still resolve — not by "contains the batterie plugin". The
+    # family kit is named since batterie-home became spm1001/family-kit (bds-lecote).
+    return repo in ("spm1001/batterie", "spm1001/family-kit") or repo.startswith("spm1001/batterie-")
 
 def source_repo(info):
     # Normalise a known_marketplaces.json entry to "owner/repo". Shapes seen in

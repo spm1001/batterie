@@ -3,8 +3,11 @@ Token storage for mise-en-space OAuth tokens.
 
 Storage priority:
 0. MISE_TOKEN_PATH env override — caller-owned credential file (see below)
-1. macOS Keychain (service: mise-oauth-token) — persistent across installs
-2. File (token.json in package root) — fallback for non-macOS
+1. macOS Keychain (service: keychain_service() — mise-oauth-token, or
+   mise-oauth-token:<client_id> for a kit-supplied client) — written on consent,
+   copied back to token.json at each server start
+2. File (token.json in the data dir, oauth_config.TOKEN_FILE) — the store on
+   non-macOS, and the only copy of a token adopted from a pre-seam store
 
 The token is a JSON blob (access_token, refresh_token, client_id, etc.).
 Keychain stores it as the password field of a generic password entry.
@@ -207,37 +210,46 @@ def keychain_service() -> str:
     return KEYCHAIN_SERVICE
 
 
-def get_from_keychain(service: str | None = None) -> str | None:
-    """Get token JSON from macOS Keychain.
+# `security find-generic-password` exits 44 (errSecItemNotFound) for a missing
+# entry. Any other failure — a locked keychain over non-interactive ssh, a
+# denied access prompt — means the entry may exist but could not be read.
+_KEYCHAIN_NOT_FOUND = 44
+
+
+def _keychain_read(service: str) -> tuple[str | None, int]:
+    """(token JSON or None, `security` exit status) for one Keychain service.
 
     The `security` CLI hex-encodes long passwords. If the output looks
     like hex (all hex chars, no whitespace), decode it first.
     """
-    if not _has_keychain():
-        return None
-    service = service or keychain_service()
     try:
         result = subprocess.run(
             ["security", "find-generic-password", "-a", os.environ.get("USER", ""), "-s", service, "-w"],
             capture_output=True, text=True, check=True,
         )
-        raw = result.stdout.strip()
-        # Try as plain JSON first
-        try:
-            json.loads(raw)
-            return raw
-        except json.JSONDecodeError:
-            pass
-        # Try hex-decoding (security CLI encodes long values as hex)
-        try:
-            decoded = bytes.fromhex(raw).decode("utf-8")
-            json.loads(decoded)
-            return decoded
-        except (ValueError, json.JSONDecodeError):
-            pass
+    except subprocess.CalledProcessError as e:
+        return None, e.returncode
+    raw = result.stdout.strip()
+    # Try as plain JSON first
+    try:
+        json.loads(raw)
+        return raw, 0
+    except json.JSONDecodeError:
+        pass
+    # Try hex-decoding (security CLI encodes long values as hex)
+    try:
+        decoded = bytes.fromhex(raw).decode("utf-8")
+        json.loads(decoded)
+        return decoded, 0
+    except (ValueError, json.JSONDecodeError):
+        return None, 0
+
+
+def get_from_keychain(service: str | None = None) -> str | None:
+    """Get token JSON from macOS Keychain, or None when absent or unreadable."""
+    if not _has_keychain():
         return None
-    except subprocess.CalledProcessError:
-        return None
+    return _keychain_read(service or keychain_service())[0]
 
 
 def store_to_keychain(token_json: str) -> bool:
@@ -496,6 +508,53 @@ def save_token(token_path: Path) -> None:
     else:
         # Keychain IS present but the write genuinely failed — a real problem.
         print(f"  Warning: Keychain is present but the token write failed. Token remains at {token_path}.", file=sys.stderr)
+
+
+def describe_store(token_file: Path, *, pending: bool = False) -> dict[str, str]:
+    """Cue text naming where the token really lives, for setup_oauth (mise-robive).
+
+    On macOS the Keychain is canonical once something has written the entry:
+    save_token (every consent) writes it and removes the file, and each
+    credential load copies it back to token_file. A token ADOPTED from a
+    pre-seam store is copied to the file alone (unless it lacks `_identity`,
+    whose first-load backfill writes the Keychain too), so for a kit client
+    (`keychain_service()` is per client) the file can be all this install
+    reads — hence the read, not a claim. `pending` describes a consent still
+    to come rather than today's token.
+    """
+    if override_path() is not None:
+        if pending:
+            return {"token_store": f"guest mode ({OVERRIDE_ENV} is set): this consent "
+                    "saves to token_will_save_to, which a guest-mode server never "
+                    "reads — the credential belongs to the embedding application, "
+                    "so re-authenticate there."}
+        return {"token_store": f"the caller-owned file named by {OVERRIDE_ENV} (guest "
+                "mode) — mise never copies it into the Keychain."}
+    if not _has_keychain():
+        return {"token_store": "the file at token_location — this platform has no "
+                "Keychain, so the file is the store."}
+    service = keychain_service()
+    if pending:
+        return {"token_keychain_service": service, "token_store": (
+            f"macOS Keychain, service '{service}': once you approve, the token is "
+            f"stored there and {token_file} is removed; mise copies it back to that "
+            "path whenever it loads its credentials.")}
+    token_json, status = _keychain_read(service)
+    if token_json:
+        text = (f"macOS Keychain, service '{service}' — the canonical copy. "
+                "token_location is re-copied from it whenever mise loads its "
+                "credentials, so editing or deleting that file changes nothing.")
+    elif status == _KEYCHAIN_NOT_FOUND:
+        text = (f"the file at token_location, the only copy this install reads: no "
+                f"macOS Keychain entry named '{service}' exists yet (the token was "
+                "copied in from an older store, or a Keychain write failed). The "
+                "next setup_oauth(force=True) stores it in the Keychain.")
+    else:
+        text = (f"undetermined: the macOS Keychain entry '{service}' could not be "
+                f"read (security exit status {status}; a locked keychain, as over "
+                "ssh, does this), so this server is using the copy at "
+                "token_location, which may be older than the Keychain's.")
+    return {"token_store": text, "token_keychain_service": service}
 
 
 def has_token(fallback_path: Path) -> bool:

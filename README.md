@@ -28,6 +28,17 @@ Before the one-plugin release each tool was its own plugin (`bon@batterie`, `tro
 
 Your Google sign-in carries over; nothing asks you to consent again.
 
+## If the kit stops loading
+
+The sign is a new session with none of the tools, and `claude plugin list` showing `batterie@batterie` with "failed to load — Marketplace batterie not found". Claude Code keeps two records of the marketplace, one in your `settings.json` and one in its own registry, and it refuses to load it when they name different sources (the same repo by git URL in one and as `spm1001/batterie` in the other, for example). `/batterie:update` can't help yet, because it ships inside the plugin that won't load. In a terminal:
+
+```
+claude plugin marketplace add spm1001/batterie
+claude plugin update batterie@batterie
+```
+
+Then start a new session and run `/batterie:update`. Re-adding a marketplace switches off its auto-update, and the update turns it back on when it can tell it was on. If `/batterie:update` doesn't say it turned auto-update back on and you want it, open `/plugin` → Marketplaces → batterie and choose Enable auto-update.
+
 ## What's inside
 
 <!-- GENERATED:plugin-table:START -->

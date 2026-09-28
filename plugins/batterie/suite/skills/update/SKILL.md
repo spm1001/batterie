@@ -136,9 +136,13 @@ kit_entries = [e for m in public for e in plugins.get(f"batterie@{m}", [])]
 folded = any(os.path.isdir(os.path.join(e.get("installPath", ""), "suite"))
              and os.path.isdir(os.path.join(e.get("installPath", ""), "bon")) for e in kit_entries)
 stale = sorted(k for k in plugins if k.rsplit("@", 1)[0] in OLD and mkt(k) in public) if folded else []
+# A claude.ai-synced plugin's root is synced/<sync-id>/<name>/ — only that
+# level names a plugin. Deeper matches are components (the family kit's own
+# synced/<id>/family/mise), which a walk read as a leftover mise plugin.
 synced_root = os.path.join(PLUGINS, "synced")
-synced = sorted({os.path.basename(r) for r, dirs, _ in os.walk(synced_root)
-                 if os.path.basename(r) in OLD and r.count(os.sep) - synced_root.count(os.sep) <= 3}) \
+synced = sorted({n for sid in os.listdir(synced_root) if os.path.isdir(os.path.join(synced_root, sid))
+                 for n in os.listdir(os.path.join(synced_root, sid))
+                 if n in OLD and os.path.isdir(os.path.join(synced_root, sid, n))}) \
          if os.path.isdir(synced_root) else []
 if folded and (stale or synced):
     print("\n🔀 MOVE TO ONE PLUGIN NEEDED — step 1b below:")

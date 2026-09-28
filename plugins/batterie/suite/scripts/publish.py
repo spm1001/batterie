@@ -83,7 +83,7 @@ COMPONENT_OF_NAME = {"batterie": "suite"}
 # publish (mise-home sat five releases behind mise before anyone noticed,
 # 2026-08-24). published plugin name -> [(sibling plugin, its marketplace)].
 FLAVOUR_SIBLINGS = {
-    "mise": [("mise-home", "batterie-home")],
+    "mise": [("family", "family")],  # was mise-home@batterie-home until the 27 Sep rename (bds-cofico)
 }
 
 
@@ -575,18 +575,22 @@ def main() -> int:
     # push, so a fault it catches costs a red run and a second suite version
     # (1.86.6, 2026-09-23: a backtick inside the update skill's snapshot block).
     # It needs the marketplace checkout beside this repo; without one, say so.
+    # Lint the KIT, not the component: since the fold every source repo ships
+    # inside batterie@batterie, and batterie-lint only knows marketplace plugin
+    # names, so `batterie-lint mise` failed "no matching plugins" and blocked
+    # every publish from a component repo (found publishing mise, 28 Sep).
     lint = suite_repo / "scripts" / "batterie-lint.py"
     if not (suite_repo.parent / "batterie" / ".claude-plugin" / "marketplace.json").is_file():
         print("  lint: skipped — no spm1001/batterie checkout beside the suite repo "
               "(the assemble workflow still lints after the push)")
     elif lint.is_file():  # read-only, so it runs under --dry-run too
-        cp = subprocess.run(["uv", "run", "--script", str(lint), name],
+        cp = subprocess.run(["uv", "run", "--script", str(lint), KIT],
                             text=True, capture_output=True, check=False)
         if cp.returncode != 0:
             print(cp.stdout, end="")
-            die(f"batterie-lint fails on {name} — fix it before publishing "
+            die(f"batterie-lint fails on {KIT} (publishing {name}) — fix it before publishing "
                 f"(the assemble run would go red on the same check)")
-        print(f"  lint: batterie-lint passes on {name}")
+        print(f"  lint: batterie-lint passes on {KIT}")
     print(f"  staging (git add {add_flag} in content repo) — these files plus the suite bump:")
     print("\n".join(f"    {ln}" for ln in pending.splitlines()) or "    (only the version bump)")
 

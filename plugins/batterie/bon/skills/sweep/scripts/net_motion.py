@@ -11,7 +11,10 @@ against both halves rather than the JSONL half alone.
 
 Sources
 * Dolt: the global `items` + `archive` tables (every prefix present, mapped in
-  the `repos` table or not — an unmapped prefix is still a board that mints).
+  the `repos` table or not — an unmapped prefix is still a board that mints),
+  EXCEPT prefixes whose board has moved to JSONL: their frozen rows are
+  skipped and the board is counted from its JSONL clone, and a moved board
+  with no JSONL clone here is named on stderr as MISSING (bon-lapine).
 * JSONL: every `.bon/items.jsonl` (+ `archive.jsonl`) under the scan roots and
   the extra board dirs, discovered by audit_survey.discover_boards — so the
   plugin-cache copies of a board are excluded exactly as the survey excludes
@@ -135,14 +138,21 @@ def _read_jsonl(path: Path) -> list[dict]:
     return list(by_id.values())
 
 
-def load_jsonl_records(roots: list[Path]) -> tuple[list[dict], dict]:
+def load_jsonl_records(
+    roots: list[Path], boards: list[dict] | None = None,
+    skip: set[str] | None = None,
+) -> tuple[list[dict], dict]:
     """Every JSONL board's items + archive under the roots, as records.
 
     Returns (records, notes) where notes carries what was NOT counted and why:
     ghosts (items.jsonl beside backend=dolt), duplicate ids seen in a second
-    board (counted once, first board wins), and the board list.
+    board (counted once, first board wins), and the board list. `boards`, when
+    given, is a discover_boards result to reuse instead of walking again;
+    `skip` holds bon_dirs that are not the board they look like (a half-pulled
+    clone of a moved board — audit_survey.half_pulled_boards).
     """
-    boards = audit_survey.discover_boards(roots)
+    if boards is None:
+        boards = audit_survey.discover_boards(roots)
     records: list[dict] = []
     seen: dict[str, str] = {}
     ghosts: list[str] = []
@@ -155,7 +165,7 @@ def load_jsonl_records(roots: list[Path]) -> tuple[list[dict], dict]:
             if items_path.exists():
                 ghosts.append(str(items_path))
             continue
-        if not items_path.exists():
+        if not items_path.exists() or str(b["bon_dir"]) in (skip or ()):
             continue
         board_labels.append(label)
         rows = _read_jsonl(items_path)
@@ -182,7 +192,10 @@ def load_dolt_records() -> tuple[list[dict], dict]:
 
     Raises on connection failure — the caller decides how loudly to degrade.
     An unmapped prefix (no repos row) is labelled `<prefix> (unmapped)` and
-    COUNTED: it is still a board that minted and closed.
+    COUNTED: it is still a board that minted and closed. A prefix that has
+    moved to JSONL (audit_survey.moved_prefixes) is NOT counted here: its
+    rows stay in Dolt frozen, and its live board is counted from the JSONL
+    clone — reading both would mint every one of its items twice.
     """
     import pymysql
 
@@ -194,6 +207,7 @@ def load_dolt_records() -> tuple[list[dict], dict]:
     )
     try:
         with conn.cursor() as cur:
+            moved = audit_survey.moved_prefixes(cur)
             cur.execute("SELECT id, status, created_at, done_at FROM items")
             rows = list(cur.fetchall())
             cur.execute("SELECT id, status, created_at, done_at FROM archive")
@@ -206,6 +220,8 @@ def load_dolt_records() -> tuple[list[dict], dict]:
     unmapped: set[str] = set()
     for row in rows + archive_rows:
         prefix = row["id"].split("-", 1)[0]
+        if prefix in moved:
+            continue
         name = repos.get(prefix)
         if name is None:
             unmapped.add(prefix)
@@ -216,6 +232,8 @@ def load_dolt_records() -> tuple[list[dict], dict]:
         "repos_rows": len(repos),
         "unmapped_prefixes": sorted(unmapped),
         "archive_rows": len(archive_rows),
+        "moved_prefixes": sorted(moved),
+        "moved": moved,
     }
     return records, notes
 
@@ -417,6 +435,14 @@ def render_text(result: dict, top: int) -> str:
     dn = result.get("dolt_notes") or {}
     if dn.get("unmapped_prefixes"):
         notes.append(f"Dolt prefixes with no repos row, counted as '(unmapped)': {', '.join(dn['unmapped_prefixes'])}")
+    if dn.get("moved_prefixes"):
+        notes.append(f"Dolt prefixes moved to JSONL, counted from their JSONL board instead: {', '.join(dn['moved_prefixes'])}")
+    for g in result.get("moved_unseen") or []:
+        notes.append(f"MISSING: {g['repo'] or g['prefix']} ({g['prefix']}) moved to JSONL but is "
+                     + ("a stale clone here — git pull in " + ", ".join(g["local_paths"])
+                        if g["state"] == "stale_clone"
+                        else "a half-pulled clone here — finish the pull in " + ", ".join(g["local_paths"])
+                        if g["state"] == "half_pulled" else "not cloned here"))
     if notes:
         lines.append("")
         lines.append("Notes:")
@@ -438,13 +464,29 @@ def run(weeks: list[str], roots: list[Path], today: date) -> dict:
             f"DEGRADED: JSONL boards only, every Dolt board missing.",
             file=sys.stderr,
         )
-    jsonl_records, jsonl_notes = load_jsonl_records(roots)
+    boards = audit_survey.discover_boards(roots)
+    moved = (dolt_notes or {}).pop("moved", {})
+    jsonl_records, jsonl_notes = load_jsonl_records(
+        roots, boards, skip=audit_survey.half_pulled_boards(moved, boards)
+    )
+    moved_unseen = audit_survey.moved_board_gaps(moved, boards)
+    if moved_unseen:
+        print(
+            f"WARNING: {len(moved_unseen)} board(s) moved from Dolt to JSONL have no "
+            f"JSONL clone here and are MISSING from this table: "
+            + ", ".join(
+                f"{g['repo'] or g['prefix']} ({g['state'].replace('_', ' ')})"
+                for g in moved_unseen
+            ),
+            file=sys.stderr,
+        )
     result = tally(dolt_records + jsonl_records, weeks)
     result["convergence"] = convergence(result["weeks"])
     result.update({
         "dolt": dolt_state,
         "dolt_notes": dolt_notes,
         "jsonl_notes": jsonl_notes,
+        "moved_unseen": moved_unseen,
         "roots": [str(r) for r in roots],
         "current_week": current_week(today),
         "today": today.isoformat(),

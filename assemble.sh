@@ -275,6 +275,7 @@ reroot_markdown() {
   BATTERIE_DIR="$BATTERIE_DIR" python3 - "$1" "$2" <<'PYEOF'
 import os, re, sys
 from pathlib import Path
+sys.dont_write_bytecode = True  # no __pycache__/ in this repo for the workflow's git add -A
 sys.path.insert(0, os.environ["BATTERIE_DIR"])
 from kitlib import reroot
 root, comp = Path(sys.argv[1]), sys.argv[2]
@@ -530,6 +531,10 @@ cp "$MARKETPLACE_README" "$BATTERIE_DIR/README.md"
 # removes a retired component's subtree and the pre-fold batterie plugin's own
 # top-level skills/, hooks/ and scripts/ (now under suite/).
 COMPONENT_NAMES=$(for e in $COMPONENTS; do echo "${e%%:*}"; done)
+# The component vendored from mise-en-space, by SOURCE repo rather than by name, so
+# renaming the component cannot slip its server into the public kit (bds-jasuha).
+MISE_COMP=$(for e in $COMPONENTS; do [ "${e##*:}" = mise-en-space ] && echo "${e%%:*}"; done)
+[ -n "$MISE_COMP" ] || { echo "FAIL: no component is vendored from mise-en-space — the family kit and the unwired-server rule both need it" >&2; exit 1; }
 for d in "$BATTERIE_DIR"/plugins/*/; do
   n=$(basename "$d")
   if [ "$n" != "$KIT" ]; then
@@ -568,9 +573,10 @@ done
 #                 (mit, family) does, with its own OAuth client. Skipped even for a
 #                 held-back component, so a quarantine never brings it back.
 write_kit_manifest() {
-  BATTERIE_DIR="$BATTERIE_DIR" python3 - "$KIT_DIR" "$KIT" "$COMPONENT_NAMES" <<'PYEOF'
+  BATTERIE_DIR="$BATTERIE_DIR" MISE_COMP="$MISE_COMP" python3 - "$KIT_DIR" "$KIT" "$COMPONENT_NAMES" <<'PYEOF'
 import json, os, re, sys
 from pathlib import Path
+sys.dont_write_bytecode = True  # no __pycache__/ in this repo for the workflow's git add -A
 sys.path.insert(0, os.environ["BATTERIE_DIR"])
 from kitlib import reroot, reroot_tree
 
@@ -582,7 +588,7 @@ ROOT = "${CLAUDE_PLUGIN_ROOT}"
 ALLOWED = {"name", "displayName", "identity", "version", "description", "author",
            "repository", "homepage", "license", "keywords", "hooks", "mcpServers"}
 fails = []
-UNWIRED_COMPONENTS = {"mise"}  # components whose servers the public kit never wires
+UNWIRED_COMPONENTS = {os.environ["MISE_COMP"]}  # the mise-en-space component: the public kit never wires its servers
 
 suite = json.load(open(kit_dir / "suite/.claude-plugin/plugin.json"))
 manifest = {"name": kit}
@@ -652,18 +658,25 @@ write_kit_manifest || exit 1
 # manifest, and no bundled OAuth client anywhere in it. A held-back (quarantined)
 # mise is exempt from the file check: it is last-published bytes by design, and
 # the next suite bump replaces it.
-python3 - "$KIT_DIR/.claude-plugin/plugin.json" <<'PYEOF' || { echo "FAIL: the public kit wires a server that runs the mise engine — a ring kit (mit, family) owns it" >&2; exit 1; }
-import json, sys
-# By what the server runs, not by its key: any entry reaching into the mise
-# component (a renamed key such as mise-itv included) fails.
-servers = json.load(open(sys.argv[1])).get("mcpServers") or {}
-bad = [n for n, cfg in servers.items() if "${CLAUDE_PLUGIN_ROOT}/mise/" in json.dumps(cfg)
-       or "${CLAUDE_PLUGIN_ROOT}/mise\"" in json.dumps(cfg)]
-for n in bad:
-    print(f"  kit server '{n}' runs from mise/", file=sys.stderr)
+python3 - "$KIT_DIR" "$SOURCE_DIR/mise-en-space/server.py" <<'PYEOF' || { echo "FAIL: the public kit wires a server that runs the mise engine — a ring kit (mit, family) owns it" >&2; exit 1; }
+import json, re, sys
+from pathlib import Path
+# By what the server RUNS, not its key or its component's name: any kit server
+# naming a file under the kit that is byte-identical to mise-en-space's server.py
+# fails, whatever the key (mise-itv) or the component dir (gws) is called.
+kit, engine = Path(sys.argv[1]), Path(sys.argv[2]).read_bytes()
+servers = json.load(open(kit / ".claude-plugin/plugin.json")).get("mcpServers") or {}
+bad = []
+for n, cfg in servers.items():
+    for rel in re.findall(r"\$\{CLAUDE_PLUGIN_ROOT\}/([^\s\"']+)", json.dumps(cfg)):
+        f = kit / rel
+        if f.is_file() and f.read_bytes() == engine:
+            bad.append(f"kit server '{n}' runs {rel}, the mise engine")
+for b in bad:
+    print(f"  {b}", file=sys.stderr)
 sys.exit(1 if bad else 0)
 PYEOF
-if ! printf '%b' "$QUARANTINED" | grep -qx mise; then
+if ! printf '%b' "$QUARANTINED" | grep -qx "$MISE_COMP"; then
   stray=$(find "$KIT_DIR" -name credentials.json -not -path '*/.venv/*' | head -1)
   if [ -n "$stray" ]; then
     echo "FAIL: the public kit ships a bundled OAuth client ($stray) — it binds no Workspace" >&2; exit 1
@@ -855,8 +868,9 @@ if [ -n "${FAMILY_OAUTH_CLIENT:-}" ]; then
   FAMILY_KIT="$FAMILY_OUT/plugins/$FAMILY_NAME"
   rm -rf "$FAMILY_OUT"
   mkdir -p "$FAMILY_KIT/.claude-plugin" "$FAMILY_OUT/.claude-plugin"
+  [ -f "$KIT_DIR/$MISE_COMP/server.py" ] || { echo "FAIL: family — no mise engine at plugins/$KIT/$MISE_COMP/server.py to build the family kit from" >&2; exit 1; }
   rsync -a --exclude .venv --exclude __pycache__ --exclude '*.pyc' --exclude /credentials.json --exclude /hooks --exclude /CLAUDE.md --exclude /.claude-plugin \
-    "$KIT_DIR/mise/" "$FAMILY_KIT/mise/"
+    "$KIT_DIR/$MISE_COMP/" "$FAMILY_KIT/mise/"
   cp "$FAMILY_OAUTH_CLIENT" "$FAMILY_KIT/mise/planetmodha-client.json"
   rsync -a "$BATTERIE_DIR/family/kit/" "$FAMILY_KIT/home/"
   cp "$BATTERIE_DIR/family/repo/README.md" "$BATTERIE_DIR/family/repo/CLAUDE.md" "$FAMILY_OUT/"
@@ -868,15 +882,16 @@ if [ -n "${FAMILY_OAUTH_CLIENT:-}" ]; then
   # the public kit's generated manifest, which since bds-jasuha wires no mise
   # server. The tool-id rewrite and the skill's picker marker are the only text
   # edits, each asserted.
-  BATTERIE_DIR="$BATTERIE_DIR" python3 - "$KIT_DIR" "$FAMILY_KIT" "$FAMILY_NAME" "$SUITE_VERSION" "$MARKETPLACE_HOME" <<'PYEOF' || exit 1
+  BATTERIE_DIR="$BATTERIE_DIR" MISE_COMP="$MISE_COMP" python3 - "$KIT_DIR" "$FAMILY_KIT" "$FAMILY_NAME" "$SUITE_VERSION" "$MARKETPLACE_HOME" <<'PYEOF' || exit 1
 import json, os, re, sys
 from pathlib import Path
+sys.dont_write_bytecode = True  # no __pycache__/ in this repo for the workflow's git add -A
 sys.path.insert(0, os.environ["BATTERIE_DIR"])
 from kitlib import ROOT, reroot_tree
 pub_kit, fam, name, version, home = Path(sys.argv[1]), Path(sys.argv[2]), sys.argv[3], sys.argv[4], sys.argv[5]
 fails = []
 pub = json.load(open(pub_kit / ".claude-plugin/plugin.json"))
-comp = json.load(open(pub_kit / "mise/.claude-plugin/plugin.json"))
+comp = json.load(open(pub_kit / os.environ["MISE_COMP"] / ".claude-plugin/plugin.json"))
 srv = comp.get("mcpServers", {}).get("mise")
 if not srv or "env" in srv:
     sys.exit("FAIL: family — the mise component's mcpServers.mise is missing or already carries env; the family wiring needs a designed merge")

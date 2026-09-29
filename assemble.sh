@@ -361,8 +361,13 @@ print('yes' if d.get('mcpServers') else 'no')
       --exclude .pytest_cache --exclude .mypy_cache --exclude .ruff_cache \
       --exclude .hypothesis --exclude '*.db' --exclude token.json --exclude .env \
       --exclude .gitignore --exclude .gitattributes \
-      --exclude /CHANGELOG.md \
+      --exclude /CHANGELOG.md --exclude /credentials.json \
       "$src/" "$dest/"
+    # /credentials.json exclusion (bds-jasuha): the public kit binds no Google
+    # Workspace. mise's bundled client is ITV's; since the MIT switch-over the
+    # mit kit carries it and runs the server, and batterie ships the engine
+    # only. Deny by default for every full-source component, and
+    # --delete-excluded removes the copy vendored before this rule.
     # /CHANGELOG.md exclusion (bds-mawitu): per-repo changelogs are no longer
     # shipped — the suite has ONE canonical changelog and every plugin ships a
     # generated stub (below) instead. Root-anchored + --delete-excluded, so a
@@ -555,6 +560,12 @@ done
 #                 prefix an environment assignment.
 #   mcpServers  — every component's servers, strings re-rooted; a duplicate
 #                 server name across components fails (it would change a tool id).
+#                 Except those in UNWIRED_SERVERS (bds-jasuha): mise's server line
+#                 stays in its component manifest (it makes the assembler vendor
+#                 full source, and the family kit reads it as the template for its
+#                 own), but the public kit runs no Google server — a ring kit
+#                 (mit, family) does, with its own OAuth client. Skipped even for a
+#                 held-back component, so a quarantine never brings it back.
 write_kit_manifest() {
   python3 - "$KIT_DIR" "$KIT" "$COMPONENT_NAMES" <<'PYEOF'
 import json, re, sys
@@ -568,6 +579,7 @@ ROOT = "${CLAUDE_PLUGIN_ROOT}"
 ALLOWED = {"name", "displayName", "identity", "version", "description", "author",
            "repository", "homepage", "license", "keywords", "hooks", "mcpServers"}
 fails = []
+UNWIRED_SERVERS = {("mise", "mise")}  # (component, server name)
 
 def reroot(s, comp):
     return re.sub(r"\$\{CLAUDE_PLUGIN_ROOT\}(?!/" + re.escape(comp) + r"(?![\w-]))",
@@ -616,6 +628,8 @@ for comp in comps:
             hooks.setdefault(event, []).append({**g, "hooks": new_hooks})
 
     for name, cfg in (pj.get("mcpServers") or {}).items():
+        if (comp, name) in UNWIRED_SERVERS:
+            continue
         if name in servers:
             fails.append(f"{comp}: MCP server '{name}' already declared by {owner[name]}")
             continue
@@ -640,6 +654,20 @@ with open(kit_dir / ".claude-plugin/plugin.json", "w") as f:
 PYEOF
 }
 write_kit_manifest || exit 1
+# The public kit binds no Google Workspace (bds-jasuha): no mise server in its
+# manifest, and no bundled OAuth client anywhere in it. A held-back (quarantined)
+# mise is exempt from the file check: it is last-published bytes by design, and
+# the next suite bump replaces it.
+python3 - "$KIT_DIR/.claude-plugin/plugin.json" <<'PYEOF' || { echo "FAIL: the public kit declares a mise server — a ring kit (mit, family) owns it" >&2; exit 1; }
+import json, sys
+sys.exit(1 if "mise" in (json.load(open(sys.argv[1])).get("mcpServers") or {}) else 0)
+PYEOF
+if ! printf '%b' "$QUARANTINED" | grep -qx mise; then
+  stray=$(find "$KIT_DIR" -name credentials.json -not -path '*/.venv/*' | head -1)
+  if [ -n "$stray" ]; then
+    echo "FAIL: the public kit ships a bundled OAuth client ($stray) — it binds no Workspace" >&2; exit 1
+  fi
+fi
 stamp_version "$KIT_DIR/.claude-plugin/plugin.json" "$SUITE_VERSION"
 stamp_repository "$KIT_DIR/.claude-plugin/plugin.json" "batterie"
 # Shipped CHANGELOG is a generated stub pointing at the canonical suite
@@ -833,19 +861,31 @@ if [ -n "${FAMILY_OAUTH_CLIENT:-}" ]; then
   cp "$BATTERIE_DIR/family/repo/README.md" "$BATTERIE_DIR/family/repo/CLAUDE.md" "$FAMILY_OUT/"
   write_changelog_stub "$FAMILY_KIT" "$SUITE_VERSION"
 
-  # Manifest + skill ids. The server entry is the PUBLIC kit's generated one
-  # (read, not retyped, so the launch command cannot drift between kits) plus
-  # the env; the tool-id rewrite and the skill's picker marker are the only
-  # text edits, each asserted.
+  # Manifest + skill ids. The server entry is read from the vendored mise
+  # component's manifest (not retyped, so the launch command cannot drift from
+  # the engine) and re-rooted under mise/, plus the env. It used to be read from
+  # the public kit's generated manifest, which since bds-jasuha wires no mise
+  # server. The tool-id rewrite and the skill's picker marker are the only text
+  # edits, each asserted.
   python3 - "$KIT_DIR" "$FAMILY_KIT" "$FAMILY_NAME" "$SUITE_VERSION" "$MARKETPLACE_HOME" <<'PYEOF' || exit 1
 import json, re, sys
 from pathlib import Path
 pub_kit, fam, name, version, home = Path(sys.argv[1]), Path(sys.argv[2]), sys.argv[3], sys.argv[4], sys.argv[5]
 fails = []
 pub = json.load(open(pub_kit / ".claude-plugin/plugin.json"))
-srv = pub.get("mcpServers", {}).get("mise")
+comp = json.load(open(pub_kit / "mise/.claude-plugin/plugin.json"))
+srv = comp.get("mcpServers", {}).get("mise")
 if not srv or "env" in srv:
-    sys.exit("FAIL: family — the public kit's mcpServers.mise is missing or already carries env; the family wiring needs a designed merge")
+    sys.exit("FAIL: family — the mise component's mcpServers.mise is missing or already carries env; the family wiring needs a designed merge")
+ROOT = "${CLAUDE_PLUGIN_ROOT}"
+def reroot(v):
+    if isinstance(v, str): return re.sub(r"\$\{CLAUDE_PLUGIN_ROOT\}(?!/mise(?![\w-]))", ROOT + "/mise", v)
+    if isinstance(v, list): return [reroot(x) for x in v]
+    if isinstance(v, dict): return {k: reroot(x) for k, x in v.items()}
+    return v
+srv = reroot(srv)
+if ROOT + "/mise/server.py" not in json.dumps(srv):
+    sys.exit("FAIL: family — the re-rooted server line does not run mise/server.py")
 srv = {**srv, "env": {
     "MISE_EN_SPACE_OAUTH_CLIENT": "${CLAUDE_PLUGIN_ROOT}/mise/planetmodha-client.json",
     "MISE_EN_SPACE_DATA_DIR": "${CLAUDE_PLUGIN_DATA}",
@@ -870,9 +910,11 @@ with open(fam / ".claude-plugin/plugin.json", "w") as f:
 
 skill = fam / "mise/skills/mise/SKILL.md"
 text = skill.read_text()
-text, n = re.subn(r"mcp__plugin_batterie_mise__", f"mcp__plugin_{name}_mise__", text)
+# The skill names the ITV kit's tools: mit's since bds-jasuha (batterie's in a
+# held-back pre-switch component).
+text, n = re.subn(r"mcp__plugin_(?:mit|batterie)_mise__", f"mcp__plugin_{name}_mise__", text)
 if n == 0:
-    fails.append("mise skill names no mcp__plugin_batterie_mise__ tool id to rewrite — its allowed-tools would not match this kit")
+    fails.append("mise skill names no mcp__plugin_mit_mise__ tool id to rewrite — its allowed-tools would not match this kit")
 marker = ("[Planet Modha (planetmodha.com) — the family Google Workspace; an ITV (itv.com) "
           "mise, if also installed, acts on a different Workspace.] ")
 text, m = re.subn(r"(?m)^description:\s*", lambda _: "description: " + marker, text, count=1)
@@ -898,8 +940,8 @@ for pp in fam.rglob("pyproject.toml"):
         fails.append(f"{pp.relative_to(fam)} takes its version from {m.group(1)}, which the kit does not ship — uv cannot build it")
 for p in fam.rglob("*"):
     if p.is_file() and p.suffix in (".md", ".json", ".py", ".sh"):
-        if "mcp__plugin_batterie_" in p.read_text(errors="ignore"):
-            fails.append(f"{p.relative_to(fam)} still names a batterie tool id")
+        if re.search(r"mcp__plugin_(?:batterie|mit)_mise__", p.read_text(errors="ignore")):
+            fails.append(f"{p.relative_to(fam)} still names another kit's mise tool id")
 for d in fam.rglob(".claude-plugin"):
     if d.parent != fam:
         fails.append(f"{d.relative_to(fam)} is a nested manifest dir — claude.ai's validator refuses a plugin.json below the plugin root")

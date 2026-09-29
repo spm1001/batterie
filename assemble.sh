@@ -96,8 +96,11 @@ passe:passe
 # accomplis rename had stranded the marketplace for ~30 min on 2026-08-02
 # because marketplace.json and the map were both hand-kept.)
 
-# Wheels shipped inside the kit (bds-timule, 2026-09-23): component:source_repo.
-# Each source repo is built into a wheel that lands in plugins/$KIT/<component>/wheels/,
+# Wheels shipped inside the kit (bds-timule, 2026-09-23): component_source_repo:wheel_repo.
+# Keyed by the COMPONENT'S SOURCE REPO, not its name (bds-jasuha, E4): keyed by
+# name, renaming a component silently dropped its wheel and shipped a lock that
+# fetches a private repo. Each wheel repo is built into a wheel that lands in
+# plugins/$KIT/<component>/wheels/,
 # so every CLI and library a plugin needs installs from THIS public repo and the
 # workshop repos can go private — batterie is the one public strand (Sameer:
 # "a spider web when it should be a rope"). The SessionStart hooks install from
@@ -113,10 +116,10 @@ accomplis:accomplis
 passe:passe
 sonner:sonner
 trousse:deglacer
-mise:jeton
+mise-en-space:jeton
 "
 
-# Build the wheels mapped to $1 into $2/wheels/ (wiped first, so a renamed or
+# Build the wheels mapped to source repo $1 into $2/wheels/ (wiped first, so a renamed or
 # retired wheel cannot linger). uv build writes a `*` .gitignore into its output
 # dir, which would make git silently skip the wheel — so build into a temp dir
 # and copy only the .whl across. Exactly one wheel per source, or fail loud.
@@ -124,7 +127,7 @@ build_wheels() {
   local plugin="$1" dest="$2" entry repo tmp whl n
   rm -rf "$dest/wheels"
   for entry in $WHEELS; do
-    [ "${entry%%:*}" = "$plugin" ] || continue
+    [ "${entry%%:*}" = "$plugin" ] || continue  # $plugin here is the component's source repo
     repo="${entry##*:}"
     [ -f "$SOURCE_DIR/$repo/pyproject.toml" ] || { echo "FAIL: wheel source $repo has no pyproject.toml (for $plugin)" >&2; exit 1; }
     tmp=$(mktemp -d)
@@ -300,7 +303,7 @@ RATCHET_FAILURES=""
 QUARANTINED=""
 
 for entry in $COMPONENTS; do
-  plugin="${entry%%:*}"   # the component name (kept as $plugin: the WHEELS map and the quarantine file speak it)
+  plugin="${entry%%:*}"   # the component name (kept as $plugin: the quarantine file speaks it; WHEELS keys on $repo)
   repo="${entry##*:}"
   src="$SOURCE_DIR/$repo"
 
@@ -422,7 +425,7 @@ print('yes' if d.get('mcpServers') else 'no')
   # Wheels after the copy (the MCP branch's rsync --delete clears wheels/, which
   # the source never has) and before the ratchet, so a rebuilt wheel counts as
   # content like everything else (bds-timule).
-  build_wheels "$plugin" "$dest"
+  build_wheels "$repo" "$dest"
 
   # Parity guard (BOTH branches): a copy rule must never eat plugin content.
   # Whatever capability dirs the source ships, the vendored package ships.
@@ -534,7 +537,11 @@ COMPONENT_NAMES=$(for e in $COMPONENTS; do echo "${e%%:*}"; done)
 # The component vendored from mise-en-space, by SOURCE repo rather than by name, so
 # renaming the component cannot slip its server into the public kit (bds-jasuha).
 MISE_COMP=$(for e in $COMPONENTS; do if [ "${e##*:}" = mise-en-space ]; then echo "${e%%:*}"; fi; done)
-[ -n "$MISE_COMP" ] || { echo "FAIL: no component is vendored from mise-en-space — the family kit and the unwired-server rule both need it" >&2; exit 1; }
+case "$(printf '%s' "$MISE_COMP" | grep -c .)" in
+  1) ;;
+  0) echo "FAIL: no component is vendored from mise-en-space — the family kit and the unwired-server rule both need it" >&2; exit 1 ;;
+  *) echo "FAIL: more than one component is vendored from mise-en-space ($(echo $MISE_COMP)) — exactly one may carry the engine" >&2; exit 1 ;;
+esac
 for d in "$BATTERIE_DIR"/plugins/*/; do
   n=$(basename "$d")
   if [ "$n" != "$KIT" ]; then
@@ -993,6 +1000,19 @@ PYEOF
   echo "  OK $FAMILY_NAME ← plugins/$KIT/$MISE_COMP + family/ ($SUITE_VERSION, client: $(basename "$FAMILY_OAUTH_CLIENT"))"
 else
   echo "  SKIP family marketplace '$FAMILY_NAME' — FAMILY_OAUTH_CLIENT not set (public-only run)"
+fi
+
+# No shipped uv project may fetch from a spm1001 git repo (bds-jasuha, E4): those
+# repos are private, so a consumer's `uv run` would fail to resolve — and the
+# build would still be green. repoint_uv_source checks the lock it rewrites;
+# this checks every vendored lock and pyproject, whatever keyed the wheel.
+git_srcs=$(grep -rlE 'git = "https://github\.com/spm1001/|git\+https://github\.com/spm1001/' \
+  --include=uv.lock --include=pyproject.toml "$BATTERIE_DIR/plugins" \
+  $( [ -n "${FAMILY_OAUTH_CLIENT:-}" ] && echo "$FAMILY_OUT" ) 2>/dev/null || true)
+if [ -n "$git_srcs" ]; then
+  echo "FAIL: shipped uv projects fetch from a private spm1001 git repo — ship the wheel instead:" >&2
+  printf '  %s\n' $git_srcs >&2
+  exit 1
 fi
 
 SCAN_DIRS="$BATTERIE_DIR/plugins $BATTERIE_DIR/README.md $BATTERIE_DIR/.claude-plugin/marketplace.json"

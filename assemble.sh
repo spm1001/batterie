@@ -533,7 +533,7 @@ cp "$MARKETPLACE_README" "$BATTERIE_DIR/README.md"
 COMPONENT_NAMES=$(for e in $COMPONENTS; do echo "${e%%:*}"; done)
 # The component vendored from mise-en-space, by SOURCE repo rather than by name, so
 # renaming the component cannot slip its server into the public kit (bds-jasuha).
-MISE_COMP=$(for e in $COMPONENTS; do [ "${e##*:}" = mise-en-space ] && echo "${e%%:*}"; done)
+MISE_COMP=$(for e in $COMPONENTS; do if [ "${e##*:}" = mise-en-space ]; then echo "${e%%:*}"; fi; done)
 [ -n "$MISE_COMP" ] || { echo "FAIL: no component is vendored from mise-en-space — the family kit and the unwired-server rule both need it" >&2; exit 1; }
 for d in "$BATTERIE_DIR"/plugins/*/; do
   n=$(basename "$d")

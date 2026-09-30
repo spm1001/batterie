@@ -63,4 +63,6 @@ One newline-terminated JSON line to the socket:
 
 Captured from a real `SendMessage` on CC 2.1.226 (2026-08-08). Upstream may version it — `msgV` is the canary, and a delivery that stops working after a CC upgrade should check this first.
 
+**The framing tag is the second canary (son-hokali, 2026-09-30).** CC parses the tag's attributes (order: from, from-session, hop-chain, from-name, from-mode, from-plugin), re-renders them and discards the whole framing unless the bytes match. `from` must be `[A-Za-z0-9%:_/.-]{1,300}` (sonner percent-encodes like CC's own `R()`); `from-name` is what CC's `lh()` would render (no `"<>`, no control/format characters, trimmed, ≤64 code points + `…`); `from-mode` is `bypass`/`prompting` and is now the calling session's real mode, read from the last `{"type":"permission-mode"}` line of its transcript, and omitted for a script. `tests/test_framing.py` ports CC 2.1.285's parser and renderer and round-trips every shape; re-read the binary and update the port if a CC upgrade breaks it. Verified live the same day: a script ring with `--from 'claude@… (…)'` lost its name under the old sonner (`origin.name: None`) and kept it under the new one.
+
 Work is tracked on a bon board in `.bon/` — read `.bon/README.md` before reading or changing anything there.

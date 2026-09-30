@@ -104,15 +104,15 @@ Sending carries the mirror duty: route work your own session was denied back to 
 sonner ~/repos/spm1001/infra "notes-sync deadman went red — iw-dokuze has the detail"
 sonner --name modha-7a "…"       # ring one session by registry name (repo too coarse)
 sonner --wake REPO               # just ensure a session exists — no message
-sonner --wake REPO --work        # same, on work billing (claudefv) — it will be DEAF
-sonner REPO "…" --work           # empty repo: work spawn, message left as a file, prompt carries only the pointer
-sonner --list                    # every live session and its repo — deaf ones tagged [deaf: no inbox — provider-gated]
+sonner --wake REPO --work        # same, on MIT work billing (claudev: Opus 5.5 on Vertex) — it gets an inbox
+sonner REPO "…" --work           # empty repo: spawn on work billing, deliver as usual
+sonner --list                    # every live session and its repo — deaf ones tagged [deaf: no inbox]
 sonner --no-spawn REPO "…"       # fail rather than start a session
 sonner REPO "…" --force-spawn    # repo held only by a deaf session: plant a socketed sibling anyway (audible, never default)
 sonner --host tube REPO "…"      # run the ring on another machine (also --wake, --list) — see Reaching another machine
 ```
 
-Grammar honesty rules (all measured 2026-08-09): a ring lands on the session sitting *exactly* at the path before any deeper one, and a deeper one counts only inside the same git repo — a plain directory such as `~/repos` or `~` matches a session sitting exactly there or gets a fresh spawn, never a session in some repo below it (son-lumaki, 2026-09-30); a repo occupied by a live-but-deaf session (work-billed, no inbox) is refused with an explanation, never doubled — `--force-spawn` is the one explicit way past that, and it says on stderr which deaf session it is spawning beside; `--list` shows the deaf so their repos never read as empty; and sonner works out which session is calling it — a socketed caller's name goes in `from` so replies route natively, while a deaf or absent caller gets `script:` plus a body footer telling the receiver **not to attempt a reply**. If a message you receive carries that footer, act on it or ignore it; there is nobody to answer.
+Grammar honesty rules (all measured 2026-08-09): a ring lands on the session sitting *exactly* at the path before any deeper one, and a deeper one counts only inside the same git repo — a plain directory such as `~/repos` or `~` matches a session sitting exactly there or gets a fresh spawn, never a session in some repo below it (son-lumaki, 2026-09-30); a repo occupied by a live-but-deaf session (one with no inbox) is refused with an explanation, never doubled — `--force-spawn` is the one explicit way past that, and it says on stderr which deaf session it is spawning beside; `--list` shows the deaf so their repos never read as empty; and sonner works out which session is calling it — a socketed caller's name goes in `from` so replies route natively, while a deaf or absent caller gets `script:` plus a body footer telling the receiver **not to attempt a reply**. If a message you receive carries that footer, act on it or ignore it; there is nobody to answer.
 
 A live session in that repo gets the message. If none is running, sonner starts one under tmux, waits for its inbox socket, then delivers — so the woken Claude sees a peer message rather than a user prompt, and treats it as a colleague's note rather than an instruction from its user.
 

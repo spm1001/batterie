@@ -1,6 +1,6 @@
 ---
 name: ping
-description: Orchestrates messages between Claude Code sessions — load BEFORE any SendMessage, ListAgents or sonner call, and when a peer message arrives. A doorbell-not-payload protocol — three message shapes, a wake-or-file test, and the two mechanics that bite, being an addressing form that wastes a round trip and a silent drop that voids repeated text while reporting success. Triggers on 'message the other session', 'wake a Claude in that repo', 'sonner', 'SendMessage', 'cross-session'. Not sonnette. (user)
+description: Orchestrates messages between Claude Code sessions, and starting a Claude in a named repo on this host or another — load BEFORE any SendMessage, ListAgents or sonner call, and when a peer message arrives. A doorbell-not-payload protocol (three message shapes, a wake-or-file test, the two mechanics that bite) that ensures a ring lands where you meant and prevents the silent drop of repeated text. Triggers on 'message the other session', 'start a Claude in that repo', 'spawn a session on tube', 'get a Claude going on this', 'sonner', 'SendMessage', 'cross-session'. Not sonnette. (user)
 ---
 
 # Peer messaging
@@ -15,6 +15,7 @@ Everything below was measured live on tube on 2026-08-08 against Claude Code 2.1
 - When a `cross-session-message` arrives and you are deciding how to answer.
 - When choosing between messaging a session and filing a board item.
 - When a peer message asks you for something that feels like it needs your user's say-so.
+- Starting a session in a named repo, on this host or another. The phone can only launch sessions at tube's root, so a ring is the route to any other repo: `sonner REPO "what to do"` spawns a Claude there and hands it the brief as a peer message.
 
 ## When not to use
 
@@ -89,7 +90,7 @@ Sending carries the mirror duty: route work your own session was denied back to 
 
 ## Reach and limits
 
-**Cross-machine is reply-only.** A session here can answer a message that arrived from the Mac or from the web, and cannot open that conversation. Anything estate-wide that must start from tube needs the older mesh or another mechanism.
+**Cross-machine is reply-only for the tools.** A session here can answer a message that arrived from the Mac or from the web, and `SendMessage` cannot open that conversation. To start one on another host, use `sonner --host` (see *Reaching another machine*, below).
 
 **There is no queue.** A message to a session that is not running is undeliverable — no store-and-forward, no retry. That is what `sonner` exists for.
 
@@ -108,6 +109,7 @@ sonner REPO "…" --work           # empty repo: work spawn, message left as a f
 sonner --list                    # every live session and its repo — deaf ones tagged [deaf: no inbox — provider-gated]
 sonner --no-spawn REPO "…"       # fail rather than start a session
 sonner REPO "…" --force-spawn    # repo held only by a deaf session: plant a socketed sibling anyway (audible, never default)
+sonner --host tube REPO "…"      # run the ring on another machine (also --wake, --list) — see Reaching another machine
 ```
 
 Grammar honesty rules (all measured 2026-08-09): a ring lands on the session sitting *exactly* at the path before any deeper one; a repo occupied by a live-but-deaf session (work-billed, no inbox) is refused with an explanation, never doubled — `--force-spawn` is the one explicit way past that, and it says on stderr which deaf session it is spawning beside; `--list` shows the deaf so their repos never read as empty; and sonner works out which session is calling it — a socketed caller's name goes in `from` so replies route natively, while a deaf or absent caller gets `script:` plus a body footer telling the receiver **not to attempt a reply**. If a message you receive carries that footer, act on it or ignore it; there is nobody to answer.
@@ -161,5 +163,6 @@ That gives you the addressable **name** and the socket path directly, with no `/
 
 - **bon** — the board is the durable inbox; messaging is for what cannot wait for the next session start. Anything that deserves to outlive the turn becomes a bon item.
 - **hublot** — the honest way to observe what a real interactive session does when a message lands. `claude -p` cannot show the collapsed peer row or a dialog.
-- **Reaching another machine** — sonner discovers peers over unix sockets, so `--list` only ever shows *this* host. That is a discovery limit, not a delivery one: **run sonner on the far host and it works** — `ssh <host> sonner <repo> '<msg>'`, demonstrated tube→Mac into a live session on 2026-08-09. So you lose *ambient* remote presence, not remote messaging: you must know which host to ring rather than seeing it in a roster.
+- **Reaching another machine** — sonner discovers peers over unix sockets, so `--list` only ever shows *this* host. That is a discovery limit, not a delivery one: run sonner on the far host and it works. **Use `sonner --host HOST REPO "msg"`** (and `--wake`, `--list`): it runs `ssh HOST bash -lic '<sonner …>'` for you, sends a repo under your home as `~/…` so it resolves under the far home, and waits 240s so the far spawn's own error comes back. By hand, the login shell is the part that matters: `ssh HOST 'bash -lic "sonner REPO \"msg\""'`. A bare `ssh HOST sonner …` gets sshd's PATH (on tube `/usr/local/bin:/usr/bin:/bin`; on the Mac, no sonner, tmux or claude at all), and tmux hands that PATH to the window it spawns, so claude is not found (30 Sep 2026). Since son-dimohu sonner refuses at once in that case rather than waiting 180s in silence. Verified tube→Mac with `--host`, 30 Sep 2026. You lose *ambient* remote presence, not remote messaging: you must know which host to ring rather than seeing it in a roster.
+- **A spawn that cannot come up says so at once.** Exit 1 with the cause when claude is missing from PATH or the spawned command dies (its exit status and last screen lines). Exit 3, `held:`, when the new session is parked at Claude Code's folder-trust dialog — trust is per exact path, so any repo nobody has opened interactively on that host hits it. If the ring had a message, it was already delivered and waits for someone to answer the dialog (`tmux attach -t claude`, the window named for the repo), so do not ring twice.
 - **sonnette** — the older account-keyed WebSocket mesh, and the thing that used to give that presence ambiently. **Deleted 2026-08-24** (`son-pilalu`): delisted from the batterie marketplace, uninstalled estate-wide, and its source removed from `spm1001/aboyeur`. Measured traffic had stopped on 2026-07-19, five weeks earlier. Do not reach for it, and treat any lore about `mesh_peers`, `send_message` or the channels flag as describing a tool that no longer exists — its failure modes were never shared with sonner's anyway. Ledger of where each capability went: `aboyeur/docs/mesh-retirement-2026-08-24.md`.

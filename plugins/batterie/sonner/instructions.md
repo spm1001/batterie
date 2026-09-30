@@ -14,8 +14,11 @@ think to load it:
 - **`sonner REPO "message"` rings a repo, not a session.** A live session there
   gets a peer message on its inbox socket; an empty repo gets a session spawned
   first. `sonner --list` shows every live session, with the deaf ones (no
-  inbox — provider-billed) tagged so their repo never reads as empty. It is a
-  CLI on PATH, not an MCP tool.
+  inbox) tagged so their repo never reads as empty. It is a CLI on PATH, not an
+  MCP tool.
+- **A message ending `[sonner: … started for this message …]` means sonner
+  spawned you for it.** Nothing else will end your session: when the errand is
+  done, `/close` if it changed anything worth a handoff, then `sonner --hangup`.
 - **Address `SendMessage` with the full `name [ref]` form from the ListAgents
   row** (e.g. `idle-target [79cf80]`) — the bare name is refused for
   cross-session peers, costing a round trip.

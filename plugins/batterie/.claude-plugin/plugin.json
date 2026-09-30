@@ -1,7 +1,7 @@
 {
   "name": "batterie",
   "displayName": "Batterie",
-  "version": "2.4.1",
+  "version": "2.4.2",
   "description": "Kitchen tools for knowledge work, in one plugin: session rituals and GTD tracking (bon), Google Workspace (mise), browser automation (passe), messaging between Claude sessions (sonner), Todoist coaching (accomplis), review and isolation tools (trousse), and keeping it all current",
   "author": {
     "name": "Sameer Modha",

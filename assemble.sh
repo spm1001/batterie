@@ -96,8 +96,11 @@ passe:passe
 # accomplis rename had stranded the marketplace for ~30 min on 2026-08-02
 # because marketplace.json and the map were both hand-kept.)
 
-# Wheels shipped inside the kit (bds-timule, 2026-09-23): component:source_repo.
-# Each source repo is built into a wheel that lands in plugins/$KIT/<component>/wheels/,
+# Wheels shipped inside the kit (bds-timule, 2026-09-23): component_source_repo:wheel_repo.
+# Keyed by the COMPONENT'S SOURCE REPO, not its name (bds-jasuha, E4): keyed by
+# name, renaming a component silently dropped its wheel and shipped a lock that
+# fetches a private repo. Each wheel repo is built into a wheel that lands in
+# plugins/$KIT/<component>/wheels/,
 # so every CLI and library a plugin needs installs from THIS public repo and the
 # workshop repos can go private — batterie is the one public strand (Sameer:
 # "a spider web when it should be a rope"). The SessionStart hooks install from
@@ -113,10 +116,10 @@ accomplis:accomplis
 passe:passe
 sonner:sonner
 trousse:deglacer
-mise:jeton
+mise-en-space:jeton
 "
 
-# Build the wheels mapped to $1 into $2/wheels/ (wiped first, so a renamed or
+# Build the wheels mapped to source repo $1 into $2/wheels/ (wiped first, so a renamed or
 # retired wheel cannot linger). uv build writes a `*` .gitignore into its output
 # dir, which would make git silently skip the wheel — so build into a temp dir
 # and copy only the .whl across. Exactly one wheel per source, or fail loud.
@@ -124,7 +127,7 @@ build_wheels() {
   local plugin="$1" dest="$2" entry repo tmp whl n
   rm -rf "$dest/wheels"
   for entry in $WHEELS; do
-    [ "${entry%%:*}" = "$plugin" ] || continue
+    [ "${entry%%:*}" = "$plugin" ] || continue  # $plugin here is the component's source repo
     repo="${entry##*:}"
     [ -f "$SOURCE_DIR/$repo/pyproject.toml" ] || { echo "FAIL: wheel source $repo has no pyproject.toml (for $plugin)" >&2; exit 1; }
     tmp=$(mktemp -d)
@@ -272,16 +275,18 @@ PYEOF
 # source text on every run (checksums differ once rewritten), so this applies
 # exactly once per run and the ratchet compares like with like.
 reroot_markdown() {
-  python3 - "$1" "$2" <<'PYEOF'
-import re, sys
+  BATTERIE_DIR="$BATTERIE_DIR" python3 - "$1" "$2" <<'PYEOF'
+import os, re, sys
 from pathlib import Path
+sys.dont_write_bytecode = True  # no __pycache__/ in this repo for the workflow's git add -A
+sys.path.insert(0, os.environ["BATTERIE_DIR"])
+from kitlib import reroot
 root, comp = Path(sys.argv[1]), sys.argv[2]
 bad = []
 for sub in ("skills", "commands", "agents"):
     for md in sorted((root / sub).rglob("*.md")) if (root / sub).is_dir() else []:
         text = md.read_text()
-        new = re.sub(r"\$\{CLAUDE_PLUGIN_ROOT\}(?!/" + re.escape(comp) + r"(?![\w-]))",
-                     "${CLAUDE_PLUGIN_ROOT}/" + comp, text)
+        new = reroot(text, comp)
         if new != text:
             md.write_text(new)
         if re.search(r"\$CLAUDE_PLUGIN_ROOT(?![\w{])", new):
@@ -298,7 +303,7 @@ RATCHET_FAILURES=""
 QUARANTINED=""
 
 for entry in $COMPONENTS; do
-  plugin="${entry%%:*}"   # the component name (kept as $plugin: the WHEELS map and the quarantine file speak it)
+  plugin="${entry%%:*}"   # the component name (kept as $plugin: the quarantine file speaks it; WHEELS keys on $repo)
   repo="${entry##*:}"
   src="$SOURCE_DIR/$repo"
 
@@ -361,8 +366,13 @@ print('yes' if d.get('mcpServers') else 'no')
       --exclude .pytest_cache --exclude .mypy_cache --exclude .ruff_cache \
       --exclude .hypothesis --exclude '*.db' --exclude token.json --exclude .env \
       --exclude .gitignore --exclude .gitattributes \
-      --exclude /CHANGELOG.md \
+      --exclude /CHANGELOG.md --exclude /credentials.json \
       "$src/" "$dest/"
+    # /credentials.json exclusion (bds-jasuha): the public kit binds no Google
+    # Workspace. mise's bundled client is ITV's; since the MIT switch-over the
+    # mit kit carries it and runs the server, and batterie ships the engine
+    # only. Deny by default for every full-source component, and
+    # --delete-excluded removes the copy vendored before this rule.
     # /CHANGELOG.md exclusion (bds-mawitu): per-repo changelogs are no longer
     # shipped — the suite has ONE canonical changelog and every plugin ships a
     # generated stub (below) instead. Root-anchored + --delete-excluded, so a
@@ -415,7 +425,7 @@ print('yes' if d.get('mcpServers') else 'no')
   # Wheels after the copy (the MCP branch's rsync --delete clears wheels/, which
   # the source never has) and before the ratchet, so a rebuilt wheel counts as
   # content like everything else (bds-timule).
-  build_wheels "$plugin" "$dest"
+  build_wheels "$repo" "$dest"
 
   # Parity guard (BOTH branches): a copy rule must never eat plugin content.
   # Whatever capability dirs the source ships, the vendored package ships.
@@ -524,6 +534,14 @@ cp "$MARKETPLACE_README" "$BATTERIE_DIR/README.md"
 # removes a retired component's subtree and the pre-fold batterie plugin's own
 # top-level skills/, hooks/ and scripts/ (now under suite/).
 COMPONENT_NAMES=$(for e in $COMPONENTS; do echo "${e%%:*}"; done)
+# The component vendored from mise-en-space, by SOURCE repo rather than by name, so
+# renaming the component cannot slip its server into the public kit (bds-jasuha).
+MISE_COMP=$(for e in $COMPONENTS; do if [ "${e##*:}" = mise-en-space ]; then echo "${e%%:*}"; fi; done)
+case "$(printf '%s' "$MISE_COMP" | grep -c .)" in
+  1) ;;
+  0) echo "FAIL: no component is vendored from mise-en-space — the family kit and the unwired-server rule both need it" >&2; exit 1 ;;
+  *) echo "FAIL: more than one component is vendored from mise-en-space ($(echo $MISE_COMP)) — exactly one may carry the engine" >&2; exit 1 ;;
+esac
 for d in "$BATTERIE_DIR"/plugins/*/; do
   n=$(basename "$d")
   if [ "$n" != "$KIT" ]; then
@@ -555,10 +573,19 @@ done
 #                 prefix an environment assignment.
 #   mcpServers  — every component's servers, strings re-rooted; a duplicate
 #                 server name across components fails (it would change a tool id).
+#                 Except those of UNWIRED_COMPONENTS (bds-jasuha): mise's server line
+#                 stays in its component manifest (it makes the assembler vendor
+#                 full source, and the family kit reads it as the template for its
+#                 own), but the public kit runs no Google server — a ring kit
+#                 (mit, family) does, with its own OAuth client. Skipped even for a
+#                 held-back component, so a quarantine never brings it back.
 write_kit_manifest() {
-  python3 - "$KIT_DIR" "$KIT" "$COMPONENT_NAMES" <<'PYEOF'
-import json, re, sys
+  BATTERIE_DIR="$BATTERIE_DIR" MISE_COMP="$MISE_COMP" python3 - "$KIT_DIR" "$KIT" "$COMPONENT_NAMES" <<'PYEOF'
+import json, os, re, sys
 from pathlib import Path
+sys.dont_write_bytecode = True  # no __pycache__/ in this repo for the workflow's git add -A
+sys.path.insert(0, os.environ["BATTERIE_DIR"])
+from kitlib import reroot, reroot_tree
 
 kit_dir, kit, comps = Path(sys.argv[1]), sys.argv[2], sys.argv[3].split()
 ROOT = "${CLAUDE_PLUGIN_ROOT}"
@@ -568,10 +595,7 @@ ROOT = "${CLAUDE_PLUGIN_ROOT}"
 ALLOWED = {"name", "displayName", "identity", "version", "description", "author",
            "repository", "homepage", "license", "keywords", "hooks", "mcpServers"}
 fails = []
-
-def reroot(s, comp):
-    return re.sub(r"\$\{CLAUDE_PLUGIN_ROOT\}(?!/" + re.escape(comp) + r"(?![\w-]))",
-                  ROOT + "/" + comp, s)
+UNWIRED_COMPONENTS = {os.environ["MISE_COMP"]}  # the mise-en-space component: the public kit never wires its servers
 
 suite = json.load(open(kit_dir / "suite/.claude-plugin/plugin.json"))
 manifest = {"name": kit}
@@ -616,15 +640,12 @@ for comp in comps:
             hooks.setdefault(event, []).append({**g, "hooks": new_hooks})
 
     for name, cfg in (pj.get("mcpServers") or {}).items():
+        if comp in UNWIRED_COMPONENTS:
+            continue
         if name in servers:
             fails.append(f"{comp}: MCP server '{name}' already declared by {owner[name]}")
             continue
-        def walk(v):
-            if isinstance(v, str): return reroot(v, comp)
-            if isinstance(v, list): return [walk(x) for x in v]
-            if isinstance(v, dict): return {k: walk(x) for k, x in v.items()}
-            return v
-        servers[name], owner[name] = walk(cfg), comp
+        servers[name], owner[name] = reroot_tree(cfg, comp), comp
 
 if skills: manifest["skills"] = skills
 if hooks: manifest["hooks"] = hooks
@@ -640,6 +661,34 @@ with open(kit_dir / ".claude-plugin/plugin.json", "w") as f:
 PYEOF
 }
 write_kit_manifest || exit 1
+# The public kit binds no Google Workspace (bds-jasuha): no mise server in its
+# manifest, and no bundled OAuth client anywhere in it. A held-back (quarantined)
+# mise is exempt from the file check: it is last-published bytes by design, and
+# the next suite bump replaces it.
+python3 - "$KIT_DIR" "$SOURCE_DIR/mise-en-space/server.py" <<'PYEOF' || { echo "FAIL: the public kit wires a server that runs the mise engine — a ring kit (mit, family) owns it" >&2; exit 1; }
+import json, re, sys
+from pathlib import Path
+# By what the server RUNS, not its key or its component's name: any kit server
+# naming a file under the kit that is byte-identical to mise-en-space's server.py
+# fails, whatever the key (mise-itv) or the component dir (gws) is called.
+kit, engine = Path(sys.argv[1]), Path(sys.argv[2]).read_bytes()
+servers = json.load(open(kit / ".claude-plugin/plugin.json")).get("mcpServers") or {}
+bad = []
+for n, cfg in servers.items():
+    for rel in re.findall(r"\$\{CLAUDE_PLUGIN_ROOT\}/([^\s\"']+)", json.dumps(cfg)):
+        f = kit / rel
+        if f.is_file() and f.read_bytes() == engine:
+            bad.append(f"kit server '{n}' runs {rel}, the mise engine")
+for b in bad:
+    print(f"  {b}", file=sys.stderr)
+sys.exit(1 if bad else 0)
+PYEOF
+if ! printf '%b' "$QUARANTINED" | grep -qx "$MISE_COMP"; then
+  stray=$(find "$KIT_DIR" -name credentials.json -not -path '*/.venv/*' | head -1)
+  if [ -n "$stray" ]; then
+    echo "FAIL: the public kit ships a bundled OAuth client ($stray) — it binds no Workspace" >&2; exit 1
+  fi
+fi
 stamp_version "$KIT_DIR/.claude-plugin/plugin.json" "$SUITE_VERSION"
 stamp_repository "$KIT_DIR/.claude-plugin/plugin.json" "batterie"
 # Shipped CHANGELOG is a generated stub pointing at the canonical suite
@@ -826,26 +875,36 @@ if [ -n "${FAMILY_OAUTH_CLIENT:-}" ]; then
   FAMILY_KIT="$FAMILY_OUT/plugins/$FAMILY_NAME"
   rm -rf "$FAMILY_OUT"
   mkdir -p "$FAMILY_KIT/.claude-plugin" "$FAMILY_OUT/.claude-plugin"
+  [ -f "$KIT_DIR/$MISE_COMP/server.py" ] || { echo "FAIL: family — no mise engine at plugins/$KIT/$MISE_COMP/server.py to build the family kit from" >&2; exit 1; }
   rsync -a --exclude .venv --exclude __pycache__ --exclude '*.pyc' --exclude /credentials.json --exclude /hooks --exclude /CLAUDE.md --exclude /.claude-plugin \
-    "$KIT_DIR/mise/" "$FAMILY_KIT/mise/"
+    "$KIT_DIR/$MISE_COMP/" "$FAMILY_KIT/mise/"
   cp "$FAMILY_OAUTH_CLIENT" "$FAMILY_KIT/mise/planetmodha-client.json"
   rsync -a "$BATTERIE_DIR/family/kit/" "$FAMILY_KIT/home/"
   cp "$BATTERIE_DIR/family/repo/README.md" "$BATTERIE_DIR/family/repo/CLAUDE.md" "$FAMILY_OUT/"
   write_changelog_stub "$FAMILY_KIT" "$SUITE_VERSION"
 
-  # Manifest + skill ids. The server entry is the PUBLIC kit's generated one
-  # (read, not retyped, so the launch command cannot drift between kits) plus
-  # the env; the tool-id rewrite and the skill's picker marker are the only
-  # text edits, each asserted.
-  python3 - "$KIT_DIR" "$FAMILY_KIT" "$FAMILY_NAME" "$SUITE_VERSION" "$MARKETPLACE_HOME" <<'PYEOF' || exit 1
-import json, re, sys
+  # Manifest + skill ids. The server entry is read from the vendored mise
+  # component's manifest (not retyped, so the launch command cannot drift from
+  # the engine) and re-rooted under mise/, plus the env. It used to be read from
+  # the public kit's generated manifest, which since bds-jasuha wires no mise
+  # server. The tool-id rewrite and the skill's picker marker are the only text
+  # edits, each asserted.
+  BATTERIE_DIR="$BATTERIE_DIR" MISE_COMP="$MISE_COMP" python3 - "$KIT_DIR" "$FAMILY_KIT" "$FAMILY_NAME" "$SUITE_VERSION" "$MARKETPLACE_HOME" <<'PYEOF' || exit 1
+import json, os, re, sys
 from pathlib import Path
+sys.dont_write_bytecode = True  # no __pycache__/ in this repo for the workflow's git add -A
+sys.path.insert(0, os.environ["BATTERIE_DIR"])
+from kitlib import ROOT, reroot_tree
 pub_kit, fam, name, version, home = Path(sys.argv[1]), Path(sys.argv[2]), sys.argv[3], sys.argv[4], sys.argv[5]
 fails = []
 pub = json.load(open(pub_kit / ".claude-plugin/plugin.json"))
-srv = pub.get("mcpServers", {}).get("mise")
+comp = json.load(open(pub_kit / os.environ["MISE_COMP"] / ".claude-plugin/plugin.json"))
+srv = comp.get("mcpServers", {}).get("mise")
 if not srv or "env" in srv:
-    sys.exit("FAIL: family — the public kit's mcpServers.mise is missing or already carries env; the family wiring needs a designed merge")
+    sys.exit("FAIL: family — the mise component's mcpServers.mise is missing or already carries env; the family wiring needs a designed merge")
+srv = reroot_tree(srv, "mise")
+if ROOT + "/mise/server.py" not in json.dumps(srv):
+    sys.exit("FAIL: family — the re-rooted server line does not run mise/server.py")
 srv = {**srv, "env": {
     "MISE_EN_SPACE_OAUTH_CLIENT": "${CLAUDE_PLUGIN_ROOT}/mise/planetmodha-client.json",
     "MISE_EN_SPACE_DATA_DIR": "${CLAUDE_PLUGIN_DATA}",
@@ -870,9 +929,11 @@ with open(fam / ".claude-plugin/plugin.json", "w") as f:
 
 skill = fam / "mise/skills/mise/SKILL.md"
 text = skill.read_text()
-text, n = re.subn(r"mcp__plugin_batterie_mise__", f"mcp__plugin_{name}_mise__", text)
+# The skill names the ITV kit's tools: mit's since bds-jasuha (batterie's in a
+# held-back pre-switch component).
+text, n = re.subn(r"mcp__plugin_(?:mit|batterie)_mise__", f"mcp__plugin_{name}_mise__", text)
 if n == 0:
-    fails.append("mise skill names no mcp__plugin_batterie_mise__ tool id to rewrite — its allowed-tools would not match this kit")
+    fails.append("mise skill names no mcp__plugin_mit_mise__ tool id to rewrite — its allowed-tools would not match this kit")
 marker = ("[Planet Modha (planetmodha.com) — the family Google Workspace; an ITV (itv.com) "
           "mise, if also installed, acts on a different Workspace.] ")
 text, m = re.subn(r"(?m)^description:\s*", lambda _: "description: " + marker, text, count=1)
@@ -898,8 +959,8 @@ for pp in fam.rglob("pyproject.toml"):
         fails.append(f"{pp.relative_to(fam)} takes its version from {m.group(1)}, which the kit does not ship — uv cannot build it")
 for p in fam.rglob("*"):
     if p.is_file() and p.suffix in (".md", ".json", ".py", ".sh"):
-        if "mcp__plugin_batterie_" in p.read_text(errors="ignore"):
-            fails.append(f"{p.relative_to(fam)} still names a batterie tool id")
+        if re.search(r"mcp__plugin_(?:batterie|mit)_", p.read_text(errors="ignore")):
+            fails.append(f"{p.relative_to(fam)} still names another kit's tool id")
 for d in fam.rglob(".claude-plugin"):
     if d.parent != fam:
         fails.append(f"{d.relative_to(fam)} is a nested manifest dir — claude.ai's validator refuses a plugin.json below the plugin root")
@@ -936,9 +997,22 @@ PYEOF
   fi
   fam_v=$(python3 -c "import json; print(json.load(open('$FAMILY_KIT/.claude-plugin/plugin.json'))['version'])")
   [ "$fam_v" = "$SUITE_VERSION" ] || { echo "FAIL: version skew — family kit $fam_v vs suite $SUITE_VERSION" >&2; exit 1; }
-  echo "  OK $FAMILY_NAME ← plugins/$KIT/mise + family/ ($SUITE_VERSION, client: $(basename "$FAMILY_OAUTH_CLIENT"))"
+  echo "  OK $FAMILY_NAME ← plugins/$KIT/$MISE_COMP + family/ ($SUITE_VERSION, client: $(basename "$FAMILY_OAUTH_CLIENT"))"
 else
   echo "  SKIP family marketplace '$FAMILY_NAME' — FAMILY_OAUTH_CLIENT not set (public-only run)"
+fi
+
+# No shipped uv project may fetch from a spm1001 git repo (bds-jasuha, E4): those
+# repos are private, so a consumer's `uv run` would fail to resolve — and the
+# build would still be green. repoint_uv_source checks the lock it rewrites;
+# this checks every vendored lock and pyproject, whatever keyed the wheel.
+git_srcs=$(grep -rlE 'git = "https://github\.com/spm1001/|git\+https://github\.com/spm1001/' \
+  --include=uv.lock --include=pyproject.toml "$BATTERIE_DIR/plugins" \
+  $( [ -n "${FAMILY_OAUTH_CLIENT:-}" ] && echo "$FAMILY_OUT" ) 2>/dev/null || true)
+if [ -n "$git_srcs" ]; then
+  echo "FAIL: shipped uv projects fetch from a private spm1001 git repo — ship the wheel instead:" >&2
+  printf '  %s\n' $git_srcs >&2
+  exit 1
 fi
 
 SCAN_DIRS="$BATTERIE_DIR/plugins $BATTERIE_DIR/README.md $BATTERIE_DIR/.claude-plugin/marketplace.json"

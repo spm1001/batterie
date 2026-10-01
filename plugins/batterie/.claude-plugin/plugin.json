@@ -1,7 +1,7 @@
 {
   "name": "batterie",
   "displayName": "Batterie",
-  "version": "2.5.0",
+  "version": "2.6.0",
   "description": "Kitchen tools for knowledge work, in one plugin: session rituals and GTD tracking (bon), Google Workspace (mise), browser automation (passe), messaging between Claude sessions (sonner), Todoist coaching (accomplis), review and isolation tools (trousse), and keeping it all current",
   "author": {
     "name": "Sameer Modha",
@@ -143,19 +143,5 @@
         ]
       }
     ]
-  },
-  "mcpServers": {
-    "mise": {
-      "command": "uv",
-      "args": [
-        "run",
-        "--project",
-        "${CLAUDE_PLUGIN_ROOT}/mise",
-        "--extra",
-        "extraction",
-        "python3",
-        "${CLAUDE_PLUGIN_ROOT}/mise/server.py"
-      ]
-    }
   }
 }

@@ -404,7 +404,7 @@ The `$HOME` guard in step 2 applies to a project-scope uninstall at the home dir
 claude plugin install batterie@batterie
 ```
 
-Report what you removed, and name anything you could not: a plugin synced from claude.ai lives in `plugins/synced/` and only claude.ai or Desktop can remove it (Customize → Plugins); tell the user to do that there. An empty registry is a normal case here — a machine whose plugins all came from claude.ai — so don't read it as nothing to do; the snapshot's synced lines are the list. Permission rules naming `mcp__plugin_mise_mise__…` now need `mcp__plugin_batterie_mise__…`; say so if you see one in `settings.json`. After this step, carry on with step 2 for what remains (normally just `batterie@batterie`).
+Report what you removed, and name anything you could not: a plugin synced from claude.ai lives in `plugins/synced/` and only claude.ai or Desktop can remove it (Customize → Plugins); tell the user to do that there. An empty registry is a normal case here — a machine whose plugins all came from claude.ai — so don't read it as nothing to do; the snapshot's synced lines are the list. Permission rules naming `mcp__plugin_mise_mise__…` or `mcp__plugin_batterie_mise__…` now need `mcp__plugin_mit_mise__…` (the ITV Google server moved to mit@mit); say so if you see one in `settings.json`. After this step, carry on with step 2 for what remains (normally just `batterie@batterie`).
 
 ### 2. Update each plugin from its own marketplace
 

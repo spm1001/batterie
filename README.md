@@ -24,9 +24,9 @@ Before the one-plugin release each tool was its own plugin (`bon@batterie`, `tro
 
 - **Claude Desktop and claude.ai:** in Customize → Plugins, uninstall each old batterie plugin and install **batterie**. A plugin installed through claude.ai syncs to your terminal sessions too, so do this even if you mostly use the terminal.
 - **Claude Code in a terminal:** run `/batterie:update`; it removes the old plugins it finds and installs the new one. By hand: `claude plugin uninstall <name>@batterie` for each of bon, trousse, mise, accomplis, sonner, passe and arete, then `claude plugin install batterie@batterie`.
-- **Permission rules** that name Google Workspace tools change prefix: `mcp__plugin_mise_mise__…` becomes `mcp__plugin_batterie_mise__…`.
+- **Permission rules** that name Google Workspace tools change prefix. The Google server now comes from your Workspace's own kit, not from batterie: for ITV that is mit@mit, so `mcp__plugin_mise_mise__…` and `mcp__plugin_batterie_mise__…` both become `mcp__plugin_mit_mise__…`. batterie carries the engine and the skill, and on its own starts no Google server.
 
-Your Google sign-in carries over; nothing asks you to consent again.
+Usually your Google sign-in carries over; if Google asks you to sign in once, that's expected.
 
 ## If the kit stops loading
 
@@ -46,7 +46,7 @@ Then start a new session and run `/batterie:update`. Re-adding a marketplace swi
 |--------|---------|--------------|-------|
 | **bon** | The ticket | GTD-flavoured work tracking — outcomes, actions, tactical steps | — |
 | **trousse** | The knife roll | Code review through three lenses, blank-slate Claudes, driving a real interactive session, skill authoring | — |
-| **mise** | Mise en place | Content fetching and prep from Google Workspace and the web (MCP) | An ITV (itv.com) Google account |
+| **mise** | Mise en place | Content fetching and prep from Google Workspace and the web (MCP) | Your Workspace's own kit for the Google server and sign-in (for ITV, mit@mit) |
 | **passe** | The pass | Fast browser automation via Chrome DevTools Protocol — fetch pages, screenshots, forms, network capture | A Chrome running with remote debugging |
 | **accomplis** | The commis | Todoist integration with GTD coaching — human-owned tasks and deadlines | A Todoist account and API token |
 | **sonner** | The bell | Inter-session messaging — ring a repo and a Claude answers, spawning one if nobody's home | — |

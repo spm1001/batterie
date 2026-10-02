@@ -18,7 +18,7 @@ reports the mismatches worth a review verdict:
   Coverage        commits citing anything / commits scanned — adoption
                   telemetry for the convention itself.
 
-Deliberately NOT reported: open items never cited. On a backlog most open
+Deliberately NOT reported: open items never cited. On a board most open
 items simply haven't started, so that direction is pure noise (decided at
 the item's birth, bon-nenine). Only modern six-letter IDs are matched —
 legacy short IDs (mise-qa6) predate the convention by definition.

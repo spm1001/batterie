@@ -37,7 +37,7 @@ but built the wrong thing" is now the more common one.
 It only works if the implementer didn't author it. **If you are filing the item,
 leave `--badly` absent** — an absent falsifier is an honest, visible gap, while
 one you wrote is `--done` in a hat: a test that cannot fail. `/lay-out` asks the
-human for it, in their words, verbatim. `/sweep` checks work against it.
+human for it, in their words, verbatim. `/bon-review` checks work against it.
 Outcomes only; the CLI nudges if it lands on an action.
 
 `--how` captures approach, strategy, constraints, and sequencing — things that don't belong in `--what` (deliverables) or `--why` (motivation). For simple work, skip it. For anything with technology choices, ordering dependencies, or coordination needs, include it.

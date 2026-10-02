@@ -2,7 +2,7 @@
 # requires-python = ">=3.11"
 # dependencies = ["pymysql"]
 # ///
-"""Audit survey — estate-wide view of open bon items for the /sweep skill.
+"""Audit survey — estate-wide view of open bon items for the /bon-review skill.
 
 Hybrid survey (bon-fuwofi): the shared Dolt database is the PRIMARY index —
 one global query covers every Dolt board in the estate, including repos with

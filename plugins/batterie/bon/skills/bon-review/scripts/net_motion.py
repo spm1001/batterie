@@ -248,7 +248,7 @@ def tally(records: list[dict], weeks: list[str]) -> dict:
       boards: {label: {backend, minted, closed, net, net_last2, open_now}}
       sources: {dolt|jsonl: {open_now, open_at_start, sum_net, residual,
                              unparseable_created, unparseable_done, items}}
-    net = closed − minted (negative: the backlog grew), matching the 2026-09-01
+    net = closed − minted (negative: the boards grew), matching the 2026-09-01
     handoff figures. The residual is open_now − (open_at_start − Σ net); it is
     zero when every stamp inside and before the window parsed. Items whose
     done_at is missing while status is done are counted in `done_without_stamp`
@@ -358,7 +358,7 @@ def render_text(result: dict, top: int) -> str:
     dolt_state = result["dolt"]
     lines.append(
         f"Net motion {weeks[0]['week']}..{weeks[-1]['week']} — net = closed − minted "
-        f"(negative: backlog grew). Dolt: {dolt_state}"
+        f"(negative: the boards grew). Dolt: {dolt_state}"
         + (f", {len(result['dolt_notes']['boards'])} boards" if dolt_state == "global" else "")
         + f"; JSONL: {len(result['jsonl_notes']['boards'])} boards."
     )

@@ -182,7 +182,7 @@ Now sort the remaining actions into three buckets:
 - Quick fixes where something is broken — even if they are in other repos, or were pre-existing problems
 - Closing off existing or superseded bon items with `--note`
 
-2. **Later** — tasks for a future session, which should be nested under Outcomes per the Bon skill:
+2. **Later** — tasks for a future session, which should be nested under Outcomes per the open skill:
 - Bigger things that need a fresh session — you know what needs doing, but it would need a different context load
 - Refactoring of Bons where you see a different path forward given the session's learnings
 - Things into which you have gained understanding which need further attention, even in other repos

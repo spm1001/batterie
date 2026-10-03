@@ -1,6 +1,6 @@
 ---
 name: bon-review
-description: "Orchestrates the bon review, the estate stocktake — load FIRST, before reviewing bons across repos. A 5-phase workflow (survey, verify, summarize, act, snapshot) that maps every board into the shape of the estate, its opportunities and breakages: jobs-grouped headlines first, subagents verify briefs against code, and nothing closes without approval. Invoke on '/bon-review', 'bon review', 'review my bons', 'stocktake', 'shape of the estate', 'what needs closing', 'queue reconciliation'. Requires bon skill loaded first."
+description: "Orchestrates the bon review, the estate stocktake — load FIRST, before reviewing bons across repos. A 5-phase workflow (survey, verify, summarize, act, snapshot) that maps every board into the shape of the estate, its opportunities and breakages: jobs-grouped headlines first, subagents verify briefs against code, and nothing closes without approval. Invoke on '/bon-review', 'bon review', 'review my bons', 'stocktake', 'shape of the estate', 'what needs closing', 'queue reconciliation'. Requires the open skill (bon's CLI conventions) loaded first."
 allowed-tools:
   - "Bash(bon:*)"
   - "Bash(uv:*)"
@@ -38,7 +38,7 @@ A repeatable 5-phase review that gives the operator the shape of the estate: wha
 
 ## Prerequisites
 
-- **Bon skill must be loaded** — audit uses `bon done` for closures
+- **The open skill must be loaded** (it carries the bon CLI conventions) — the review uses `bon done` for closures
 - **`uv` in PATH** — audit_survey.py runs via `uv run --script` (pymysql resolves automatically via PEP 723)
 - **Dolt server reachable** for the estate-wide view. If it's down the survey falls back to JSONL-boards-only and says so loudly — consider fixing the server before reviewing.
 

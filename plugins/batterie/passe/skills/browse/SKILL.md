@@ -92,6 +92,8 @@ passe --device "iPhone 14 Pro" --dpr 1 look https://example.com
 
 Available presets: iPhone 14 Pro, iPhone SE, Pixel 7, iPad Air, iPad Pro 11, Desktop 1080p.
 
+**A screenshot is a claim about one moment.** A UI that recomputes in place can pair your new input with its old answer: Snowsight keeps the previous result on screen while a new query runs, so a mid-run capture shows the new SQL above the old result and reads as one coherent frame. On 2026-09-02 that produced a demo slide evidencing the opposite of its caption. Wait for the busy indicator to appear and clear before capturing, then check the frame against what you expected it to show (carte-pulapu).
+
 ### 3. Understand page structure
 
 Two complementary tools: `snapshot` lists interactive elements with CSS selectors. `ax-tree` shows the browser's semantic accessibility tree.
@@ -218,6 +220,8 @@ passe log tail --file /tmp/reqs.jsonl --method POST
 ```
 
 **The pattern:** capture → identify API endpoint → call it directly via `eval` + `fetch()` using Chrome's authenticated session. Skip the UI entirely.
+
+**A capture of a logged-in site is a credential file.** `capture --bodies` writes the live bearer tokens and session cookies the browser sends. On 2026-09-10 a `jq` meant to list header names printed a full refresh cookie into the transcript, where it stays. Inspect headers as name and length, never value: `jq '.request_headers | to_entries[] | "\(.key): len=\(.value|length)"'`. Keep the file out of any repo, and delete it before the session ends (carte-sucupa).
 
 ### 7. Verify a deployment
 

@@ -343,6 +343,8 @@ Two notes on the key itself. `message.id` and `requestId` partition assistant en
 
 Reference implementation: `dedupe_by_request()` in deglacer `parsing.py`. **Both a July 2026 field report and a fresh reading in August reached "the usage objects are identical" from a small sample** — 4 entries of one session, and 2 sessions respectively — and the July one nearly shipped as the fix. Widen the sample before trusting this shape.
 
+**Counting tokens yourself from transcript content? Price images and documents at the vision rate, never by tokenising their base64.** An image block's base64 run through a text tokenizer charges about 40× what the model pays: roughly 20,000 tokens for an 800×450 thumbnail the model bills at about 480 (≈ width × height / 750), and about 95,000 for a PDF page render. One such scorer manufactured a whole "cost crossover" finding in the mise Tier 1 bench before a pre-registered tripwire caught it (2026-09-23, carte-febami). Before trusting any tally, count the image and document blocks it saw and check what it charged for each. The `usage` fields above avoid this, because the API has already priced the blocks.
+
 ### Checking the parser still fits — `deglacer --doctor`
 
 The schema moves with CC releases and a drifted parser does not raise; it quietly reports different numbers. `deglacer --doctor FILE` reports lines read, bad-JSON and non-object lines, entry-type counts, requests vs assistant entries, and duplicates collapsed — then renders findings and **exits 1 if anything is flagged**, so it works in a pipeline.

@@ -45,6 +45,8 @@ If a repo has both `.bon/backend=dolt` and a stale `items.jsonl`, the JSONL file
 
 A commit doing work tracked by a bon cites it: trailing `(bon-ID)` in the subject or body (e.g. `fix(close): resolve session id from env (bon-casovo)`). This is the link the orphans check reads — an open item no commit ever cites, or a commit citing an unknown ID, is a review-time signal. Untracked work commits normally; don't invent an item just to have an ID.
 
+**bon commits its own board changes — never `git add .bon` yourself.** Every write (`new`, `edit`, `done`, `wait`…) lands as its own `bon: …` commit on the checked-out branch, so staging `.bon/` afterwards does nothing, and on a Dolt board there is no `items.jsonl` to stage at all (seen 2026-09: `fatal: pathspec '.bon/items.jsonl' did not match any files`). If a board change must reach `main`, check which branch is checked out before writing.
+
 ## Discoverability
 
 `bon show ID --json` and `bon list --json` already pretty-print (indent=2). Pipe direct — no need to wrap in `python3 -m json.tool` or `json.dumps(d, indent=2)`.

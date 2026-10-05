@@ -95,12 +95,17 @@ third-party Go binary that indexed every session, was dropped on 2026-09-13
 after measurement: 52 invocations ever, two genuine searches in the preceding
 month, an installed build twelve releases behind an upstream shipping every
 two or three days, and an index holding unredacted transcript text. A native
-`deglacer --index` / `--search` over conversation text is specified and not yet
-built. Until it lands, route like this:
+`deglacer --index` / `--search` over conversation text now exists (index built
+by 2026-09-13), but nothing refreshes the index automatically — on 2026-10-04 it
+still read "indexed as of 2026-09-13". So run `deglacer --index` (incremental)
+before trusting a null, and read the "indexed as of" line it prints. Its recall
+and ranking have not been measured against the 13-task bench, so `rg` below
+stays the recall floor. Route like this:
 
 | Question | Reach for | Cost / caveat |
 |---|---|---|
 | "have we discussed X?" across all history | `rg -li -F 'fragment' ~/.claude/projects -g '*.jsonl'` | 100% recall on the 13-task bench, but ~120 unranked files per query and ~15s warm. Fixed-string (`-F`) matters: the raw bytes include JSON escaping |
+| indexed whole-history search | `deglacer --index && deglacer --search term` | Fast once indexed; refresh first (no cron), and treat a null as "not in the index as of <date>" until measured |
 | the same, inside the recent window | `deglacer --find "term"` | Scans the 200 most-recent sessions, stops at 10 matches, and PRINTS that scope — read the scope line before reading a null as an absence. `--since DATE` widens it to every session after that date |
 | "what happened in THIS session" | `deglacer --summary FILE` / `--json` / `--stats` | Schema-aware; the rest of this reference |
 

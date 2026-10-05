@@ -1,6 +1,6 @@
 {
   "name": "trousse",
-  "version": "2.6.3",
+  "version": "2.6.4",
   "description": "Code review through three lenses, blank-slate Claudes for cold reads and evals, driving a real interactive session, and skill authoring.",
   "author": {
     "name": "Sameer Modha",

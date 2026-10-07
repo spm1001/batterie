@@ -1,6 +1,6 @@
 {
   "name": "passe",
-  "version": "2.6.4",
+  "version": "2.6.5",
   "description": "Fast browser automation via Chrome DevTools Protocol — fetch pages, screenshots, forms, network capture. Needs a Chrome running with remote debugging; the passe CLI installs itself on first session.",
   "author": {
     "name": "Sameer Modha",

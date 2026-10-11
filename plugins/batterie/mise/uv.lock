@@ -813,21 +813,21 @@ wheels = [
 
 [[package]]
 name = "jeton"
-version = "1.4.1"
-source = { path = "wheels/jeton-1.4.1-py3-none-any.whl" }
+version = "1.5.0"
+source = { path = "wheels/jeton-1.5.0-py3-none-any.whl" }
 dependencies = [
     { name = "google-auth" },
     { name = "google-auth-oauthlib" },
 ]
 wheels = [
-    { filename = "jeton-1.4.1-py3-none-any.whl", hash = "sha256:ad1ae5b83011908ee9f26ae17bc49c44fc3c1c85e5215adb42d08209b1eb5057" },
+    { filename = "jeton-1.5.0-py3-none-any.whl", hash = "sha256:0c72e051750a82de78ca5799600378b49984387408d3f579bcd18caff069c14b" },
 ]
 
 [package.metadata]
 requires-dist = [
-    { name = "google-auth", specifier = ">=2.50.0" },
-    { name = "google-auth-oauthlib", specifier = ">=1.3.1" },
-    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0.0" },
+    { name = "google-auth", specifier = ">=2.56.2" },
+    { name = "google-auth-oauthlib", specifier = ">=1.4.0" },
+    { name = "pytest", marker = "extra == 'dev'", specifier = ">=9.1.1" },
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=7.1.0" },
 ]
 provides-extras = ["dev"]
@@ -1151,7 +1151,7 @@ dev = [
 requires-dist = [
     { name = "beautifulsoup4", marker = "extra == 'extraction'", specifier = ">=4.15.0" },
     { name = "httpx", extras = ["http2"], specifier = ">=0.28.1" },
-    { name = "jeton", path = "wheels/jeton-1.4.1-py3-none-any.whl" },
+    { name = "jeton", path = "wheels/jeton-1.5.0-py3-none-any.whl" },
     { name = "markdown", specifier = ">=3.10.3" },
     { name = "markitdown", extras = ["pdf"], marker = "extra == 'extraction'", specifier = ">=0.1.7" },
     { name = "mcp", extras = ["cli"], specifier = ">=2.0.0,<3.0.0" },

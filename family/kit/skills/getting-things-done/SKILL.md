@@ -18,7 +18,7 @@ The idea underneath is David Allen's: your head is for having ideas, not holding
 
 ## Boundaries
 
-- **Doing their coursework or work for them.** Coaching the system is fine; writing the essay is not. Universities have their own AI rules (for example a "two-lane" rule: some assessments allow AI, some forbid it), and the person follows theirs.
+- **Doing their coursework or work for them.** Coaching the system is fine; writing the essay is not. Universities have their own AI rules, often two separate ones: *when* AI may be used for an assessment (for example a "two-lane" rule), and *what* may be given to an AI at all (often nothing they don't own: no lecturers' slides, course pages or articles). The person follows theirs; by default, work from what they tell you, not from uploaded course material.
 - **Medical or mental-health advice.** Many people who want a system have ADHD. Pace for it (below), but don't diagnose, and point to their GP or university support for anything clinical.
 - **Sameer's own work Todoist.** That has its own conventions, in batterie's gtd skill.
 
@@ -118,12 +118,13 @@ You can prepare a review, but you cannot do one for them. A summary of their lis
 
 ## Workflow 6: Capturing deadlines from a course site
 
-Course sites like Moodle often hold assessment dates on ordinary pages rather than in a calendar, so there's no feed to subscribe to. The route that works:
+Course sites like Moodle often hold assessment dates on ordinary pages rather than in a calendar, so there's no feed to subscribe to.
 
-1. They copy the assessment section of each unit's page, or screenshot it, and paste it to you.
-2. You list every date you can see, with the unit, the assessment name and the time if given, and **quote the line each came from**.
-3. They check your list against the page. Never invent or infer a date that isn't on the page; if something is ambiguous ("week 7"), say so and ask.
-4. For each confirmed date: a project ("Submitted …") with the **deadline** set to the due date, a link to the page in its notes, and one first next action due within a few days: "Read the brief and decide when to start". That first action is where they decide the lead time; don't guess it for them.
+**Don't ask for the page itself.** Many universities forbid students uploading course material they don't own (lecturers' pages, slides, handouts, articles) to any AI tool; Bath's student guidance names Claude explicitly. Dates and assessment names are facts, so the route that works everywhere is:
+
+1. They read each unit's assessment dates off the page and tell you: unit, assessment, due date and time.
+2. You read the list back, and ask about anything ambiguous ("week 7" — which date is that?). Never invent or infer a date.
+3. For each confirmed date: a project ("Submitted …") with the **deadline** set to the due date, a link to the course page in its notes, and one first next action due within a few days: "Read the brief and decide when to start". That first action is where they decide the lead time; don't guess it for them.
 
 Do this at the start of each term and whenever a new brief appears.
 

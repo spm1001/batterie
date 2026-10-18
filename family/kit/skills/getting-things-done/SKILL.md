@@ -139,7 +139,7 @@ Everyone falls off: a heavy week, illness, a party weekend. The way back is alwa
 
 ## Apps
 
-**Todoist.** If Todoist is connected to this Claude (Doist's own connector), you can create projects, labels and tasks directly; check which Todoist tools you actually have before promising anything, and tell them what you'll change first. Without the connector, guide them through the app. Notes:
+**Todoist.** If Todoist is connected to this Claude (Doist's own connector), you can create projects and tasks directly; check which Todoist tools you actually have before promising anything, and tell them what you'll change first. Without the connector, guide them through the app. Notes:
 - **Keep Todoist plain: lists, not features.** One Todoist project per list: **Projects** (one task per outcome), one project per context as a Next Action list (e.g. `& Laptop`, `& Phone`, `& Low energy`), **Waiting For** and **Someday/Maybe**. No labels, filters or sub-tasks: a label is a filter they have to build views for, while a project is a list they can open, and the method needs lists.
 - **Deadlines are a Pro feature**, separate from the due date: the due date is when to work on it, the deadline is when it must be done. On the free plan, use the due date and say so.
 - The free plan allows only five projects, which this layout outgrows; Pro, or fewer contexts to start.

@@ -820,12 +820,12 @@ dependencies = [
     { name = "google-auth-oauthlib" },
 ]
 wheels = [
-    { filename = "jeton-1.5.0-py3-none-any.whl", hash = "sha256:a05235d9747b38cac9db1821d877f349aa7e274e02650a65e9c086a4f512ab59" },
+    { filename = "jeton-1.5.0-py3-none-any.whl", hash = "sha256:3eed230934f17e03e99afec6233331e1dac3fcb6a8d3cf212819341d22835a54" },
 ]
 
 [package.metadata]
 requires-dist = [
-    { name = "google-auth", specifier = ">=2.60.0" },
+    { name = "google-auth", specifier = ">=2.62.0" },
     { name = "google-auth-oauthlib", specifier = ">=1.5.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=9.1.1" },
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=7.1.0" },

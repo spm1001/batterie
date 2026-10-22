@@ -8,7 +8,8 @@
 # three things a family session needs from them instead:
 #   1. writes the family shard, rules/family.md, every session start;
 #   2. syncs the engine's dependencies once, so the first MCP start is not a
-#      cold install racing its connect timeout;
+#      cold install racing its connect timeout (and, on a Mac, Coursier's —
+#      the Apple Mail component; elsewhere its server needs nothing);
 #   3. says, once per session, when there is no Google sign-in yet — and stays
 #      quiet when the engine will adopt the pre-kit mise-home token by itself.
 # Silent when all is well.

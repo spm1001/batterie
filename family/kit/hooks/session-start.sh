@@ -86,6 +86,18 @@ elif [ ! -d "$ENGINE/.venv" ]; then
     fi
 fi
 
+# Coursier (Apple Mail) runs only on a Mac; sync its dependencies there for the
+# same reason as the engine's, and say nothing elsewhere: off a Mac its server
+# answers every call with one sentence saying so.
+COURSIER="$KIT_ROOT/coursier"
+if [ -n "$UV_BIN" ] && [ "$(uname -s)" = "Darwin" ] && [ -f "$COURSIER/pyproject.toml" ] && [ ! -d "$COURSIER/.venv" ]; then
+    SYNC_LOG="$HOME/.cache/family-kit/coursier-sync.log"
+    mkdir -p "$(dirname "$SYNC_LOG")"
+    if ! "$UV_BIN" sync --project "$COURSIER" --quiet >"$SYNC_LOG" 2>&1; then
+        ISSUES="${ISSUES}• The Apple Mail tool's dependencies failed to install (log: ${SYNC_LOG}). Retry with: uv sync --project \"$COURSIER\"\n"
+    fi
+fi
+
 # --- 3. Is there a Google sign-in? --------------------------------------------
 # Mirrors the engine's own search (token_store.resolve_token_path): this kit's
 # store, then a pre-kit store holding a token minted by THIS client — the
@@ -127,5 +139,5 @@ PYEOF
 fi
 
 [ -z "$ISSUES" ] && exit 0
-MSG="$(printf '%b' "Family kit — Google Workspace setup:\n\n${ISSUES}")"
+MSG="$(printf '%b' "Family kit — setup:\n\n${ISSUES}")"
 python3 -c 'import json, sys; print(json.dumps({"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": sys.argv[1]}}))' "$MSG"

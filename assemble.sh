@@ -179,6 +179,13 @@ PYEOF
 # loop and the guards, which both outputs pass through.
 FAMILY_OUT="${ASSEMBLE_FAMILY_OUT:-$BATTERIE_DIR/dist/family}"
 FAMILY_NAME="family"
+# Family-only components, vendored whole into plugins/family/<component>/ and
+# never into the public kit. Keep the `name:repo` line shape: assemble.yml's
+# clone list greps every such line in this file. coursier (Apple Mail, macOS
+# only) is for family mailboxes whose organisation blocks cloud connectors.
+FAMILY_COMPONENTS="
+coursier:coursier
+"
 
 # The single suite version (bds-suwoho): one number stamped onto every
 # vendored plugin so all published plugins carry an identical version. It
@@ -880,6 +887,15 @@ if [ -n "${FAMILY_OAUTH_CLIENT:-}" ]; then
     "$KIT_DIR/$MISE_COMP/" "$FAMILY_KIT/mise/"
   cp "$FAMILY_OAUTH_CLIENT" "$FAMILY_KIT/mise/planetmodha-client.json"
   rsync -a "$BATTERIE_DIR/family/kit/" "$FAMILY_KIT/home/"
+  for entry in $FAMILY_COMPONENTS; do
+    comp="${entry%%:*}"; repo="${entry##*:}"
+    [ -f "$SOURCE_DIR/$repo/.claude-plugin/plugin.json" ] || { echo "FAIL: family — component $comp has no source at $SOURCE_DIR/$repo" >&2; exit 1; }
+    # Its .claude-plugin/ is read below for the server line, then left behind:
+    # claude.ai's validator refuses a nested plugin.json.
+    rsync -a --exclude .git --exclude .bon --exclude .venv --exclude __pycache__ --exclude '*.pyc' \
+      --exclude .pytest_cache --exclude /tests --exclude /CLAUDE.md --exclude /.claude-plugin \
+      "$SOURCE_DIR/$repo/" "$FAMILY_KIT/$comp/"
+  done
   cp "$BATTERIE_DIR/family/repo/README.md" "$BATTERIE_DIR/family/repo/CLAUDE.md" "$FAMILY_OUT/"
   write_changelog_stub "$FAMILY_KIT" "$SUITE_VERSION"
 
@@ -889,7 +905,8 @@ if [ -n "${FAMILY_OAUTH_CLIENT:-}" ]; then
   # the public kit's generated manifest, which since bds-jasuha wires no mise
   # server. The tool-id rewrite and the skill's picker marker are the only text
   # edits, each asserted.
-  BATTERIE_DIR="$BATTERIE_DIR" MISE_COMP="$MISE_COMP" python3 - "$KIT_DIR" "$FAMILY_KIT" "$FAMILY_NAME" "$SUITE_VERSION" "$MARKETPLACE_HOME" <<'PYEOF' || exit 1
+  BATTERIE_DIR="$BATTERIE_DIR" MISE_COMP="$MISE_COMP" FAMILY_COMPONENTS="$FAMILY_COMPONENTS" SOURCE_DIR="$SOURCE_DIR" \
+  python3 - "$KIT_DIR" "$FAMILY_KIT" "$FAMILY_NAME" "$SUITE_VERSION" "$MARKETPLACE_HOME" <<'PYEOF' || exit 1
 import json, os, re, sys
 from pathlib import Path
 sys.dont_write_bytecode = True  # no __pycache__/ in this repo for the workflow's git add -A
@@ -909,19 +926,30 @@ srv = {**srv, "env": {
     "MISE_EN_SPACE_OAUTH_CLIENT": "${CLAUDE_PLUGIN_ROOT}/mise/planetmodha-client.json",
     "MISE_EN_SPACE_DATA_DIR": "${CLAUDE_PLUGIN_DATA}",
 }}
+servers = {"mise": srv}
+skills = ["./mise/skills/", "./home/skills/"]
+for entry in os.environ["FAMILY_COMPONENTS"].split():
+    comp, repo = entry.split(":", 1)
+    cman = json.load(open(Path(os.environ["SOURCE_DIR"]) / repo / ".claude-plugin/plugin.json"))
+    for sname, scfg in (cman.get("mcpServers") or {}).items():
+        if sname in servers:
+            sys.exit(f"FAIL: family — component {comp} wires a server named {sname!r}, which the kit already has")
+        servers[sname] = reroot_tree(scfg, comp)
+    if (fam / comp / "skills").is_dir():
+        skills.append(f"./{comp}/skills/")
 manifest = {
     "name": name,
     "displayName": "Family",
     "version": version,
-    "description": "Google Workspace tools for the Planet Modha family — search Drive, read Gmail, act on documents and calendars, signed in with the family's own Google account",
+    "description": "Tools for the Planet Modha family — Google Workspace (Drive, Gmail, documents, calendars) on the family's own Google account, and Apple Mail on a Mac for mail accounts with no cloud connector",
     "author": pub.get("author", {"name": "Sameer Modha"}),
     "repository": home,
     "license": pub.get("license", "MIT"),
-    "keywords": ["google", "workspace", "mcp", "family"],
-    "skills": ["./mise/skills/", "./home/skills/"],
+    "keywords": ["google", "workspace", "mail", "mcp", "family"],
+    "skills": skills,
     "hooks": {"SessionStart": [{"matcher": "", "hooks": [
         {"type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/home/hooks/session-start.sh"}]}]},
-    "mcpServers": {"mise": srv},
+    "mcpServers": servers,
 }
 with open(fam / ".claude-plugin/plugin.json", "w") as f:
     json.dump(manifest, f, indent=2, ensure_ascii=False)
@@ -976,7 +1004,7 @@ pj = json.load(open(f"{out}/plugins/{name}/.claude-plugin/plugin.json"))
 manifest = {
     "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
     "name": name,
-    "description": "The Planet Modha family's private kit: Google Workspace tools on the family's own Google account",
+    "description": "The Planet Modha family's private kit: Google Workspace tools on the family's own Google account, and Apple Mail on a Mac",
     "owner": {"name": "Sameer Modha", "email": "sameer@modha.dev"},
     "plugins": [{"name": name, "displayName": pj["displayName"], "source": f"./plugins/{name}",
                  "description": pj["description"], "category": "integration",

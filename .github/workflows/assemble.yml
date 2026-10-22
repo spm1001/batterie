@@ -60,6 +60,7 @@ jobs:
           DEPLOY_KEY_SONNER: ${{ secrets.SONNER_DEPLOY_KEY }}
           DEPLOY_KEY_DEGLACER: ${{ secrets.DEGLACER_DEPLOY_KEY }}
           DEPLOY_KEY_JETON: ${{ secrets.JETON_DEPLOY_KEY }}   # bds-sipaba
+          DEPLOY_KEY_COURSIER: ${{ secrets.COURSIER_DEPLOY_KEY }}   # family-only component (Apple Mail)
         run: |
           repos=$(grep -E '^[a-z-]+:[a-z-]+$' batterie/assemble.sh | cut -d: -f2 | sort -u)
           test -n "$repos"

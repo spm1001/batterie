@@ -5,7 +5,7 @@ description: Says honestly what else the family could add beyond this kit's Goog
 
 # More tools (Planet Modha family)
 
-This family kit holds two things: Google Workspace tools for Planet Modha (Drive, Gmail, Calendar, Docs), signed in with the family's own Google account, and **getting-things-done**, a skill that coaches someone through organising their life and running a weekly review in any app (Todoist, Things or paper). It stands alone and needs nothing else installed.
+This family kit holds three things: Google Workspace tools for Planet Modha (Drive, Gmail, Calendar, Docs), signed in with the family's own Google account; **coursier**, which reads, archives and drafts mail through the Apple Mail app on a Mac, for accounts such as a university's Outlook that allow no cloud connector (it never sends: the person presses Send); and **getting-things-done**, a skill that coaches someone through organising their life and running a weekly review in any app (Todoist, Things or paper). It stands alone and needs nothing else installed.
 
 ## When to use
 

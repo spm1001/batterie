@@ -1,6 +1,6 @@
 # family-kit — the Planet Modha family's private marketplace (generated)
 
-One marketplace, `family`, holding one plugin, `family`: Google Workspace tools (the mise engine, unmodified) signed in against the Planet Modha Google account. It stands alone — nothing else needs installing.
+One marketplace, `family`, holding one plugin, `family`: Google Workspace tools (the mise engine, unmodified) signed in against the Planet Modha Google account, and Coursier, which reads, archives and drafts mail through Apple Mail on a Mac (it cannot send). It stands alone — nothing else needs installing.
 
 ```
 claude plugin marketplace add spm1001/family-kit

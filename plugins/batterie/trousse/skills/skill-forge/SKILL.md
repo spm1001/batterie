@@ -209,7 +209,9 @@ Creates `.skill` file (zip format) for distribution.
 - [ ] Consistent terminology throughout
 - [ ] Concrete examples, not abstract rules
 - [ ] Configuration values justified
-- [ ] Error handling documented
+- [ ] Errors indexed in one table — message or symptom → why → what to do (a "whose move" column where it can be someone else's), not prose spread across steps (house examples: `mit:gcp`, `mit:snowflake`, `diagnose`)
+- [ ] Numbers carry receipts — what was run, when, how many samples ("measured 2026-10-11, one attempt each", `mit:image-gen`); a number nobody measured says it is a rule of thumb
+- [ ] Says what a green result does not establish, wherever a pass could be forwarded as more than it is (`mit:clean-room`'s "What an all-✓ audit does not establish")
 - [ ] Dependencies explicitly listed
 - [ ] Anti-patterns section present
 - [ ] Rules carry their why — mechanism prose transfers where the rule's letter runs out: far-transfer 15/15 with whys vs 8/15 bare rules, p=0.003 (banc guidance A/B, 2026-08-03)
@@ -224,6 +226,7 @@ Creates `.skill` file (zip format) for distribution.
 - [ ] When to Use AND When NOT to Use sections
 - [ ] Integration points with other skills explicit
 - [ ] Verification/validation included
+- [ ] For any skill that writes: which actions are safe to repeat, and what to look at before re-issuing one that isn't (`tailnet-acl`'s exit 3, mise's write table) — a timeout does not say whether the write landed
 - [ ] Quick reference for common operations
 - [ ] Recipes don't silently narrow attention — enumerated read-lists are marked as floors ("sweep everything; these are where the gold usually sits") or preceded by an explicit sweep step; a skill's map becomes the model's blind spots (skilled runs read 0% of an unlisted inbox that bare runs read 100% — accomplis coaching eval, 2026-08-05; register-principles P9)
 

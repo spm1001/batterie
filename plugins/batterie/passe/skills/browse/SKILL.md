@@ -81,9 +81,11 @@ passe look https://news.ycombinator.com
 # Full-page PNG (large, high fidelity)
 passe run -c 'goto https://example.com; screenshot /tmp/out.png'
 
-# Fast iteration (JPEG, viewport-only, 2-4x faster)
+# Fast iteration (JPEG, viewport-only: faster the longer the page — see below)
 passe run -c 'goto https://example.com; screenshot --fast /tmp/out.jpg'
 ```
+
+**How much faster `--fast` is** (measured 2026-10-22: Chrome 155 behind `:9222`, foreground tab, three pages, two or three pairs each). The gain comes mostly from capturing the viewport only, so it grows with page length: 1.0–1.3x on a short page (Hacker News), 1.5–2.4x on BBC News, 2.5–3.9x on a long Wikipedia article. Files were 3x smaller on the short page and 17–28x smaller on the long ones. A single run on one backend, so read it as a shape, not a constant.
 
 **Mobile device emulation:**
 ```bash
@@ -334,7 +336,7 @@ passe log stop
 | `scroll down 500` | Pixel coordinates: `scroll 0 500` |
 | "Passe is broken" on connection refused | Run `passe status`. Diagnose the connection, not the tool. |
 | Chasing "doubled output" | Claude Code bash quirk on non-zero exit. Check the error, ignore the duplication. |
-| PNG for inner-loop iteration | Use `screenshot --fast` (JPEG viewport-only, 2-4x faster). |
+| PNG for inner-loop iteration | Use `screenshot --fast` (JPEG viewport-only; 1–4x faster depending on page length, far smaller). |
 | Monster inline one-liners | Use heredoc for 5+ verbs. |
 | `click e1` with no refs snapped, or after a navigation | Refs come from `ax-tree --flat-refs` and clear on navigation. Re-snap, then act. |
 | `--cdp` gymnastics to get a human signed in | `passe login <url>` is the verb — visible Chrome, foreground tab, kept + recorded. |

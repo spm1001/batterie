@@ -311,7 +311,23 @@ PYEOF`
 
 ## Your task
 
-Update every batterie plugin listed above. Follow these steps exactly:
+Update every batterie plugin listed above. Follow these steps exactly.
+
+Not for the MIT kit: `mit@mit` updates with `/mit:mit-refresh`, which also refreshes the files that kit deployed (statusline, cost line, rules shard).
+
+**Reading the snapshot and the run.** Each flag below has its full story in the step it names; this is the index.
+
+| You see | Why | Do |
+|---|---|---|
+| `⚠️ SNAPSHOT FAILED`, `⚠️ SNAPSHOT WARNING`, or "Registry lists no batterie plugins but a batterie plugin cache exists" | The before-state can't be trusted: unreadable registry, an unrecognised marketplace shape, or a silent registry drop | The sanity gate below: read `installed_plugins.json` directly |
+| `🩹 MARKETPLACE REPAIR NEEDED` | `settings.json` and Claude Code's own registry disagree about a marketplace, so it has stopped loading, silently | Step 0 |
+| `🔀 MOVE TO ONE PLUGIN NEEDED` | Old per-tool plugins (`bon@batterie`…) are still installed beside the kit | Step 1b |
+| A CLI shows `NOT IN PATH` or `(version check failed)` | The CLI is missing, or its `--version` crashed or hung | Step 4 reinstalls it from the shipped wheel |
+| Step 1 fails with "corrupted installLocation" | Nothing is corrupted: this session runs under a second `CLAUDE_CONFIG_DIR` sharing the primary's plugins tree | Rerun with `CLAUDE_CONFIG_DIR=<the dir the error names>`; never remove and re-add |
+| Step 3: a plugin's scopes still disagree | One scope updated and another didn't | Report it loudly; it is the failure step 3 exists to catch |
+| Step 3: a plugin from the before-list is missing after | A silent registry drop | `claude plugin install <name>@<marketplace>` |
+
+Each command is run once. If one fails in a way this table doesn't name, read the state again (the two registry files) before running anything else, and report what you found.
 
 **Snapshot sanity gate:** if the snapshot above shows any ⚠️ line — or claims nothing is installed while batterie plugins are plainly active in this session — do not proceed from it. Read `~/.claude/plugins/installed_plugins.json` directly and use that as the before-state (and `known_marketplaces.json` to see what the marketplace list should have been). A false-empty snapshot otherwise turns the whole update into a silent no-op (bds-mifubu).
 

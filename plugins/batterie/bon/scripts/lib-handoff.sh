@@ -47,6 +47,11 @@ board_root() {
 handoff_write_dir() {
     local start="$1" root walk
     root=$(board_root "$start") || root=""
+    # A bare stash is not a board (same guard as handoff_migrate_legacy): at
+    # cwd=$HOME board_root adopts the prefix-less ~/.bon, the global catch-all.
+    # Writing to its visible handoffs/ would mint a pile no reader lists
+    # (bon-desasi, bon-pasesi), so fall through to ~/.bon/handoffs instead.
+    if [ -n "$root" ] && [ ! -f "$root/.bon/prefix" ]; then root=""; fi
     walk="$start"
     while [ "$walk" != "/" ]; do
         if [ -d "$walk/handoffs" ]; then printf '%s\n' "$walk/handoffs"; return 0; fi

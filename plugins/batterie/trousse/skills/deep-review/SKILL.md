@@ -1,10 +1,12 @@
 ---
 name: deep-review
 description: >
-  Three-lens code review using parallel subagents: Epimetheus (hindsight — bugs, debt, fragility),
-  Metis (craft — clarity, idiom, fit-for-purpose), Prometheus (foresight — vision, extensibility, future-Claude).
-  Triggers on /deep-review, 'review this code', 'what did I miss', 'before I ship this'.
-  Use after completing substantial work, before /close. (user)
+  Orchestrates a three-lens code review — invoke before shipping substantial work, and after
+  it is done but before /close. Parallel subagents: Mnemosyne (memory — what the change broke that
+  used to work), Metis (craft — clarity, idiom, fragility, debt), Prometheus (foresight — vision,
+  extensibility), then a synthesis that ensures findings become a critical path, not three reports.
+  Triggers on /deep-review, 'review this code', 'what did I miss', 'before I ship this',
+  'check for regressions'. (user)
 allowed-tools: [Read, Glob, Grep, Agent]
 ---
 
@@ -27,16 +29,16 @@ Three reviewers, three lenses. Dispatch in parallel, synthesize findings.
 
 ## Beyond Code Review
 
-The three-lens pattern works for more than code. The underlying structure (hindsight/craft/foresight) applies to any artifact worth reviewing thoroughly:
+The three-lens pattern works for more than code. The underlying structure (memory/craft/foresight) applies to any artifact worth reviewing thoroughly:
 
-| Domain | Epimetheus asks | Metis asks | Prometheus asks |
-|--------|-----------------|------------|-----------------|
-| **Documentation** | What's stale or misleading? | Is it clear and well-structured? | Does it serve future readers? |
-| **Architecture** | What's fragile or debt-laden? | Does it follow good patterns? | Does it enable what we're building toward? |
-| **Process** | What's broken or painful? | Is it efficient and clear? | Will it scale with the team? |
-| **CLAUDE.md** | What's wrong or outdated? | Is it well-organized? | What should future Claude know? |
+| Domain | Mnemosyne asks | Metis asks | Prometheus asks |
+|--------|----------------|------------|-----------------|
+| **Documentation** | What did this edit drop that readers relied on? | Is it clear, accurate and well-structured? | Does it serve future readers? |
+| **Architecture** | Which contract or consumer did this change break? | Is it well-patterned, or fragile and debt-laden? | Does it enable what we're building toward? |
+| **Process** | What used to work that now doesn't? | Is it efficient and clear? | Will it scale with the team? |
+| **CLAUDE.md** | What true guidance did this edit lose? | Is it well-organized, or stale? | What should future Claude know? |
 
-**Discovered Jan 2026:** Used titans pattern to review trousse itself for CLAUDE.md updates. The three lenses surfaced different categories of findings — infrastructure bugs (Epimetheus), stale references (Metis), undocumented contracts (Prometheus) — that a single-pass review would have missed.
+**Discovered Jan 2026:** Used titans pattern to review trousse itself for CLAUDE.md updates. The three lenses surfaced different categories of findings — infrastructure bugs (Epimetheus, the hindsight lens Mnemosyne later replaced), stale references (Metis), undocumented contracts (Prometheus) — that a single-pass review would have missed.
 
 **When adapting:** Adjust the reviewer briefs for the domain. The output structure (findings, assumptions, could-not-assess, questions) remains useful regardless of what you're reviewing.
 
@@ -44,11 +46,13 @@ The three-lens pattern works for more than code. The underlying structure (hinds
 
 | Titan | Lens | Question | Focus |
 |-------|------|----------|-------|
-| **Epimetheus** | Hindsight | "What has already gone wrong, or will bite us?" | Bugs, debt, fragility, security |
-| **Metis** | Craft | "Is this well-made, right now, for what it is?" | Clarity, idiom, structure, tests |
+| **Mnemosyne** | Memory | "What did this change make the code forget?" | Regressions: callers, contracts, removals, platforms, lost protection |
+| **Metis** | Craft | "Is this well-made, right now, for what it is?" | Clarity, idiom, structure, tests, fragility, debt |
 | **Prometheus** | Foresight | "Does this serve what we're building toward?" | Vision, extensibility, knowledge capture |
 
-**Why these three?** Hindsight catches what's broken. Craft ensures current quality. Foresight protects future-you. Small overlaps are fine — they're perspectives, not partitions.
+**Why these three?** Memory catches what the change broke. Craft ensures current quality. Foresight protects future-you. Small overlaps are fine — they're perspectives, not partitions.
+
+**Why Mnemosyne replaced Epimetheus (Oct 2026).** Regressions are the defects that most often reach our users, and tests catch few of them. A blind test gave reviewers the 39 commits that shipped our 42 known user-facing regressions, plus 39 size-matched ordinary commits, and two blind judges scored the reviews. Epimetheus, the old hindsight lens, caught 19 of 42 but raised about 8 findings on every ordinary commit, roughly 9 in 10 of them false. A plain "review this for regressions" prompt caught 21 at about 3 findings per commit. Mnemosyne caught 26 at about 2 per commit, and her confirmed pile was about 70% real. The edge over the plain prompt is not significant at this size (p = 0.18), and her focus list was written from the same regressions, so expect a smaller edge on new code. Epimetheus's debt and fragility checks moved to Metis. Evidence: banc `regression-dig/review-test/RESULTS.md`.
 
 ## Orchestration
 
@@ -75,7 +79,7 @@ Each reviewer receives:
 Task(
   subagent_type: "Explore",
   model: "opus",
-  description: "EPIMETHEUS review of [scope]",
+  description: "MNEMOSYNE review of [scope]",
   prompt: "[Reviewer brief from REVIEWERS.md] + [scoped files] + [output template]"
 )
 ```
@@ -88,7 +92,7 @@ Each reviewer returns structured findings. See [Output Structure](#output-struct
 
 **Partial failures:** If a reviewer times out, errors, or returns malformed output:
 - Proceed with available outputs (two reviews > none)
-- Note the gap in synthesis ("Epimetheus did not complete — hindsight lens missing")
+- Note the gap in synthesis ("Mnemosyne did not complete — memory lens missing")
 - Consider re-running the failed reviewer with tighter scope
 
 ### 4. Synthesize
@@ -135,6 +139,8 @@ Specific, answerable questions:
 - "Who are the intended consumers?"
 ```
 
+**Mnemosyne uses her own two-pile template** (Findings, then Unresolved), set out in her brief. Read her Findings first. Unresolved is a second pile to work through, not noise: it is where she puts suspected breaks she could not prove from the code alone.
+
 **"Could not assess" is itself diagnostic.** A codebase that leaves Prometheus constantly asking "what are we building toward?" has a documentation problem worth surfacing.
 
 ---
@@ -147,9 +153,9 @@ After collecting all three reviews, produce:
 ## Review Triad Synthesis
 
 ### High-Priority Findings (Multiple Reviewers)
-| Finding | E | M | P | Action |
-|---------|---|---|---|--------|
-| [issue] | ✓ | ✓ | — | [fix]  |
+| Finding | Mn | M | P | Action |
+|---------|----|---|---|--------|
+| [issue] | ✓  | ✓ | — | [fix]  |
 
 ### Conflicts Reveal Trade-offs
 | Trade-off | Metis says | Prometheus says | Resolution |
@@ -185,7 +191,7 @@ Repeated across reviewers:
 ## Observed Token Consumption
 
 From test runs, reviewers tend to use tokens in this order:
-- **Epimetheus** uses the most — deepest spelunking through code paths
+- **Mnemosyne** traces outward from the diff to callers and consumers, so her cost grows with how widely the changed code is used (median 48 s and $0.30 per commit in the Oct 2026 test)
 - **Metis** uses moderate — structural analysis, less exploration
 - **Prometheus** uses the least — architectural assessment from less code
 
@@ -199,6 +205,7 @@ This varies by codebase size and scope clarity. If a reviewer seems to be loopin
 | Skip synthesis | Three reports, no action | Always synthesize findings |
 | Ignore partial failures | Miss perspectives | Report which reviewer failed, proceed with others |
 | Review before work is "done" | Premature review | Complete the feature first |
+| Every finding read at equal weight | Real breaks drown in notes | Mnemosyne's Findings first, then her Unresolved, then the rest |
 
 ---
 

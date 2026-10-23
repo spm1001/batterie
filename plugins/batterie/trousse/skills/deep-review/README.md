@@ -2,8 +2,8 @@
 
 Three-lens code review using parallel subagents, named for the Greek Titans:
 
-- **Epimetheus** (hindsight) — What's broken, fragile, or accruing debt?
-- **Metis** (craft) — Is this well-made for what it is?
+- **Mnemosyne** (memory) — What did this change break that used to work?
+- **Metis** (craft) — Is this well-made, and is it fragile or accruing debt?
 - **Prometheus** (foresight) — Does this serve where we're going?
 
 ## Usage
@@ -24,9 +24,11 @@ After completing substantial work, before /close. Sits in the workflow as:
 
 ## The Mythology
 
-Prometheus means "forethought" — he warned against accepting Zeus's gifts. Epimetheus means "afterthought" — he accepted Pandora anyway. Metis is the Titaness of practical wisdom, cunning intelligence, and good counsel.
+Prometheus means "forethought" — he warned against accepting Zeus's gifts. Mnemosyne is the Titaness of memory, mother of the Muses: a regression is code forgetting something it used to do. Metis is the Titaness of practical wisdom, cunning intelligence, and good counsel.
 
-The three lenses form a largely MECE set: hindsight catches what's broken, craft ensures current quality, foresight protects future-you.
+Until October 2026 the first lens was Epimetheus ("afterthought", who accepted Pandora anyway), hunting bugs, debt and fragility. A blind test on the commits behind our known regressions found he caught no more than a plain "review this for regressions" prompt while raising about three times the findings, nearly all false. Mnemosyne took his place, and his debt and fragility checks moved to Metis. See the skill's "Why Mnemosyne replaced Epimetheus".
+
+The three lenses form a largely MECE set: memory catches what the change broke, craft ensures current quality, foresight protects future-you.
 
 ## Files
 
@@ -46,4 +48,4 @@ Developed in conversation, January 2026. First run produced a synthesis that sur
 - Documentation debt (4 items repeated across "could not assess")
 - Clear critical path (3 items blocking shipping)
 
-The token disparity told a story: Epimetheus (127k) did the most spelunking, Prometheus (74k) could assess vision from less code.
+The token disparity told a story: Epimetheus (127k, the lens since replaced by Mnemosyne) did the most spelunking, Prometheus (74k) could assess vision from less code.

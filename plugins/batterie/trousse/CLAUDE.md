@@ -71,8 +71,8 @@ ardoise, deglacer, hublot, review, skill-forge, titans
 
 | Titan | Lens |
 |-------|------|
-| **Epimetheus** | Hindsight — bugs, debt, fragility |
-| **Metis** | Craft — clarity, idiom, structure |
+| **Mnemosyne** | Memory — what the change broke that used to work (replaced Epimetheus, Oct 2026) |
+| **Metis** | Craft — clarity, idiom, structure, fragility, debt |
 | **Prometheus** | Foresight — vision, extensibility |
 
 Uses `Task` tool with `subagent_type: "explore-opus"`. Worth it for substantial work; overkill for quick fixes.

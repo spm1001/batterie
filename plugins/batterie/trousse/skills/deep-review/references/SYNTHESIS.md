@@ -20,8 +20,8 @@ When multiple reviewers flag the same issue, it's almost certainly real.
 
 ### Building the Table
 
-| Finding | E | M | P | Action |
-|---------|---|---|---|--------|
+| Finding | Mn | M | P | Action |
+|---------|----|---|---|--------|
 | ContentType literal incomplete | ✓ | ✓ | ✓ | Add missing types |
 | Service cache has no invalidation | ✓ | — | ✓ | Add clear_service_cache() |
 | CreateResult not in models.py | ✓ | — | ✓ | Move for consistency |
@@ -70,7 +70,7 @@ Not all conflicts need immediate resolution. Options:
 Sometimes apparent conflicts are just different lenses on the same issue:
 
 - Metis: "This function is too long"
-- Epimetheus: "This function has too many failure modes"
+- Mnemosyne: "This function's new branch now catches inputs the old one handled"
 
 Both are true. The resolution might be: split the function (satisfies both).
 
@@ -178,8 +178,8 @@ Good hygiene, but absence of answer doesn't block shipping.
 ## Review Triad Synthesis
 
 ### High-Priority Findings (Multiple Reviewers)
-| Finding | E | M | P | Action |
-|---------|---|---|---|--------|
+| Finding | Mn | M | P | Action |
+|---------|----|---|---|--------|
 | [issue] | ✓/— | ✓/— | ✓/— | [fix] |
 
 ### Conflicts Reveal Trade-offs

@@ -892,8 +892,13 @@ if [ -n "${FAMILY_OAUTH_CLIENT:-}" ]; then
     [ -f "$SOURCE_DIR/$repo/.claude-plugin/plugin.json" ] || { echo "FAIL: family — component $comp has no source at $SOURCE_DIR/$repo" >&2; exit 1; }
     # Its .claude-plugin/ is read below for the server line, then left behind:
     # claude.ai's validator refuses a nested plugin.json.
+    # /handoffs + /HANDOFF.md: session handoffs are internal work notes and
+    # never ship, here as in the public kit's vendor step above. This loop
+    # lacked them until coursier's first handoff (22 Oct 2026) tripped the
+    # leak scan on its personal terms.
     rsync -a --exclude .git --exclude .bon --exclude .venv --exclude __pycache__ --exclude '*.pyc' \
       --exclude .pytest_cache --exclude /tests --exclude /CLAUDE.md --exclude /.claude-plugin \
+      --exclude /handoffs --exclude /HANDOFF.md \
       "$SOURCE_DIR/$repo/" "$FAMILY_KIT/$comp/"
   done
   cp "$BATTERIE_DIR/family/repo/README.md" "$BATTERIE_DIR/family/repo/CLAUDE.md" "$FAMILY_OUT/"

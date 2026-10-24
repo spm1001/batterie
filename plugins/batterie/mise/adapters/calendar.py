@@ -395,9 +395,16 @@ def list_status_events(
     return items
 
 
-# A lookup that ANSWERED (a zone, or none in the diary) is cached for the process —
-# the user's timezone doesn't change mid-session. A failure is not cached.
+# A lookup that ANSWERED (a zone, or none in the diary) is cached until the
+# identity changes — clear_timezone_cache() runs wherever the profile cache is
+# cleared for an account switch (mise-lagame). A failure is not cached.
 _TZ_CACHE: list[tuple[str | None, str | None]] = []
+
+
+def clear_timezone_cache() -> None:
+    """Forget the cached zone: the next lookup reads the (new) account's diary."""
+    _TZ_CACHE.clear()
+
 # Anticipated, by name: no usable credential (CredentialsUnavailable, never a bare
 # FileNotFoundError), Google's answer or the network (httpx), the token endpoint.
 _TZ_LOOKUP_FAILURES = (MiseError, CredentialsUnavailable, httpx.HTTPError, TransportError,

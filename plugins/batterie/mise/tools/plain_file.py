@@ -19,6 +19,7 @@ from adapters.drive import (
 from models import DoResult
 from retry import with_retry
 from tools.common import NO_MATCH_WARNING, resolve_source as _resolve_source
+from tools.fetch.drive_restricted import restriction_message
 from workspace.manager import deposit_lock_for_source
 
 
@@ -51,6 +52,21 @@ def _reject_google_native(metadata: dict[str, Any]) -> dict[str, Any] | None:
                        f"This operation is for plain files (markdown, JSON, etc.) stored in Drive." + hint,
         }
     return None
+
+
+def _refuse_if_undownloadable(file_id: str, metadata: dict[str, Any]) -> dict[str, Any] | None:
+    """Teaching permission_denied before a download Google will refuse (mise-togeha).
+
+    prepend/append/replace_text download via alt=media, which a file with
+    restrictedForWriters refuses even to an editor. canDownload rides the
+    metadata do() pre-fetches (FILE_METADATA_FIELDS), so knowing is free.
+    overwrite never downloads and does not call this.
+    """
+    message = restriction_message(file_id, metadata, "edits this kind of file")
+    if message is None:
+        return None
+    return {"error": True, "kind": "permission_denied", "message": message,
+            "retryable": False}
 
 
 def _decode_content(raw: bytes, file_name: str) -> str:
@@ -179,6 +195,8 @@ def plain_replace_text(
         return {"error": True, "kind": "invalid_input",
                 "message": f"Text operations not supported on binary files ({mime_type}). Use overwrite for full replacement."}
 
+    if err := _refuse_if_undownloadable(file_id, metadata):
+        return err
     raw = download_file_content(file_id)
     text = _decode_content(raw, metadata.get("name", ""))
 
@@ -219,6 +237,8 @@ def plain_prepend(
         return {"error": True, "kind": "invalid_input",
                 "message": f"Text operations not supported on binary files ({mime_type}). Use overwrite for full replacement."}
 
+    if err := _refuse_if_undownloadable(file_id, metadata):
+        return err
     raw = download_file_content(file_id)
     existing = _decode_content(raw, metadata.get("name", ""))
 
@@ -248,6 +268,8 @@ def plain_append(
         return {"error": True, "kind": "invalid_input",
                 "message": f"Text operations not supported on binary files ({mime_type}). Use overwrite for full replacement."}
 
+    if err := _refuse_if_undownloadable(file_id, metadata):
+        return err
     raw = download_file_content(file_id)
     existing = _decode_content(raw, metadata.get("name", ""))
 

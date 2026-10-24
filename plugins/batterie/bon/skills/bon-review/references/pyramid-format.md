@@ -54,7 +54,7 @@ The survey emits `job` slugs from each board's `.bon/job` marker. Render them as
 | `estate-infra` | 🏠 Estate & infrastructure |
 | `apps-research` | 🔬 Apps & research |
 
-Boards in `jobs_unassigned` get a one-line "Unassigned — where do these live?" list at the bottom of the pyramid; agree placement with the operator, then persist it (`bon register --job <slug>` from the clone for Dolt boards; write `.bon/job` for JSONL boards). Never guess a group silently.
+Boards in `jobs_unassigned` get a one-line "Unassigned — where do these live?" list at the bottom of the pyramid; agree placement with the operator, then persist it by writing the slug into the board's `.bon/job` and committing it. Never guess a group silently.
 
 **The jobs-groups are not the operator's task-system carve, and shouldn't be forced to match it.** The worked example that settled this (2026-08-09, bon-jagoha step 6): one Todoist project whose DOs spanned all five jobs-groups. The mapping is many-to-many and the alignment block below IS the join — render it, don't mirror either carve onto the other (settled 2026-08-09, bon-jagoha step 6).
 

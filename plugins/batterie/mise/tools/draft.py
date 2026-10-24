@@ -21,6 +21,7 @@ from adapters.gmail import (
 from html_convert import html_to_text_with_links, markdown_to_html
 from adapters.gmail_draft_attachments import download_draft_attachments, get_draft_attachments
 from models import DoResult, MiseError
+from tools.draft_changed import changed_since_refusal
 from tools.reply_quote import Quote, build_quote, validate_quote
 from validation import validate_drive_id
 
@@ -188,6 +189,7 @@ def do_draft(
     include: list[str] | None = None,
     file_id: str | None = None,
     quote: str | None = None,
+    supersede: bool = False,
     **_kwargs: Any,
 ) -> DoResult | dict[str, Any]:
     """
@@ -210,6 +212,8 @@ def do_draft(
         file_id: Existing draft ID to update in place (mise-wemuki)
         quote: update only — on a reply draft the rebuilt body re-quotes the
             message it answers ('last', the default) unless 'none' (mise-wujuza)
+        supersede: update only — write even though the draft changed since
+            mise last wrote it; without it that update is refused (mise-cijugo)
 
     Returns:
         DoResult on success, error dict on failure
@@ -217,7 +221,12 @@ def do_draft(
     if bad_quote := validate_quote(quote):
         return {"error": True, "kind": "invalid_input", "message": bad_quote}
     if file_id:
-        return _update_draft_in_place(file_id, to, subject, content, cc, include, quote)
+        return _update_draft_in_place(file_id, to, subject, content, cc, include, quote,
+                                      supersede)
+    if supersede:
+        return {"error": True, "kind": "invalid_input",
+                "message": "supersede= applies to updating a draft (file_id=<draft_id>) "
+                           "or to reply_draft. Nothing was drafted."}
     if quote is not None:
         return {"error": True, "kind": "invalid_input",
                 "message": "quote= applies to replies — use reply_draft, or draft with "
@@ -292,6 +301,7 @@ def _update_draft_in_place(
     cc: str | None,
     include: list[str] | None,
     quote: str | None = None,
+    supersede: bool = False,
 ) -> DoResult | dict[str, Any]:
     """Update an existing draft (drafts.update rebuilds the message wholesale).
 
@@ -329,13 +339,23 @@ def _update_draft_in_place(
     # If they cannot be read, refuse: an update that drops a file is worse than none.
     try:
         message_id, parts, quoted_now = get_draft_attachments(draft_id)
+    except MiseError as e:
+        return {"error": True, "kind": e.kind.value,
+                "message": f"Draft not updated: could not read its attachments to carry them "
+                           f"over ({e.message}), and updating would delete them."}
+    # Someone else saved this draft since mise's last write (a human edit or a
+    # compose window's autosave). Refuse BEFORE writing: until mise-cijugo this
+    # only warned afterwards, when their words were already gone.
+    moved_under_us = draft_id in _LAST_WRITTEN and _LAST_WRITTEN[draft_id] != message_id
+    if moved_under_us and not supersede:
+        return changed_since_refusal(draft_id, existing.get("thread_id"), message_id)
+    try:
         attachments = download_draft_attachments(message_id, parts)
     except MiseError as e:
         return {"error": True, "kind": e.kind.value,
                 "message": f"Draft not updated: could not read its attachments to carry them "
                            f"over ({e.message}), and updating would delete them."}
     dropped_inline = [p["filename"] for p in parts if p["inline"]]
-    moved_under_us = draft_id in _LAST_WRITTEN and _LAST_WRITTEN[draft_id] != message_id
 
     included_links: list[IncludedLink] = []
     include_warnings: list[str] = []
@@ -375,7 +395,7 @@ def _update_draft_in_place(
     if moved_under_us:
         cues.setdefault("warnings", []).append(
             "This draft changed since mise last wrote it (a Gmail compose window's "
-            "autosave or a human edit); this update replaced those changes. If the "
+            "autosave or a human edit); supersede=True replaced those changes. If the "
             "person was editing it, their words are gone from the draft — check with them.")
     if attachments:
         cues["attachments_kept"] = [name for name, _, _ in attachments]

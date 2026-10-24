@@ -37,6 +37,7 @@ from tools.elicit import (
     ConfirmVerdict,
     GateQuestion,
     accepted_cue,
+    dialog_lines,
     dialog_verdict,
     skipped_preview,
     unaccepted_preview,
@@ -194,7 +195,7 @@ def share_preview_message(file_name: str, emails: list[str], role: str) -> str:
         else:
             current = joined
     lines.append(current)
-    return "\n".join(lines)
+    return dialog_lines(lines)
 
 
 @with_retry(max_attempts=3, delay_ms=1000, idempotent=False)

@@ -78,7 +78,7 @@ from typing import Any
 
 import token_store
 from adapters.http_client import clear_http_client, clear_sync_client
-from adapters.people import clear_profile_cache
+from adapters.identity_caches import clear_identity_caches
 from models import FetchError, FetchResult, MiseError, SearchResult
 from tools import OPERATIONS, do_fetch, do_search
 from tools.dispatch import DO_PARAM_DEFAULTS as _DO_DEFAULTS
@@ -127,7 +127,9 @@ class Mise:
         # env-default) must not keep serving a predecessor's injection.
         clear_http_client()
         clear_sync_client()
-        clear_profile_cache()  # directory profiles and any refusal are per identity
+        # Email, directory profiles and diary zone are per identity; the email
+        # especially, or the new client never re-resolves it (mise-lagame).
+        clear_identity_caches()
         self.base_path: Path | None = Path(base_path) if base_path else None
 
     def search(

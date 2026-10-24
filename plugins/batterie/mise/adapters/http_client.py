@@ -469,10 +469,9 @@ class MiseSyncClient:
             # (enrichment skips honestly) — never the OLD account's email or
             # directory profiles stamped beside the NEW account's data (cold
             # review, mise-bapije 2026-08-24).
-            from adapters.people import clear_profile_cache
-            from cues_util import clear_user_email_cache, resolve_user_email_eager
-            clear_user_email_cache()
-            clear_profile_cache()
+            from adapters.identity_caches import clear_identity_caches
+            from cues_util import resolve_user_email_eager
+            clear_identity_caches()
             self._credentials = fresh
             if not self._credentials.valid:
                 self._credentials.refresh(GoogleAuthRequest())

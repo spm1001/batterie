@@ -42,17 +42,31 @@ def _name_space(space_name: str, me: str | None) -> tuple[dict[str, Any], str]:
     return space, space_label(space, members, me)
 
 
+def _identity_after_first_call() -> str | None:
+    """The user's address — read only AFTER a Google call has run (mise-raloge).
+
+    current_user_email() is a cache filled when the sync client is first built,
+    so read before any call it is None in a cold process even though the token
+    carries _identity, and the own-message guard goes silently off. The search
+    call mints that client, inside with_retry's conversion, so a credential
+    failure still arrives as a MiseError the per-source funnel catches. (Minting
+    it here with get_sync_client() lost for that reason: its
+    CredentialsUnavailable would escape collect_chat_results.)
+    """
+    return current_user_email()
+
+
 def run_chat_search(query: str, max_results: int) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     """Run the search and name its spaces. Returns (rows newest-first, cues)."""
     q = build_search_filter(query)
     notes = list(q.notes)
-    me = current_user_email()
     if q.unread:
         # is_unread() alone is not the answer: of its 399 live hits, 20 were
         # flagged read, including all 18 of the user's own. Keep Google's
         # read == false, drop the user's own, then (with a keyword) keep
         # whole-word matches in the text.
         found, scan_cut = search_messages(q.filter, max_results=_UNREAD_SCAN_CAP)
+        me = _identity_after_first_call()
         hits = [m for m in found if m.get("read") is False and not sent_by(m, me)]
         if q.post_filter:
             hits = [m for m in hits if has_phrase(m, q.post_filter)]
@@ -66,6 +80,7 @@ def run_chat_search(query: str, max_results: int) -> tuple[list[dict[str, Any]],
                          "of the user's own as read when measured).")
     else:
         messages, truncated = search_messages(q.filter, max_results=max_results)
+        me = _identity_after_first_call()
 
     names: list[str] = []
     for m in messages:

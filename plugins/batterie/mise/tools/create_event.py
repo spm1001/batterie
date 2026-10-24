@@ -29,7 +29,7 @@ from mcp.server.elicitation import ElicitationResult
 from adapters.calendar_insert import INSERT_RECOVERED_KEY, insert_event
 from cues_util import current_user_email, with_identity
 from models import DoResult, ErrorKind, MiseError
-from tools.elicit import ConfirmAnswer, GateQuestion, settle_gate
+from tools.elicit import ConfirmAnswer, GateQuestion, dialog_lines, settle_gate
 from tools.event_clock import describe_when, zoned_datetime
 from tools.events_util import (
     EVENT_COLORS,
@@ -140,7 +140,7 @@ def _preview_message(
         clash_line,
     ]
     lines.extend(f"Warning: {w}" for w in plan.warnings)
-    return "\n".join(lines)
+    return dialog_lines(lines)
 
 
 def _preview(

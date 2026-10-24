@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from cues_util import with_identity
+from tools.elicit import dialog_lines
 from tools.event_clock import describe_when
 from tools.events_util import extract_meet_link
 
@@ -79,7 +80,7 @@ def _preview_message(edit: Edit, described: dict[str, Any]) -> str:
         f"({count} attendee(s) on it now)"
     )
     lines.extend(f"Warning: {w}" for w in edit.warnings)
-    return "\n".join(lines)
+    return dialog_lines(lines)
 
 
 def edit_preview(

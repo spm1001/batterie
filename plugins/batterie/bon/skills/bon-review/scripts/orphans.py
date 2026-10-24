@@ -23,7 +23,7 @@ items simply haven't started, so that direction is pure noise (decided at
 the item's birth, bon-nenine). Only modern six-letter IDs are matched —
 legacy short IDs (mise-qa6) predate the convention by definition.
 
-Reads the board via the bon CLI (backend-agnostic: JSONL and Dolt). A board
+Reads the board via the bon CLI. A board
 read failure is a loud exit, never an empty-looking clean report. Override
 the CLI with BON_CMD (e.g. "python3 -m bon.cli") for tests.
 """
@@ -76,7 +76,7 @@ def load_board(repo: Path) -> dict:
 
 
 def load_archive_ids(repo: Path) -> set:
-    """Archived IDs, best-effort: raw file on JSONL boards, empty on Dolt."""
+    """Archived IDs, best-effort, from the board's raw archive.jsonl."""
     archive = repo / ".bon" / "archive.jsonl"
     ids = set()
     if archive.is_file():

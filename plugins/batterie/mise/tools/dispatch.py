@@ -132,7 +132,8 @@ OP_PARAMS: dict[str, frozenset[str]] = {
     "prepend": frozenset({"file_id", "content", "suggest"}),
     "append": frozenset({"file_id", "content", "tab", "suggest"}),
     "replace_text": frozenset({"file_id", "find", "content", "suggest", "remove"}),
-    "draft": frozenset({"to", "subject", "content", "cc", "include", "file_id", "quote"}),
+    "draft": frozenset({"to", "subject", "content", "cc", "include", "file_id", "quote",
+                        "supersede"}),
     "reply_draft": frozenset({"file_id", "content", "cc", "include",
                               "reply_all", "supersede", "to", "quote"}),
     "archive": frozenset({"file_id"}),
@@ -261,7 +262,7 @@ DISPATCH: dict[str, Any] = {
     "draft": lambda p: do_draft(
         to=p["to"], subject=p["subject"], content=p["content"],
         cc=p["cc"], include=p["include"], file_id=p["file_id"],
-        quote=p.get("quote"),
+        quote=p.get("quote"), supersede=p.get("supersede", False),
     ),
     "reply_draft": lambda p: do_reply_draft(
         file_id=p["file_id"], content=p["content"],
@@ -325,7 +326,7 @@ Operations: create, copy, move, rename, share, overwrite, prepend, append, repla
 Create: content + title + doc_type (doc/sheet/file/folder/form). page_setup='pageless'; file_path= reads disk; form: YAML/JSON.
 Edit: overwrite (full replace), prepend/append, replace_text (find + content); append tab='T' adds a new doc tab (plain text). Sheets: overwrite=CSV, range='Tab'/'Tab!F9:F15'; [label](url)→link, @url→chip. Docs: suggest=True on prepend/append/replace_text proposes a tracked change; do(suggest, action=accept|reject, find='s2') folds one ([sN] from a markup fetch; tags RENUMBER after each fold).
 Calendar: create_event (title + time_min/time_max + attendees/content/location/meet/recurrence/include; attendees ⇒ preview, confirm=True books). update_event (event or invite-thread id; time/attendees/recurrence gated). freebusy (attendees + window + duration → slots). respond (file_id + action). properties/color/visibility/transparency on both. See mise://docs/do.
-Email: draft (to + subject + content; file_id=draft_id updates it), reply_draft (file_id + content — refuses if the thread has a draft; supersede=True discards), archive/star/label. Signature + quoted original auto-append (quote='none' skips) — no sign-off.
+Email: draft (to + subject + content; file_id=draft_id updates it), reply_draft (file_id + content; refuses if thread has a draft, supersede=True discards), archive/star/label. Signature + quoted original auto-append (quote='none' skips) — no sign-off.
 Trash: file_id(s) — Drive→trash (recoverable); Gmail drafts (r+digits) go for good.
 Comments: comment (file_id + content = NEW thread; anchor='slide 3'/'Tab!B12'/quoted doc text anchors it, else panel-only; to= assigns), comment_reply (comment_id + content/action=resolve|reopen). '[agent] ' prefix.
 Share: file_id + to + role (reader/writer/commenter); confirm=True executes.

@@ -8,7 +8,10 @@ FileNotFoundError from the same call (httpx's client constructor reading an
 SSL_CERT_FILE that isn't there) is not an auth problem and keeps its own kind.
 
 Split from adapters/calendar.py, which sits at the 500-line cap; any adapter may
-use it.
+use it. Since mise-lokowo, retry._convert_to_mise_error makes the same
+conversion (same message, same details mark) at every with_retry site, so
+under @with_retry this decorator is redundant; it still matters on a call
+with no with_retry (calendar.respond_to_event).
 """
 
 from functools import wraps

@@ -1,28 +1,23 @@
 # /// script
 # requires-python = ">=3.11"
-# dependencies = ["pymysql"]
+# dependencies = []
 # ///
-"""Net motion — minted vs closed per ISO week across EVERY board, Dolt and JSONL.
+"""Net motion — minted vs closed per ISO week across every board on this machine.
 
 One table for the review ceremony's survey phase (bon-dajusi): per week, how
-many items the estate minted (created_at) and closed (done_at), the net, and
-the same split by backend, so a "we are in balance" belief can be checked
-against both halves rather than the JSONL half alone.
+many items the estate minted (created_at) and closed (done_at), and the net,
+so a "we are in balance" belief can be checked against the boards.
 
-Sources
-* Dolt: the global `items` + `archive` tables (every prefix present, mapped in
-  the `repos` table or not — an unmapped prefix is still a board that mints),
-  EXCEPT prefixes whose board has moved to JSONL: their frozen rows are
-  skipped and the board is counted from its JSONL clone, and a moved board
-  with no JSONL clone here is named on stderr as MISSING (bon-lapine).
-* JSONL: every `.bon/items.jsonl` (+ `archive.jsonl`) under the scan roots and
-  the extra board dirs, discovered by audit_survey.discover_boards — so the
-  plugin-cache copies of a board are excluded exactly as the survey excludes
-  them. A `items.jsonl` sitting beside `.bon/backend = dolt` is a
-  pre-migration ghost and is SKIPPED (named on stderr), never counted.
+Source: every `.bon/items.jsonl` (+ `archive.jsonl`) under the scan roots and
+the extra board dirs, discovered by audit_survey.discover_boards — so the
+plugin-cache copies of a board are excluded exactly as the survey excludes
+them. A clone still carrying `.bon/backend = dolt` has not pulled since Dolt
+was retired (2026-10-24); its items.jsonl, if any, is stale and is SKIPPED
+(named in the notes), never counted. (Until then a second source read the
+shared Dolt database; it retired with Dolt, bon-hetewa.)
 
-The parts are checked against the whole: for each source the script prints
-`open now − (open at window start + Σ net)`, which is zero when every item has
+The parts are checked against the whole: the script prints
+`open now − (open at window start − Σ net)`, which is zero when every item has
 a parseable created_at and every done item a parseable done_at. A non-zero
 residual is reported, never silently absorbed, and unparseable stamps are
 counted beside it.
@@ -32,8 +27,7 @@ Usage:
     uv run --script net_motion.py --from 2026-W27 --to 2026-W36
     uv run --script net_motion.py --json               # machine-readable
     uv run --script net_motion.py --top 12             # more boards in the growth table
-Exit 2 on a malformed flag; a Dolt outage degrades LOUDLY (stderr + `dolt:
-"unreachable"` in the output) and the JSONL half still prints.
+Exit 2 on a malformed flag.
 """
 
 import argparse
@@ -114,12 +108,11 @@ def week_start(label: str) -> date:
 
 # ---------- loading ----------
 
-def _record(item: dict, board: str, backend: str) -> dict:
+def _record(item: dict, board: str) -> dict:
     return {
         "id": item.get("id"),
         "prefix": (item.get("id") or "").split("-", 1)[0],
         "board": board,
-        "backend": backend,
         "status": item.get("status"),
         "created_at": item.get("created_at"),
         "done_at": item.get("done_at"),
@@ -140,32 +133,28 @@ def _read_jsonl(path: Path) -> list[dict]:
 
 def load_jsonl_records(
     roots: list[Path], boards: list[dict] | None = None,
-    skip: set[str] | None = None,
 ) -> tuple[list[dict], dict]:
-    """Every JSONL board's items + archive under the roots, as records.
+    """Every board's items + archive under the roots, as records.
 
     Returns (records, notes) where notes carries what was NOT counted and why:
-    ghosts (items.jsonl beside backend=dolt), duplicate ids seen in a second
+    stale clones (still saying backend=dolt), duplicate ids seen in a second
     board (counted once, first board wins), and the board list. `boards`, when
-    given, is a discover_boards result to reuse instead of walking again;
-    `skip` holds bon_dirs that are not the board they look like (a half-pulled
-    clone of a moved board — audit_survey.half_pulled_boards).
+    given, is a discover_boards result to reuse instead of walking again.
     """
     if boards is None:
         boards = audit_survey.discover_boards(roots)
     records: list[dict] = []
     seen: dict[str, str] = {}
-    ghosts: list[str] = []
+    stale: list[str] = []
     duplicates: list[dict] = []
     board_labels: list[str] = []
     for b in boards:
         items_path = b["bon_dir"] / "items.jsonl"
         label = audit_survey.repo_label(b["repo_path"], b["root"])
-        if b["backend"] != "jsonl":
-            if items_path.exists():
-                ghosts.append(str(items_path))
+        if audit_survey.stale_state(b) is not None:
+            stale.append(str(b["repo_path"]))
             continue
-        if not items_path.exists() or str(b["bon_dir"]) in (skip or ()):
+        if not items_path.exists():
             continue
         board_labels.append(label)
         rows = _read_jsonl(items_path)
@@ -178,62 +167,11 @@ def load_jsonl_records(
                 duplicates.append({"id": iid, "first": seen[iid], "again": label})
                 continue
             seen[iid] = label
-            records.append(_record(item, label, "jsonl"))
+            records.append(_record(item, label))
     notes = {
         "boards": sorted(board_labels),
-        "ghosts_skipped": ghosts,
+        "stale_clones_skipped": stale,
         "duplicate_ids_skipped": duplicates,
-    }
-    return records, notes
-
-
-def load_dolt_records() -> tuple[list[dict], dict]:
-    """Every row of Dolt's items + archive tables, labelled via the repos table.
-
-    Raises on connection failure — the caller decides how loudly to degrade.
-    An unmapped prefix (no repos row) is labelled `<prefix> (unmapped)` and
-    COUNTED: it is still a board that minted and closed. A prefix that has
-    moved to JSONL (audit_survey.moved_prefixes) is NOT counted here: its
-    rows stay in Dolt frozen, and its live board is counted from the JSONL
-    clone — reading both would mint every one of its items twice.
-    """
-    import pymysql
-
-    config = audit_survey.load_dolt_config()
-    conn = pymysql.connect(
-        host=config["host"], port=config["port"], user=config["user"],
-        password=config["password"], database=config["database"],
-        cursorclass=pymysql.cursors.DictCursor, connect_timeout=5,
-    )
-    try:
-        with conn.cursor() as cur:
-            moved = audit_survey.moved_prefixes(cur)
-            cur.execute("SELECT id, status, created_at, done_at FROM items")
-            rows = list(cur.fetchall())
-            cur.execute("SELECT id, status, created_at, done_at FROM archive")
-            archive_rows = list(cur.fetchall())
-            cur.execute("SELECT prefix, repo_name FROM repos")
-            repos = {r["prefix"]: r["repo_name"] for r in cur.fetchall()}
-    finally:
-        conn.close()
-    records = []
-    unmapped: set[str] = set()
-    for row in rows + archive_rows:
-        prefix = row["id"].split("-", 1)[0]
-        if prefix in moved:
-            continue
-        name = repos.get(prefix)
-        if name is None:
-            unmapped.add(prefix)
-            name = f"{prefix} (unmapped)"
-        records.append(_record(row, name, "dolt"))
-    notes = {
-        "boards": sorted({r["board"] for r in records}),
-        "repos_rows": len(repos),
-        "unmapped_prefixes": sorted(unmapped),
-        "archive_rows": len(archive_rows),
-        "moved_prefixes": sorted(moved),
-        "moved": moved,
     }
     return records, notes
 
@@ -241,13 +179,13 @@ def load_dolt_records() -> tuple[list[dict], dict]:
 # ---------- tally ----------
 
 def tally(records: list[dict], weeks: list[str]) -> dict:
-    """Bucket records by ISO week of created_at / done_at, per source and per board.
+    """Bucket records by ISO week of created_at / done_at, overall and per board.
 
     Returns a dict with:
-      weeks: [{week, minted, closed, net, by_source: {dolt: {...}, jsonl: {...}}}]
-      boards: {label: {backend, minted, closed, net, net_last2, open_now}}
-      sources: {dolt|jsonl: {open_now, open_at_start, sum_net, residual,
-                             unparseable_created, unparseable_done, items}}
+      weeks: [{week, minted, closed, net}]
+      boards: {label: {minted, closed, net, net_last2, open_now}}
+      whole: {items, open_now, open_at_start, sum_net, residual,
+              unparseable_created, unparseable_done, done_without_stamp}
     net = closed − minted (negative: the boards grew), matching the 2026-09-01
     handoff figures. The residual is open_now − (open_at_start − Σ net); it is
     zero when every stamp inside and before the window parsed. Items whose
@@ -257,31 +195,24 @@ def tally(records: list[dict], weeks: list[str]) -> dict:
     wk = {w: i for i, w in enumerate(weeks)}
     start = week_start(weeks[0])
     last2 = set(weeks[-2:])
-    per_week = {w: {"dolt": [0, 0], "jsonl": [0, 0]} for w in weeks}
+    per_week = {w: [0, 0] for w in weeks}
     boards: dict[str, dict] = {}
-    src = {
-        s: {"items": 0, "open_now": 0, "open_at_start": 0, "sum_net": 0,
-            "unparseable_created": 0, "unparseable_done": 0,
-            "done_without_stamp": 0}
-        for s in ("dolt", "jsonl")
-    }
+    st = {"items": 0, "open_now": 0, "open_at_start": 0, "sum_net": 0,
+          "unparseable_created": 0, "unparseable_done": 0,
+          "done_without_stamp": 0}
     for r in records:
-        s = r["backend"]
-        st = src[s]
         st["items"] += 1
         b = boards.setdefault(r["board"], {
-            "backend": s, "minted": 0, "closed": 0, "net": 0,
-            "net_last2": 0, "open_now": 0,
+            "minted": 0, "closed": 0, "net": 0, "net_last2": 0, "open_now": 0,
         })
-        is_open = r["status"] == "open"
-        if is_open:
+        if r["status"] == "open":
             st["open_now"] += 1
             b["open_now"] += 1
         cw = week_of(r["created_at"])
         if cw is None:
             st["unparseable_created"] += 1
         elif cw in wk:
-            per_week[cw][s][0] += 1
+            per_week[cw][0] += 1
             b["minted"] += 1
             if cw in last2:
                 b["net_last2"] -= 1
@@ -293,7 +224,7 @@ def tally(records: list[dict], weeks: list[str]) -> dict:
         elif r["done_at"] and dw is None:
             st["unparseable_done"] += 1
         if dw is not None and dw in wk:
-            per_week[dw][s][1] += 1
+            per_week[dw][1] += 1
             b["closed"] += 1
             if dw in last2:
                 b["net_last2"] += 1
@@ -302,22 +233,13 @@ def tally(records: list[dict], weeks: list[str]) -> dict:
             st["open_at_start"] += 1
     out_weeks = []
     for w in weeks:
-        d, j = per_week[w]["dolt"], per_week[w]["jsonl"]
-        minted, closed = d[0] + j[0], d[1] + j[1]
-        out_weeks.append({
-            "week": w, "minted": minted, "closed": closed, "net": closed - minted,
-            "by_source": {
-                "dolt": {"minted": d[0], "closed": d[1], "net": d[1] - d[0]},
-                "jsonl": {"minted": j[0], "closed": j[1], "net": j[1] - j[0]},
-            },
-        })
-        src["dolt"]["sum_net"] += d[1] - d[0]
-        src["jsonl"]["sum_net"] += j[1] - j[0]
-    for s in src.values():
-        s["residual"] = s["open_now"] - (s["open_at_start"] - s["sum_net"])
+        minted, closed = per_week[w]
+        out_weeks.append({"week": w, "minted": minted, "closed": closed, "net": closed - minted})
+        st["sum_net"] += closed - minted
+    st["residual"] = st["open_now"] - (st["open_at_start"] - st["sum_net"])
     for b in boards.values():
         b["net"] = b["closed"] - b["minted"]
-    return {"weeks": out_weeks, "boards": boards, "sources": src}
+    return {"weeks": out_weeks, "boards": boards, "whole": st}
 
 
 def convergence(weeks: list[dict]) -> dict:
@@ -352,55 +274,39 @@ def _fmt_net(n: int) -> str:
 
 def render_text(result: dict, top: int) -> str:
     weeks = result["weeks"]
-    src = result["sources"]
+    x = result["whole"]
     cur = result["current_week"]
     lines = []
-    dolt_state = result["dolt"]
     lines.append(
         f"Net motion {weeks[0]['week']}..{weeks[-1]['week']} — net = closed − minted "
-        f"(negative: the boards grew). Dolt: {dolt_state}"
-        + (f", {len(result['dolt_notes']['boards'])} boards" if dolt_state == "global" else "")
-        + f"; JSONL: {len(result['jsonl_notes']['boards'])} boards."
+        f"(negative: the boards grew). {len(result['notes']['boards'])} boards."
     )
-    lines.append(f"{'week':<10}| {'all':>17} | {'dolt':>17} | {'jsonl':>17}")
-    lines.append(f"{'':<10}| {'minted clsd  net':>17} | {'minted clsd  net':>17} | {'minted clsd  net':>17}")
+    lines.append(f"{'week':<10}| {'minted':>6} {'clsd':>4} {'net':>5}")
     for w in weeks:
-        d, j = w["by_source"]["dolt"], w["by_source"]["jsonl"]
         mark = "*" if w["week"] == cur else " "
-        lines.append(
-            f"{w['week']}{mark:<2}| {w['minted']:>6} {w['closed']:>4} {_fmt_net(w['net']):>5} | "
-            f"{d['minted']:>6} {d['closed']:>4} {_fmt_net(d['net']):>5} | "
-            f"{j['minted']:>6} {j['closed']:>4} {_fmt_net(j['net']):>5}"
-        )
+        lines.append(f"{w['week']}{mark:<2}| {w['minted']:>6} {w['closed']:>4} {_fmt_net(w['net']):>5}")
     tm = sum(w["minted"] for w in weeks)
     tc = sum(w["closed"] for w in weeks)
-    lines.append(
-        f"{'Σ window':<10}| {tm:>6} {tc:>4} {_fmt_net(tc - tm):>5} | "
-        f"{'':>11} {_fmt_net(src['dolt']['sum_net']):>5} | {'':>11} {_fmt_net(src['jsonl']['sum_net']):>5}"
-    )
+    lines.append(f"{'Σ window':<10}| {tm:>6} {tc:>4} {_fmt_net(tc - tm):>5}")
     if cur in {w["week"] for w in weeks}:
         days_in = (date.fromisoformat(result["today"]) - week_start(cur)).days + 1
         lines.append(f"* {cur} is the current week — partial: {days_in} of 7 days, through {result['today']}. "
                      f"A fortnight read on day 1–2 of a week is mostly the prior week.")
     lines.append("")
     lines.append("Whole vs parts (residual = open now − (open at window start − Σ net); 0 = the parts account for the whole):")
-    for s in ("dolt", "jsonl"):
-        x = src[s]
-        extra = []
-        if x["unparseable_created"]:
-            extra.append(f"{x['unparseable_created']} unparseable created_at")
-        if x["unparseable_done"]:
-            extra.append(f"{x['unparseable_done']} unparseable done_at")
-        if x["done_without_stamp"]:
-            extra.append(f"{x['done_without_stamp']} done without done_at")
-        flag = "" if x["residual"] == 0 else "  <-- NON-ZERO: parts do not account for the whole"
-        lines.append(
-            f"  {s:<6} items {x['items']:>5}  open now {x['open_now']:>4}  open at start {x['open_at_start']:>4}"
-            f"  Σ net {_fmt_net(x['sum_net']):>5}  residual {x['residual']:>3}{flag}"
-            + (f"  ({'; '.join(extra)})" if extra else "")
-        )
-    open_total = src["dolt"]["open_now"] + src["jsonl"]["open_now"]
-    lines.append(f"  open now, whole estate: {open_total} (dolt {src['dolt']['open_now']} + jsonl {src['jsonl']['open_now']})")
+    extra = []
+    if x["unparseable_created"]:
+        extra.append(f"{x['unparseable_created']} unparseable created_at")
+    if x["unparseable_done"]:
+        extra.append(f"{x['unparseable_done']} unparseable done_at")
+    if x["done_without_stamp"]:
+        extra.append(f"{x['done_without_stamp']} done without done_at")
+    flag = "" if x["residual"] == 0 else "  <-- NON-ZERO: parts do not account for the whole"
+    lines.append(
+        f"  items {x['items']:>5}  open now {x['open_now']:>4}  open at start {x['open_at_start']:>4}"
+        f"  Σ net {_fmt_net(x['sum_net']):>5}  residual {x['residual']:>3}{flag}"
+        + (f"  ({'; '.join(extra)})" if extra else "")
+    )
     conv = result["convergence"]
     lines.append("")
     if conv.get("prior_mean") is not None:
@@ -414,10 +320,10 @@ def render_text(result: dict, top: int) -> str:
     growth = sorted(result["boards"].items(), key=lambda kv: (kv[1]["net"], -kv[1]["minted"]))
     lines.append("")
     lines.append(f"Boards carrying the growth (most negative net over the window first, top {top}):")
-    lines.append(f"  {'board':<34}{'be':<6}{'minted':>7}{'closed':>7}{'net':>6}{'last2':>7}{'open':>6}")
+    lines.append(f"  {'board':<34}{'minted':>7}{'closed':>7}{'net':>6}{'last2':>7}{'open':>6}")
     for label, b in growth[:top]:
         lines.append(
-            f"  {label:<34}{b['backend']:<6}{b['minted']:>7}{b['closed']:>7}"
+            f"  {label:<34}{b['minted']:>7}{b['closed']:>7}"
             f"{_fmt_net(b['net']):>6}{_fmt_net(b['net_last2']):>7}{b['open_now']:>6}"
         )
     shrinking = [(label, b) for label, b in growth if b["net"] > 0]
@@ -425,24 +331,13 @@ def render_text(result: dict, top: int) -> str:
         best = sorted(shrinking, key=lambda kv: -kv[1]["net"])[:5]
         lines.append("  shrinking: " + ", ".join(f"{label} {_fmt_net(b['net'])}" for label, b in best))
     notes = []
-    jn = result["jsonl_notes"]
-    if jn["ghosts_skipped"]:
-        notes.append(f"{len(jn['ghosts_skipped'])} pre-migration ghost items.jsonl skipped (beside backend=dolt): "
-                     + ", ".join(jn["ghosts_skipped"]))
-    if jn["duplicate_ids_skipped"]:
-        notes.append(f"{len(jn['duplicate_ids_skipped'])} duplicate ids seen in a second JSONL board, counted once "
-                     f"(e.g. {jn['duplicate_ids_skipped'][0]})")
-    dn = result.get("dolt_notes") or {}
-    if dn.get("unmapped_prefixes"):
-        notes.append(f"Dolt prefixes with no repos row, counted as '(unmapped)': {', '.join(dn['unmapped_prefixes'])}")
-    if dn.get("moved_prefixes"):
-        notes.append(f"Dolt prefixes moved to JSONL, counted from their JSONL board instead: {', '.join(dn['moved_prefixes'])}")
-    for g in result.get("moved_unseen") or []:
-        notes.append(f"MISSING: {g['repo'] or g['prefix']} ({g['prefix']}) moved to JSONL but is "
-                     + ("a stale clone here — git pull in " + ", ".join(g["local_paths"])
-                        if g["state"] == "stale_clone"
-                        else "a half-pulled clone here — finish the pull in " + ", ".join(g["local_paths"])
-                        if g["state"] == "half_pulled" else "not cloned here"))
+    n = result["notes"]
+    if n["stale_clones_skipped"]:
+        notes.append(f"{len(n['stale_clones_skipped'])} clone(s) still say backend=dolt and were skipped — "
+                     "git pull in: " + ", ".join(n["stale_clones_skipped"]))
+    if n["duplicate_ids_skipped"]:
+        notes.append(f"{len(n['duplicate_ids_skipped'])} duplicate ids seen in a second board, counted once "
+                     f"(e.g. {n['duplicate_ids_skipped'][0]})")
     if notes:
         lines.append("")
         lines.append("Notes:")
@@ -453,43 +348,19 @@ def render_text(result: dict, top: int) -> str:
 # ---------- main ----------
 
 def run(weeks: list[str], roots: list[Path], today: date) -> dict:
-    """Load both sources, tally, and return the full result dict (JSON-safe)."""
-    dolt_state, dolt_records, dolt_notes = "global", [], None
-    if not audit_survey.dolt_configured():
-        dolt_state = "retired"  # bon-comowa: every board is JSONL, nothing to read
-    else:
-        try:
-            dolt_records, dolt_notes = load_dolt_records()
-        except Exception as e:  # pymysql errors, socket errors — all mean "not read"
-            dolt_state = "unreachable"
-            print(
-                f"WARNING: Dolt unreachable ({type(e).__name__}: {e}) — this table is "
-                f"DEGRADED: JSONL boards only, every Dolt board missing.",
-                file=sys.stderr,
-            )
-    boards = audit_survey.discover_boards(roots)
-    moved = (dolt_notes or {}).pop("moved", {})
-    jsonl_records, jsonl_notes = load_jsonl_records(
-        roots, boards, skip=audit_survey.half_pulled_boards(moved, boards)
-    )
-    moved_unseen = audit_survey.moved_board_gaps(moved, boards)
-    if moved_unseen:
+    """Load every board, tally, and return the full result dict (JSON-safe)."""
+    records, notes = load_jsonl_records(roots)
+    if notes["stale_clones_skipped"]:
         print(
-            f"WARNING: {len(moved_unseen)} board(s) moved from Dolt to JSONL have no "
-            f"JSONL clone here and are MISSING from this table: "
-            + ", ".join(
-                f"{g['repo'] or g['prefix']} ({g['state'].replace('_', ' ')})"
-                for g in moved_unseen
-            ),
+            f"WARNING: {len(notes['stale_clones_skipped'])} clone(s) still say "
+            f"backend=dolt (Dolt retired 2026-10-24) and are MISSING from this "
+            f"table — git pull in: " + ", ".join(notes["stale_clones_skipped"]),
             file=sys.stderr,
         )
-    result = tally(dolt_records + jsonl_records, weeks)
+    result = tally(records, weeks)
     result["convergence"] = convergence(result["weeks"])
     result.update({
-        "dolt": dolt_state,
-        "dolt_notes": dolt_notes,
-        "jsonl_notes": jsonl_notes,
-        "moved_unseen": moved_unseen,
+        "notes": notes,
         "roots": [str(r) for r in roots],
         "current_week": current_week(today),
         "today": today.isoformat(),
@@ -498,11 +369,11 @@ def run(weeks: list[str], roots: list[Path], today: date) -> dict:
 
 
 def main(argv: list[str] | None = None) -> int:
-    ap = argparse.ArgumentParser(description="Estate-wide net motion per ISO week (Dolt + JSONL).")
+    ap = argparse.ArgumentParser(description="Estate-wide net motion per ISO week.")
     ap.add_argument("--weeks", type=int, default=10, help="window length ending in the current week (default 10)")
     ap.add_argument("--from", dest="start", help="first ISO week, e.g. 2026-W27 (with --to)")
     ap.add_argument("--to", dest="end", help="last ISO week, e.g. 2026-W36")
-    ap.add_argument("--roots", nargs="+", type=Path, help="scan roots for JSONL boards (default: ~/repos, ~/Repos, ~/notes)")
+    ap.add_argument("--roots", nargs="+", type=Path, help="scan roots for boards (default: ~/repos, ~/Repos, ~/notes)")
     ap.add_argument("--top", type=int, default=10, help="boards to list in the growth table")
     ap.add_argument("--json", action="store_true", help="emit the full result as JSON")
     args = ap.parse_args(argv)

@@ -18,7 +18,7 @@ A repeatable 5-phase review that gives the operator the shape of the estate: wha
 
 **Core principle: Verify against code, not briefs.** A brief says what was planned. The codebase says what happened. Always check.
 
-**Second principle: Survey everywhere, verify locally.** The survey sees every board in the shared Dolt database — including repos with no clone on this machine. Verification needs the actual working tree. When they diverge, say so explicitly: an item you can see but can't verify is NOT_VERIFIABLE_HERE, never trust-the-brief.
+**Second principle: Survey what is cloned, and say what isn't.** Every board is `.bon/items.jsonl` in its own repo, so the survey sees exactly the boards cloned on this machine — a repo not cloned here is not in the output at all, which is why `visibility_note` exists. Verification needs the actual working tree, and the survey only ever reports boards that have one. When the user asks about a repo the survey didn't show, say it isn't cloned here rather than calling the board empty.
 
 **Third principle: the rite is core; the ceremony is an accent.** /bon-review is the outer loop's close, and its scope is a dial — the same five phases run estate-wide (the default), on a few repos or one (`--repos`), or on one jobs-group (`--job <slug>`). The pyramid document and the dispatch-queue lanes are the operator's personal ceremony riding that spine: the queue-population step (Phase 1, assembly step 4) is a **socket** — variation point `review.populate-queue`, pluggable per team — and a review with no dispatch queue runs the rite complete without it. Verified verdicts, landed repricings and the adjudicated summary are the rite's product everywhere; the populated lanes are the ceremony's product where the queue exists. Nothing downstream depends on a queue existing.
 
@@ -39,8 +39,8 @@ A repeatable 5-phase review that gives the operator the shape of the estate: wha
 ## Prerequisites
 
 - **The open skill must be loaded** (it carries the bon CLI conventions) — the review uses `bon done` for closures
-- **`uv` in PATH** — audit_survey.py runs via `uv run --script` (pymysql resolves automatically via PEP 723)
-- **Dolt server reachable** for the estate-wide view. If it's down the survey falls back to JSONL-boards-only and says so loudly — consider fixing the server before reviewing.
+- **`uv` in PATH** — audit_survey.py runs via `uv run --script` (no third-party dependencies)
+- **The repos you want reviewed are cloned** under `~/repos`, `~/Repos` or `~/notes` (plus `~/.claude` and `~/.dotfiles`, probed directly). The review covers this machine's clones.
 
 ## Workflow: 5 Phases
 
@@ -62,29 +62,22 @@ uv run --script ${CLAUDE_SKILL_DIR}/scripts/audit_survey.py --full-dones   # lif
 
 **Scoping refuses rather than guessing (bon-libito).** `--repos` matches a whole label or its whole final path segment, so `--repos sonner` finds `spm1001/sonner` while `--repos passe` no longer sweeps in `spm1001/passe-partout`. A scope flag returning the wrong-sized answer looks exactly like a good one, so the script refuses what it cannot read — an unknown, misspelled, `=`-joined or repeated option exits 2, as does a flag with no values after it (that one used to widen silently to the whole estate: measured 2026-08-31 at 52 repos and 864 items while the caller believed it was scoped). A value naming no board exits 2 listing its substring near-misses. **Read the stderr even on a successful run** — it is the only place a narrowing appears: the near-misses a `--repos` value excluded, and the boards `--job` discarded from what `--repos` had matched.
 
-**How it surveys (hybrid):** one global Dolt query is the primary index — it covers every Dolt-backed board in the estate, cloned here or not, including boards outside the scan roots (`~/.dotfiles`). The filesystem scan only reads JSONL boards. Repo labels come from Dolt's self-registering `repos` mapping table (`bon register`).
+**How it surveys:** it walks the scan roots for `.bon/` boards (skipping hidden directories and plugin caches), probes `~/.claude` and `~/.dotfiles` directly, and reads each board's `items.jsonl`. Repo labels are the clone's path under its root (`spm1001/bon`). (Until 2026-10-24 a global query on the shared Dolt database was the primary index; it retired with Dolt.)
 
 **Output fields that drive the later phases:**
 
 | Field | Meaning |
 |-------|---------|
-| `dolt: "global"` | Full estate view. `"unreachable"` = JSONL boards only — a DEGRADED survey. |
-| `visibility_note` | Human sentence splitting the count into Dolt (visible anywhere) vs JSONL (visible only where cloned). **Read this to the user** — it's how a headline jump gets read as clones appearing, not work. |
-| `dolt_open` / `jsonl_open` | The split behind `total_open`. `jsonl_open` is machine-dependent; `dolt_open` is not. |
-| `unmapped_prefixes` | Prefixes with items but no repos-table row — usually orphaned boards of retired repos. |
-| `duplicate_prefixes` | Two boards minting the same id-space (bon-kafono) — different origins sharing one prefix, or a JSONL board squatting on a Dolt-registered prefix. Same-repo clones are exempt. Surface for re-prefixing; never merge their items. |
-| `local_path` | Clone under the scan roots — verifiable here. |
-| `not_cloned_here: true` | No clone under the scan roots or the fixed board locations (`~/.claude`, `~/.dotfiles`) — surveyed, not verifiable here. |
-| `moved_prefixes` / `moved_unseen` | Boards that have moved from Dolt to JSONL (bon-lapine). Their frozen Dolt rows are skipped and the board is counted from its JSONL clone. `moved_unseen` lists the ones with no JSONL clone here that holds the board — `stale_clone` (a clone still on backend=dolt: `git pull` it), `half_pulled` (backend gone, migrate commit not landed: finish the pull) or `not_cloned_here` — which are MISSING from the totals; `visibility_note` says so too. **Name them to the user** — a board that moved is not a board that emptied. |
-| `origin_url` | Where a fresh clone would come from, when registered. |
+| `visibility_note` | Human sentence saying the total covers only the boards cloned here. **Read this to the user** — it's how a headline jump gets read as clones appearing, not work. |
+| `stale_clones` | Clones that haven't pulled since Dolt retired (2026-10-24): `state` is `backend=dolt` (the file still says so) or `half-pulled` (the file is gone from disk but git's HEAD still has it as `dolt`). Their items.jsonl is stale or a stray, so it is NOT counted. Scoped by `--repos`/`--job` like the boards. **Name them to the user** with "git pull there" — a stale clone is not an empty board. |
+| `duplicate_prefixes` | Two boards minting the same id-space (bon-kafono) — two local clones with different origins sharing one prefix. Same-repo clones are exempt. Surface for re-prefixing; never merge their items. |
+| `local_path` | The clone the board was read from — every reported board has one, so every item is verifiable here. |
 | `open_child_count` (on outcomes) | Open children in the same board — closing this outcome would strand them (the kegewe trap). Non-zero means re-home or close children first. |
 | `recent_dones` / `recent_done_count` | Items closed inside `window_days` (default 30), newest first. The list is capped at 10; the count is the TRUE total — trust the count, not the list length. Feeds the pyramid's Recent Progress lines. **`--full-dones` lifts the cap** — right for the queue-line annotation join, which needs every close to match a line against its card. The cap is not cosmetic: 15 boards were being truncated on 2026-08-31, `~/.claude` at 129 dones and mise-en-space at 91. |
 | `git` | Light motion signal for boards with a clone here: `commits_window` + `last_commit` (date and subject). Absent for uncloned boards and non-repos. |
 | `job` | The board's jobs-group slug, from the board's `.bon/job` marker (the Dolt-era `repos.job` column was carried into `.bon/job` at migration). Drives the pyramid grouping. |
 | `jobs_unassigned` (top-level) | Boards reporting items but carrying no job — surface these for assignment, never guess a group. |
 | `repos_reported` (top-level) | Boards in the output. Includes boards with zero open items whose work all closed inside the window — a recent win is reportable even when nothing remains open. |
-
-**If `dolt` is `"unreachable"`, stop and tell the user** — present the degraded scope honestly (JSONL boards only, every Dolt board missing) and offer to fix the server first. Never present a degraded survey as the estate.
 
 **Present the pyramid, not count tables.** Assemble a DRAFT pyramid from the survey — jobs-grouped repo headlines with Recent Progress and Desired Outcomes at human grain, Cross-cutting Work first, and — where the operator runs a dispatch queue — the alignment block and the population step's annotation inputs. The full format spec, jobs-group display mapping, line-grain rules and ceremony mechanics are in `references/pyramid-format.md` — read it before assembling. In brief:
 
@@ -94,7 +87,7 @@ uv run --script ${CLAUDE_SKILL_DIR}/scripts/audit_survey.py --full-dones   # lif
 4. **Queue population (socket: `review.populate-queue`)**: where the operator runs a dispatch queue, populating its lanes IS the ceremony's product — not a proposed top-N for hand adoption. Pre-annotate every queue line with board truth from the one survey pass, triage bucket-is-verdict, and write only inside announced write-windows **at adjudication** — drafting writes nothing; the STOP gate below holds until the operator is in the conversation. **A live ceremony has two writers on one queue** (the human dragging in the app, the session writing through the API), and the races are silent. Recipe, buckets and the write-window protocol: `references/pyramid-format.md` → Queue population. The queue is the one the operator's accent names (`review.personal`, docs/ACCENT.md); no accent naming a queue → no dispatch queue in this book — one plain line ("no dispatch queue in this book, so no lane population this review"), the rite complete without it, and NEVER map a task system the accent didn't name into the ceremony, however available accomplis makes it. The socket name stays stage direction, never rendered at the human.
 5. **Boards in `jobs_unassigned`** get asked about, then persisted by writing the slug into that board's `.bon/job` and committing it.
 
-Alongside the pyramid, give the survey's one-line vitals: total open, `visibility_note` (a headline jump is usually clones appearing, not work), old-item flags, orphaned prefixes.
+Alongside the pyramid, give the survey's one-line vitals: total open, `visibility_note` (a headline jump is usually clones appearing, not work), any `stale_clones`, old-item flags.
 
 **Net motion (the balance line).** One more vital, from a second script — is the estate minting faster than it closes?
 
@@ -104,7 +97,7 @@ uv run --script ${CLAUDE_SKILL_DIR}/scripts/net_motion.py --from 2026-W27 --to 2
 uv run --script ${CLAUDE_SKILL_DIR}/scripts/net_motion.py --json          # for the draft
 ```
 
-It buckets every item's `created_at` (minted) and `done_at` (closed) by ISO week across BOTH halves — Dolt's global `items` + `archive` tables (every prefix, mapped or not) and every JSONL board the survey would see, archives folded in — and prints minted, closed and **net = closed − minted** (negative: the boards grew) for all / Dolt / JSONL, then a per-board table of who carries the growth. Read it with three things in hand (bon-dajusi, measured 2026-09-03): the **residual** line per source must read 0 — it is `open now − (open at window start − Σ net)`, the whole checked against its parts, and a non-zero one names its cause (a done item with no `done_at`, an unparseable stamp) rather than hiding it; the **current week is partial** and says how many of its seven days are in — a fortnight read on a Monday is mostly last week, which is how a 2026-09-01 read saw W36 at −9 when four days later it stood at −84; and the convergence line gives the prior weeks' **median beside the mean**, because one bulk-close sweep (W28 2026: 518 closes, 213 of them on 07-08) drags a mean positive for months. A Dolt outage degrades LOUDLY — stderr warning plus `dolt: "unreachable"` — and the JSONL half still prints; present that as half a table, never as the estate. Pre-migration ghosts (`items.jsonl` beside `backend = dolt`) and an id seen in a second clone are skipped and named under Notes. Render the all-boards weekly table and the top of the growth table in the pyramid's vitals; the one-sentence reading ("does the convergence hold, and which boards carry it") is the ceremony's to write, from the numbers.
+It buckets every item's `created_at` (minted) and `done_at` (closed) by ISO week across every board the survey would see, archives folded in, and prints minted, closed and **net = closed − minted** (negative: the boards grew), then a per-board table of who carries the growth. Read it with three things in hand (bon-dajusi, measured 2026-09-03): the **residual** line must read 0 — it is `open now − (open at window start − Σ net)`, the whole checked against its parts, and a non-zero one names its cause (a done item with no `done_at`, an unparseable stamp) rather than hiding it; the **current week is partial** and says how many of its seven days are in — a fortnight read on a Monday is mostly last week, which is how a 2026-09-01 read saw W36 at −9 when four days later it stood at −84; and the convergence line gives the prior weeks' **median beside the mean**, because one bulk-close sweep (W28 2026: 518 closes, 213 of them on 07-08) drags a mean positive for months. A stale clone (`backend = dolt`, not pulled since the retirement) and an id seen in a second clone are skipped and named under Notes. Render the all-boards weekly table and the top of the growth table in the pyramid's vitals; the one-sentence reading ("does the convergence hold, and which boards carry it") is the ceremony's to write, from the numbers.
 
 **Citation cross-check (orphans).** For boards with a local clone, run:
 
@@ -120,7 +113,7 @@ The convention (bon-nenine, 2026-08-08): commits doing tracked work cite their b
 
 ### Phase 2: Verify (the hard part)
 
-Verification is LOCAL-ONLY: dispatch read-only subagents (Task tool, Opus) for repos with a `local_path`. Items in `not_cloned_here` repos are classified **NOT_VERIFIABLE_HERE** — with a note of where they could be verified (a machine holding the clone, or a fresh clone from `origin_url`) — unless the user asks you to clone or ssh. Never let distance quietly downgrade the standard to trusting the brief.
+Verification is LOCAL: dispatch read-only subagents (Task tool, Opus) against each repo's `local_path`. An item whose done-criteria live in a repo not cloned here (a sibling repo, another machine) is classified **NOT_VERIFIABLE_HERE**, with a note of where it could be verified, unless the user asks you to clone or ssh. Never let distance quietly downgrade the standard to trusting the brief.
 
 **Freshness gate (before dispatch) — a stale clone is worse than no clone.** A clone is a snapshot; verifying a brief against out-of-date code produces a *confident* wrong verdict (a false DONE/STALE), whereas NOT_VERIFIABLE_HERE at least announces its ignorance. So before dispatching a repo's subagent, bring its clone current or flag it:
 
@@ -283,7 +276,7 @@ Scanned {N} open items across {M} boards. {R} carry a repricing — queued for P
 
 | Repo | Items | Where verifiable |
 |------|-------|------------------|
-| ... | ... | machine/clone hint, or origin_url |
+| ... | ... | machine or clone hint |
 
 ### External Surface — Verify Off-Repo ({count})
 
@@ -295,11 +288,11 @@ facteur/mise-armed session) can tick them in one pass instead of digging.
 |------|-------|------------------|
 | ... | ... | Drive doc / Confluence / dashboard / thread |
 
-### Orphaned Prefixes ({count})
+### Stale Clones ({count})
 
-| Prefix | Open items | Triage options |
-|--------|-----------|----------------|
-| ... | ... | `bon move` the live ones from a clone / report the rest as archived history (Phase 4 orphan note) |
+| Clone | Prefix | Why stale | Fix |
+|-------|--------|-----------|-----|
+| ... | ... | backend=dolt / half-pulled | `git pull` there (from `stale_clones`) |
 
 ### Unclear — Needs Human ({count})
 
@@ -331,14 +324,9 @@ cd {local_path}
 bon done {id}
 ```
 
-**For items in `not_cloned_here` repos** (in preference order):
-1. ssh to a machine holding the clone and run `bon done` there
-2. Defer with a note in the summary — closure waits for a session on the right machine
-3. Clone fresh from `origin_url` only if the user wants it — cloning just to close items is usually overkill
+**For orphan prefixes (items once seen with no clone anywhere):** these lived only in the shared Dolt database. Since Dolt was retired (2026-10-24) their items survive only in `spm1001/bon-dolt-backup` (`readable/` JSONL, or a native `dolt clone`), so there is no live board to close them on. Report them as archived history; never recreate a board just to close its items. (The old scratch-reconnect recipe used `bon init --backend dolt`, which no longer exists.)
 
-**For orphan boards (a prefix with NO clone anywhere):** these lived only in the shared Dolt database. Since Dolt was retired (2026-10-24) their items survive only in `spm1001/bon-dolt-backup` (`readable/` JSONL, or a native `dolt clone`), so there is no live board to close them on. Report them as archived history; never recreate a board just to close its items. (The old scratch-reconnect recipe used `bon init --backend dolt`, which no longer exists.)
-
-**Commit strategy (JSONL boards only — Dolt boards have no file to commit):**
+**Commit strategy:**
 ```bash
 cd {local_path}
 git add .bon/items.jsonl
@@ -377,7 +365,7 @@ uv run --script ${CLAUDE_SKILL_DIR}/scripts/audit_survey.py
 | Closing without verification | Work may not be done | Always verify against codebase in Phase 2 |
 | Trusting briefs at face value | Codebase may have diverged | Verify, especially items >30 days old |
 | Trust-the-brief for uncloned repos | Distance is not verification | Classify NOT_VERIFIABLE_HERE; verify where the code lives |
-| Presenting a degraded survey as the estate | `dolt: unreachable` output is JSONL-only | Name the degradation; offer to fix the server first |
+| Presenting this machine's clones as the estate | The survey sees only what is cloned here | Read `visibility_note` aloud; name `stale_clones` |
 | Closing items from the wrong cwd | bon resolves the board by cwd | `cd` into the target clone (or ssh) before `bon done` |
 | In-context-only subagent results | A bg'd session loses them | Subagents Write result files as they finish |
 | Auto-closing stale items | Stale brief ≠ stale intent | Flag stale, let human decide |
@@ -399,6 +387,6 @@ uv run --script ${CLAUDE_SKILL_DIR}/scripts/audit_survey.py
 
 - `references/pyramid-format.md` — The Phase 1 pyramid: document shape, jobs display mapping, alignment block, queue population (lanes, pre-annotation, write-windows), ceremony mechanics
 - `references/verification-patterns.md` — How to verify different brief types
-- `scripts/audit_survey.py` — Hybrid estate survey (Dolt-global + JSONL sweep) with recent wins, git signal, jobs grouping, age flags
+- `scripts/audit_survey.py` — Estate survey over this machine's clones, with recent wins, git signal, jobs grouping, age flags
 - `scripts/orphans.py` — Per-clone citation cross-check: commits vs board (CITED-BUT-OPEN close-candidates, UNKNOWN-ID typos, coverage telemetry)
-- `scripts/net_motion.py` — Estate net motion: minted vs closed per ISO week, Dolt + JSONL, per-source residual, per-board growth table (bon-dajusi)
+- `scripts/net_motion.py` — Estate net motion: minted vs closed per ISO week, whole-vs-parts residual, per-board growth table (bon-dajusi)

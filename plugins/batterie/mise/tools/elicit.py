@@ -65,6 +65,9 @@ UNAVAILABLE = "unavailable"    # the question could not be prepared (a Google re
 # the body would see "no dialog". It must stop instead (mise-pukiri, round-2
 # essayeur: update_event wrote after a decline that way).
 ORPHANED = "orphaned"
+# The message still carries a control or bidi character: a renderer built it
+# without dialog_lines. A backstop — the three renderers never reach it.
+UNSAFE = "unsafe"
 
 
 @dataclass(frozen=True)
@@ -73,8 +76,8 @@ class GateQuestion:
 
     message: the op's preview message, or None when there is nothing to
         confirm here (not gated, confirmed, no capability, invalid inputs).
-    skipped: why a gated call was NOT asked — TOO_LONG, UNAVAILABLE or
-        ORPHANED — else None.
+    skipped: why a gated call was NOT asked — TOO_LONG, UNAVAILABLE,
+        ORPHANED or UNSAFE — else None.
     Built by tools/confirm_gate.py; lives here so the ops can read it.
     """
 
@@ -116,6 +119,67 @@ DIALOG_MAX_COLS = 80 - 6
 def _display_width(text: str) -> int:
     """Terminal columns: wide and full-width characters take two."""
     return sum(2 if unicodedata.east_asian_width(ch) in "WF" else 1 for ch in text)
+
+
+# Bidi controls (embeddings, overrides, isolates and the invisible marks).
+# Category Cf, so they are named; Cf as a whole would take the emoji ZWJ too.
+_BIDI_CONTROLS = frozenset(
+    "\u061c\u200e\u200f\u202a\u202b\u202c\u202d\u202e\u2066\u2067\u2068\u2069"
+)
+
+
+def _is_unsafe(ch: str) -> bool:
+    """A character a terminal acts on or reorders rather than prints: C0 and C1
+    controls and DEL (Cc), the Unicode line and paragraph separators, bidi controls."""
+    return unicodedata.category(ch) in ("Cc", "Zl", "Zp") or ch in _BIDI_CONTROLS
+
+
+def _placeholder(ch: str) -> str:
+    code = ord(ch)
+    if code < 0x20:
+        return chr(0x2400 + code)  # the Control Pictures block: \r -> ␍, ESC -> ␛
+    if code == 0x7F:
+        return "\u2421"  # ␡
+    return f"[U+{code:04X}]"
+
+
+def dialog_line(text: str) -> str:
+    """One line of a dialog message, with every control or bidi character SHOWN.
+
+    Titles are other people's text (a file name, an event summary, a stranger's
+    invite in the clash check). Raw, a \r sends the cursor back over the line,
+    an ESC sequence erases or moves it, a \n forges a line of its own and an
+    RLO reverses what the human reads (mise-selejo). Each is replaced by a
+    visible placeholder rather than deleted, so the human sees that something
+    was there instead of the terminal acting on it. Look-alikes are out of
+    scope: a title holding a literal '␍' reads the same as one holding \r, and
+    the other Cf characters (U+200B, U+FEFF, the soft hyphen and the rest) pass
+    through raw — they can make two titles look alike but cannot move the
+    cursor or reorder text.
+    """
+    return "".join(_placeholder(ch) if _is_unsafe(ch) else ch for ch in text)
+
+
+def dialog_lines(lines: list[str]) -> str:
+    """A preview message from its lines — the one way a confirm renderer builds it.
+
+    Each line is sanitised whole, so a field added to a renderer later is
+    covered without anyone remembering to; the dialog text and the re-render
+    settle_gate compares it with go through the same function, so they stay
+    byte-identical.
+    """
+    return "\n".join(dialog_line(line) for line in lines)
+
+
+def dialog_safe(message: str) -> bool:
+    """No control or bidi character except the line breaks between lines.
+
+    The backstop's blind spot: \\n is exempt, and from the joined message this
+    cannot tell a real line break from one a title forged. A renderer that
+    bypasses dialog_lines with a \\n in a title passes this check; only
+    dialog_lines (which sanitises each line before joining) stops that.
+    """
+    return not any(_is_unsafe(ch) for ch in message.replace("\n", ""))
 
 
 def fits_dialog(message: str) -> bool:
@@ -199,6 +263,11 @@ _SKIP_CUES = {
         "no dialog: the confirmation question could not be prepared (a Google read "
         "failed), so the confirm= round-trip applies: show the user this preview "
         "and call again with confirm=True on their yes."
+    ),
+    UNSAFE: (
+        "no dialog: the preview text carries a control or bidi character a terminal "
+        "would act on rather than show, so the confirm= round-trip applies: show the "
+        "user this preview and call again with confirm=True on their yes."
     ),
     ORPHANED: (
         "elicitation: an answer came back for a question this call no longer asks — "

@@ -1,39 +1,22 @@
 # /// script
 # requires-python = ">=3.11"
-# dependencies = ["pymysql"]
+# dependencies = []
 # ///
 """Audit survey — estate-wide view of open bon items for the /bon-review skill.
 
-Hybrid survey (bon-fuwofi): the shared Dolt database is the PRIMARY index —
-one global query covers every Dolt board in the estate, including repos with
-no clone on this machine and boards outside the scan roots (~/.dotfiles).
-The filesystem scan is demoted to a JSONL-straggler sweep: it only reads
-boards without a Dolt backend (their items already arrive via the global
-query). A board that has moved from Dolt to JSONL flips sides: the global
-query skips its frozen rows and the sweep reads its clone, and where no JSONL
-clone is here the board is named in `moved_unseen` rather than vanishing
-(bon-lapine).
-
-Repo labels come from Dolt's self-registering `repos` mapping table
-(prefix → repo_name, origin_url — see `bon register`). A prefix with no
-mapping row surfaces as "<prefix> (unmapped)" — fail visible, never guess.
-
-Each repo group carries `local_path` (a clone under the scan roots) or
-`not_cloned_here: true` so the review skill can split verification
-(local code checks) from survey-only visibility.
-
-If the Dolt server is unreachable the survey falls back to the old
-filesystem-only behaviour (including per-board `bon list --jsonl` for local
-Dolt boards) and says so loudly — a degraded survey must never present
-itself as the whole estate.
+Filesystem survey: every board on the estate is `.bon/items.jsonl` in its own
+repo (the shared Dolt database was retired on 2026-10-24, bon-venida), so the
+survey walks the scan roots and reads each board it finds. What it reports is
+what this machine has cloned — a board not cloned under the roots is not in
+the output, and `visibility_note` says so. A clone still carrying
+`.bon/backend` = `dolt` has not pulled since the retirement: its items.jsonl,
+if any, is stale, so it is not counted and is named in `stale_clones` instead.
 
 Default roots: whichever of ~/repos, ~/Repos, ~/notes exist (deduped by
 realpath). REPOS_DIR env var overrides with a single root; --roots overrides
 both. The ~/.claude board (JSONL, prefix carte) is probed directly rather
 than walked: the walk skips hidden directories, and a recursive walk of
 ~/.claude would surface phantom boards from vendored marketplace clones.
-Connection config: BON_DOLT_* env vars > ~/.config/bon/dolt.toml
-(same resolution as bon's dolt.py, minus the macOS keychain).
 
 Recent wins ride the same pass (bon-jagoha): each repo group carries
 `recent_dones` (items closed inside the window, newest first, capped with the
@@ -41,8 +24,7 @@ true total in `recent_done_count`) and, where a clone exists, a light `git`
 signal (commit count in the window + last commit line). The pyramid's
 "Recent Progress" lines come from these, not a separate sweep.
 
-Jobs grouping: each repo group carries `job` when assigned — Dolt boards from
-the repos table's `job` column (`bon register --job`), JSONL boards from a
+Jobs grouping: each repo group carries `job` when assigned, from the board's
 `.bon/job` marker file. Boards with open items and no job are listed in
 `jobs_unassigned` — fail-visible for assignment, never guessed. `--job <slug>`
 scopes the survey to one or more jobs groups.
@@ -86,264 +68,6 @@ import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-# ---------- Dolt connection (mirrors bon/dolt.py resolution) ----------
-
-_DOLT_DEFAULTS = {
-    "host": "127.0.0.1",
-    "port": 3306,
-    "database": "bon",
-    "user": "root",
-    "password": "",
-}
-
-
-def dolt_configured() -> bool:
-    """Is this machine still a Dolt client? (bon-comowa, 2026-10-24.)
-
-    Every board moved to JSONL and the server was stopped on 2026-10-24, and
-    each machine's ~/.config/bon/dolt.toml was removed with it. Without that
-    file or a BON_DOLT_* override there is nothing to query, so the readers
-    report Dolt as "retired" instead of spending a connect timeout to print an
-    "unreachable" warning that would be a false alarm on every review.
-    """
-    if (Path.home() / ".config" / "bon" / "dolt.toml").exists():
-        return True
-    return any(os.environ.get(k) for k in (
-        "BON_DOLT_HOST", "BON_DOLT_PORT", "BON_DOLT_DATABASE", "BON_DOLT_USER", "BON_DOLT_PASSWORD"))
-
-
-def load_dolt_config() -> dict:
-    """Connection config: env vars > ~/.config/bon/dolt.toml > defaults."""
-    config = dict(_DOLT_DEFAULTS)
-    config_path = Path.home() / ".config" / "bon" / "dolt.toml"
-    if config_path.exists():
-        try:
-            import tomllib
-            with open(config_path, "rb") as f:
-                file_config = tomllib.load(f)
-            for key in ("host", "port", "database", "user", "password"):
-                if key in file_config:
-                    config[key] = file_config[key]
-        except Exception as e:
-            print(f"Warning: failed to read {config_path}: {e}", file=sys.stderr)
-
-    env_map = {
-        "BON_DOLT_HOST": "host",
-        "BON_DOLT_PORT": "port",
-        "BON_DOLT_DATABASE": "database",
-        "BON_DOLT_USER": "user",
-        "BON_DOLT_PASSWORD": "password",
-    }
-    for env_key, config_key in env_map.items():
-        val = os.environ.get(env_key)
-        if val is not None:
-            config[config_key] = int(val) if config_key == "port" else val
-    return config
-
-
-def moved_prefixes(cur) -> dict[str, dict]:
-    """Prefixes whose board has moved to JSONL, mapped to bon's moved marker.
-
-    `bon migrate --to jsonl` leaves the board's rows in Dolt on purpose —
-    frozen, for the backup and so a stale clone still reads something — and
-    records the move as a `moved:<prefix>` row in the config table
-    (bon-lowija). A reader of every Dolt row would therefore count a migrated
-    board twice: the frozen copy here and the live one in its JSONL clone,
-    with the frozen copy winning any id dedup. Every global Dolt reader skips
-    these prefixes (bon-lapine). Value shape as bon's dolt._moved_marker:
-    JSON {at, repo, origin}; an unparseable marker still means moved.
-    """
-    import pymysql
-
-    try:
-        cur.execute("SELECT `key`, `value` FROM config WHERE `key` LIKE 'moved:%'")
-    except pymysql.err.ProgrammingError as e:
-        # 1146: no config table. bon creates it with the schema, so a server
-        # without one has never been written by a CLI that could mark a move.
-        if e.args and e.args[0] == 1146:
-            return {}
-        raise
-    moved = {}
-    for row in cur.fetchall():
-        try:
-            marker = json.loads(row["value"])
-        except (json.JSONDecodeError, TypeError):
-            marker = None
-        if not isinstance(marker, dict):
-            # A marker row we can't read as {at, repo, origin} still means
-            # moved — refuse, don't admit (bon's dolt._moved_marker agrees).
-            marker = {"at": str(row["value"])}
-        moved[row["key"].split(":", 1)[1]] = marker
-    return moved
-
-
-def clone_holds_board(board: dict) -> bool:
-    """A JSONL clone holds a moved board once git tracks its items.jsonl and
-    no longer tracks .bon/backend — i.e. the migrate commit has landed here.
-
-    A file on disk is not enough (essayeur round 2 on bon-lapine): a clone
-    whose backend was deleted before the pull landed can hold a stray
-    untracked items.jsonl — one `bon new` there writes it silently — or an
-    old ghost, and either would be counted as the whole moved board.
-    """
-    bon_dir = board["bon_dir"]
-    if not (bon_dir / "items.jsonl").exists():
-        return False
-
-    def git_ok(*args: str) -> bool:
-        return subprocess.run(
-            ["git", "-C", str(bon_dir), *args], capture_output=True, text=True
-        ).returncode == 0
-
-    if not git_ok("rev-parse", "--is-inside-work-tree"):
-        return True  # no git to ask; the file is all there is
-    return git_ok("ls-files", "--error-unmatch", "items.jsonl") and not git_ok(
-        "ls-files", "--error-unmatch", "backend"
-    )
-
-
-def half_pulled_boards(moved: dict[str, dict], boards: list[dict]) -> set[str]:
-    """bon_dirs (as str) of non-Dolt clones of a moved prefix that do not yet
-    hold the board. Their items.jsonl is not the board, so no reader counts it."""
-    return {
-        str(b["bon_dir"]) for b in boards
-        if b["prefix"] in moved and b["backend"] != "dolt" and not clone_holds_board(b)
-    }
-
-
-def moved_board_gaps(moved: dict[str, dict], boards: list[dict]) -> list[dict]:
-    """Moved prefixes this machine cannot count from a JSONL clone.
-
-    Skipping a moved prefix in Dolt is only right where its JSONL board is
-    read instead. Where it isn't, the board would vanish without a word — so
-    each gap is named: `stale_clone` (a local clone still on backend=dolt,
-    which needs a git pull), `half_pulled` (.bon/backend gone but the migrate
-    commit not landed — see clone_holds_board) or `not_cloned_here`.
-    """
-    local: dict[str, list[dict]] = {}
-    for b in boards:
-        if b["prefix"]:
-            local.setdefault(b["prefix"], []).append(b)
-    gaps = []
-    for prefix in sorted(moved):
-        here = local.get(prefix, [])
-        if any(b["backend"] != "dolt" and clone_holds_board(b) for b in here):
-            continue
-        gap = {
-            "prefix": prefix,
-            "repo": moved[prefix].get("repo"),
-            "moved_at": moved[prefix].get("at"),
-        }
-        if any(b["backend"] == "dolt" for b in here):
-            gap["state"] = "stale_clone"
-        elif here:
-            gap["state"] = "half_pulled"
-        else:
-            gap["state"] = "not_cloned_here"
-        if here:
-            gap["local_paths"] = [str(b["repo_path"]) for b in here]
-        gaps.append(gap)
-    return gaps
-
-
-def query_dolt_global(
-    done_cutoff: str,
-) -> tuple[
-    dict[str, list[dict]], dict[str, list[dict]], dict[str, dict], dict[str, dict]
-]:
-    """One global pass: open items and recent dones grouped by prefix, plus repos map.
-
-    Returns (open_by_prefix, dones_by_prefix, repos_map, moved). `done_cutoff`
-    is an ISO-8601 Z timestamp; done_at is stored in the same format, so the
-    string comparison is a correct date comparison. Prefixes in `moved` (see
-    moved_prefixes) are left out of both groupings — their truth is the JSONL
-    board. Raises on any connection/query failure — the caller decides the
-    fallback.
-    """
-    import pymysql
-
-    config = load_dolt_config()
-    conn = pymysql.connect(
-        host=config["host"],
-        port=config["port"],
-        user=config["user"],
-        password=config["password"],
-        database=config["database"],
-        cursorclass=pymysql.cursors.DictCursor,
-        connect_timeout=5,
-    )
-    try:
-        with conn.cursor() as cur:
-            moved = moved_prefixes(cur)
-            # `someday` arrived August 2026 (bon-majoca) — fall back to the
-            # older shape if this server's schema hasn't migrated yet.
-            try:
-                cur.execute(
-                    "SELECT id, type, title, status, brief, parent, waiting_for, "
-                    "someday, created_at FROM items WHERE status = 'open'"
-                )
-                rows = cur.fetchall()
-            except pymysql.err.MySQLError:
-                cur.execute(
-                    "SELECT id, type, title, status, brief, parent, waiting_for, "
-                    "created_at FROM items WHERE status = 'open'"
-                )
-                rows = cur.fetchall()
-            cur.execute(
-                "SELECT id, type, title, done_at, done_note FROM items "
-                "WHERE status = 'done' AND done_at >= %s",
-                (done_cutoff,),
-            )
-            done_rows = cur.fetchall()
-            # `job` arrived August 2026; a server whose schema predates it
-            # (migration rides the next bon CLI connection) must not break
-            # the survey — fall back to the jobless shape.
-            try:
-                cur.execute("SELECT prefix, repo_name, origin_url, job FROM repos")
-                repo_rows = cur.fetchall()
-            except pymysql.err.MySQLError:
-                cur.execute("SELECT prefix, repo_name, origin_url FROM repos")
-                repo_rows = [dict(r, job=None) for r in cur.fetchall()]
-            repos_map = {
-                r["prefix"]: {
-                    "repo_name": r["repo_name"],
-                    "origin_url": r["origin_url"],
-                    "job": r.get("job"),
-                }
-                for r in repo_rows
-            }
-    finally:
-        conn.close()
-
-    by_prefix: dict[str, list[dict]] = {}
-    for row in rows:
-        item = _dolt_row_to_item(row)
-        prefix = item["id"].split("-", 1)[0]
-        if prefix not in moved:
-            by_prefix.setdefault(prefix, []).append(item)
-    dones_by_prefix: dict[str, list[dict]] = {}
-    for row in done_rows:
-        prefix = row["id"].split("-", 1)[0]
-        if prefix not in moved:
-            dones_by_prefix.setdefault(prefix, []).append(dict(row))
-    return by_prefix, dones_by_prefix, repos_map, moved
-
-
-def _dolt_row_to_item(row: dict) -> dict:
-    """Minimal row→item conversion (brief JSON, waiting_for list-or-legacy)."""
-    item = dict(row)
-    brief = item.get("brief")
-    if isinstance(brief, str):
-        try:
-            item["brief"] = json.loads(brief)
-        except json.JSONDecodeError:
-            item["brief"] = {}
-    wf = item.get("waiting_for")
-    if isinstance(wf, str):
-        item["waiting_for"] = json.loads(wf) if wf.startswith("[") else [wf]
-    return item
-
-
 # ---------- JSONL boards (filesystem) ----------
 
 def load_items_jsonl(bon_path: Path) -> list[dict]:
@@ -359,47 +83,37 @@ def load_items_jsonl(bon_path: Path) -> list[dict]:
     return list(items.values())
 
 
-# bon's own load warning on a board whose Dolt copy is frozen (dolt.py
-# _warn_if_moved). The fallback reader keys on it because it is the one
-# signal the CLI gives that the rows it just printed are not the board.
-FROZEN_BOARD_WARNING = "Warning: frozen board"
-
-
-def load_items_dolt_via_cli(repo_path: Path) -> tuple[list[dict], bool]:
-    """Fallback only: read a local Dolt board via `bon list --jsonl`.
-
-    Returns (items, frozen). `frozen` is True when bon says this clone's
-    board has moved to JSONL — the items are then the frozen Dolt copy, and
-    the caller must not count them (essayeur finding on bon-lapine: the
-    survey's own query failing while the CLI still reached Dolt counted a
-    closed item as open, and named nothing).
-    """
-    try:
-        result = subprocess.run(
-            ["bon", "list", "--jsonl"],
-            cwd=repo_path,
-            capture_output=True, text=True, timeout=10,
-        )
-        if FROZEN_BOARD_WARNING in result.stderr:
-            return [], True
-        if result.returncode != 0:
-            return [], False
-        items = {}
-        for line in result.stdout.strip().splitlines():
-            if line:
-                item = json.loads(line)
-                items[item["id"]] = item
-        return list(items.values()), False
-    except (subprocess.TimeoutExpired, FileNotFoundError):
-        return [], False
-
-
 def get_backend(bon_dir: Path) -> str:
     """Read .bon/backend to determine storage type. Absent = jsonl."""
     backend_file = bon_dir / "backend"
     if backend_file.exists():
-        return backend_file.read_text().strip()
+        return backend_file.read_text().strip().lower()
     return "jsonl"
+
+
+def stale_state(board: dict) -> str | None:
+    """Why this clone's board can't be trusted, or None when it can.
+
+    `backend=dolt`: the file still says so — the clone hasn't pulled since Dolt
+    retired (2026-10-24). `half-pulled`: the file is gone from disk but git's
+    HEAD still has it as `dolt`, so the migrate commit hasn't landed and any
+    items.jsonl here is a stray (bon's own `_refuse_if_half_pulled` guards the
+    CLI against the same shape). Inherited GIT_* location variables are
+    dropped so a hook's GIT_DIR can't answer for another repo.
+    """
+    if board["backend"] == "dolt":
+        return "backend=dolt"
+    if (board["bon_dir"] / "backend").exists():
+        return None
+    env = {k: v for k, v in os.environ.items()
+           if k not in ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE")}
+    r = subprocess.run(
+        ["git", "-C", str(board["bon_dir"]), "show", "HEAD:./backend"],
+        capture_output=True, text=True, env=env,
+    )
+    if r.returncode == 0 and r.stdout.strip().lower() == "dolt":
+        return "half-pulled"
+    return None
 
 
 def get_prefix(bon_dir: Path) -> str | None:
@@ -411,8 +125,7 @@ def get_prefix(bon_dir: Path) -> str | None:
 
 
 def get_job(bon_dir: Path) -> str | None:
-    """Read .bon/job — the JSONL board's jobs-group marker (Dolt boards use
-    the repos table's job column instead; see `bon register --job`)."""
+    """Read .bon/job — the board's jobs-group marker."""
     job_file = bon_dir / "job"
     if job_file.exists():
         return job_file.read_text().strip() or None
@@ -642,22 +355,14 @@ def board_origin(repo_path: Path) -> str | None:
     return _norm_origin(r.stdout.strip())
 
 
-def detect_duplicate_prefixes(
-    boards: list[dict],
-    repos_map: dict[str, dict],
-    origin_resolver=None,
-) -> list[dict]:
+def detect_duplicate_prefixes(boards: list[dict], origin_resolver=None) -> list[dict]:
     """Boards sharing a prefix without sharing an origin are squatters (bon-kafono).
 
-    Two layers, so the check doesn't depend on the rightful owner being cloned
-    here: (1) local boards grouped by prefix — more than one distinct origin
-    flags the group (same-origin clones, e.g. a marketplace cache checkout of
-    the same repo, are the estate's normal shape and exempt); (2) a JSONL board
-    whose prefix carries a repos-table row pointing at a different origin — the
-    shared-DB owner needn't be cloned locally to be squatted on. A Dolt board
-    whose mapping origin drifted is a stale registration, not a squat, and is
-    deliberately not flagged here. A board with no origin remote counts as its
-    own identity: fail-visible beats a silent merge.
+    Local boards grouped by prefix — more than one distinct origin flags the
+    group (same-origin clones, e.g. a marketplace cache checkout of the same
+    repo, are the estate's normal shape and exempt). A board with no origin
+    remote counts as its own identity: fail-visible beats a silent merge.
+    (A second layer checked against the Dolt repos table; it retired with Dolt.)
     """
     resolve = origin_resolver or board_origin
     by_prefix: dict[str, list[dict]] = {}
@@ -667,34 +372,15 @@ def detect_duplicate_prefixes(
 
     findings = []
     for prefix, group in sorted(by_prefix.items()):
-        mapping = repos_map.get(prefix)
-        mapped_origin = _norm_origin(mapping.get("origin_url")) if mapping else None
-        needs_origins = len(group) > 1 or (
-            mapped_origin and any(b["backend"] != "dolt" for b in group)
-        )
-        if not needs_origins:
+        if len(group) < 2:
             continue
         entries = [
-            {
-                "local_path": str(b["repo_path"]),
-                "backend": b["backend"],
-                "origin": resolve(b["repo_path"]),
-            }
+            {"local_path": str(b["repo_path"]), "origin": resolve(b["repo_path"])}
             for b in group
         ]
         identities = {e["origin"] or e["local_path"] for e in entries}
-        jsonl_squat = mapped_origin and any(
-            e["backend"] != "dolt" and e["origin"] != mapped_origin
-            for e in entries
-        )
-        if len(identities) > 1 or jsonl_squat:
-            finding = {"prefix": prefix, "boards": entries}
-            if mapping:
-                finding["repos_table"] = {
-                    "repo_name": mapping.get("repo_name"),
-                    "origin_url": mapping.get("origin_url"),
-                }
-            findings.append(finding)
+        if len(identities) > 1:
+            findings.append({"prefix": prefix, "boards": entries})
     return findings
 
 
@@ -702,8 +388,7 @@ def detect_duplicate_prefixes(
 # hidden directories (and ~/.claude is one), so probe these directly — bounded,
 # and immune to the phantom boards a recursive walk of plugins/marketplaces/
 # clones would surface. ~/.dotfiles (prefix df) is the board the Dolt census
-# found every consumer missing (docs/dolt-consumers-2026-09-25.md): read from
-# Dolt it needed no clone, but once it moves to JSONL only this probe sees it.
+# found every consumer missing (docs/dolt-consumers-2026-09-25.md).
 EXTRA_BOARD_DIRS = [Path.home() / ".claude" / ".bon", Path.home() / ".dotfiles" / ".bon"]
 
 
@@ -729,104 +414,32 @@ def survey(
     job_filter: list[str] | None = None,
     full_dones: bool = False,
 ) -> dict:
-    """Hybrid estate survey. Returns the full output document."""
+    """Estate survey over this machine's clones. Returns the full output document."""
     boards = discover_boards(roots)
     dones_cap = None if full_dones else RECENT_DONES_CAP
-    local_dolt_by_prefix = {
-        b["prefix"]: b for b in boards if b["backend"] == "dolt" and b["prefix"]
-    }
     done_cutoff = (
         datetime.now(timezone.utc) - timedelta(days=window_days)
     ).strftime("%Y-%m-%dT%H:%M:%SZ")
 
-    dolt_mode = "global"
-    dolt_items: dict[str, list[dict]] = {}
-    dolt_dones: dict[str, list[dict]] = {}
-    repos_map: dict[str, dict] = {}
-    moved: dict[str, dict] = {}
-    if not dolt_configured():
-        dolt_mode = "retired"  # every board is JSONL; the filesystem survey is the whole estate
-    else:
-        try:
-            dolt_items, dolt_dones, repos_map, moved = query_dolt_global(done_cutoff)
-        except Exception as e:
-            dolt_mode = "unreachable"
-            print(
-                f"WARNING: Dolt server unreachable ({e}).\n"
-                f"Falling back to filesystem survey: repos not cloned under "
-                f"{', '.join(str(r) for r in roots)} are MISSING from this output, "
-                f"and local Dolt-backed boards will read empty if the server is "
-                f"down — this output may be JSONL boards only.",
-                file=sys.stderr,
-            )
-
     results = []
-    unmapped = []
+    stale_clones = []
     seen_ids: set[str] = set()
 
-    if dolt_mode == "global":
-        # Primary index: every Dolt board in the estate, cloned here or not.
-        # Iterate the union of open and recently-done prefixes: a board whose
-        # work all closed this window has no open items but IS a recent win.
-        all_prefixes = sorted(set(dolt_items) | set(dolt_dones))
-        for prefix in all_prefixes:
-            items = dolt_items.get(prefix, [])
-            open_items = [i for i in items if i["id"] not in seen_ids]
-            seen_ids.update(i["id"] for i in open_items)
-            recent, recent_total = done_records(
-                dolt_dones.get(prefix, []), cap=dones_cap
-            )
-            if not open_items and not recent:
-                continue
-            mapping = repos_map.get(prefix)
-            local = local_dolt_by_prefix.get(prefix)
-            if mapping:
-                label = mapping["repo_name"]
-            else:
-                label = f"{prefix} (unmapped)"
-                unmapped.append(prefix)
-            extra = {
-                "prefix": prefix,
-                "backend": "dolt",
-                "recent_dones": recent,
-                "recent_done_count": recent_total,
-            }
-            if mapping and mapping.get("job"):
-                extra["job"] = mapping["job"]
-            if mapping and mapping.get("origin_url"):
-                extra["origin_url"] = mapping["origin_url"]
-            if local:
-                extra["local_path"] = str(local["repo_path"])
-            else:
-                extra["not_cloned_here"] = True
-            results.append(repo_entry(label, open_items, **extra))
-
-    half_pulled = half_pulled_boards(moved, boards)
-
-    # Straggler sweep: JSONL boards only (Dolt boards arrived via the global
-    # query). In fallback mode, local Dolt boards are read via the CLI so the
-    # survey still covers everything visible from this machine.
     for board in boards:
-        if board["backend"] == "dolt":
-            if dolt_mode == "global":
-                continue
-            items, frozen = load_items_dolt_via_cli(board["repo_path"])
-            if frozen:
-                # Name it through the same path as a marker read from Dolt.
-                if board["prefix"]:
-                    moved.setdefault(board["prefix"], {
-                        "at": "an unknown date (read from bon's frozen-board warning)",
-                        "repo": None,
-                    })
-                else:
-                    print(f"WARNING: {board['repo_path']} reads as a frozen board and "
-                          f"has no .bon/prefix — skipped, not counted.", file=sys.stderr)
-                continue
-        elif str(board["bon_dir"]) in half_pulled:
-            continue  # not the board yet; named in moved_unseen
-        else:
-            items_path = board["bon_dir"] / "items.jsonl"
-            items = load_items_jsonl(items_path) if items_path.exists() else []
+        state = stale_state(board)
+        if state is not None:
+            # Not pulled since Dolt retired: whatever items.jsonl sits here is
+            # not the board. Name it rather than count it or drop it silently.
+            stale_clones.append({
+                "repo": repo_label(board["repo_path"], board["root"]),
+                "prefix": board["prefix"],
+                "local_path": str(board["repo_path"]),
+                "state": state,
+                "job": get_job(board["bon_dir"]),
+            })
+            continue
+        items_path = board["bon_dir"] / "items.jsonl"
+        items = load_items_jsonl(items_path) if items_path.exists() else []
         open_items = [
             i for i in items
             if i.get("status") == "open" and i["id"] not in seen_ids
@@ -845,7 +458,6 @@ def survey(
         label = repo_label(board["repo_path"], board["root"])
         extra = {
             "prefix": board["prefix"],
-            "backend": board["backend"],
             "local_path": str(board["repo_path"]),
             "recent_dones": recent,
             "recent_done_count": recent_total,
@@ -857,11 +469,14 @@ def survey(
 
     if repo_filter:
         results = apply_repo_filter(results, repo_filter)
+        stale_clones = [s for s in stale_clones
+                        if any(match_repo(s["repo"], v) for v in repo_filter)]
 
     if job_filter:
         results = apply_job_filter(
             results, job_filter, report_drops=bool(repo_filter)
         )
+        stale_clones = [s for s in stale_clones if s["job"] in job_filter]
 
     # Light git signal for every board with a clone here — the pyramid's
     # "recent wins" line wants motion, and board writes alone under-report it.
@@ -873,45 +488,34 @@ def survey(
 
     results.sort(key=lambda r: r["open_count"], reverse=True)
 
-    # Visibility is split by backend. Dolt boards come from the shared database,
-    # so they're visible from ANY machine. JSONL boards are only seen when their
-    # repo is cloned under the scan roots — so the JSONL total is machine- and
-    # clone-dependent, and the headline count jumps when clones appear (the
-    # 491→650 overnight move on 2026-07-08 was purely tube gaining JSONL clones,
+    # Boards are seen only where cloned under the scan roots, so the total is
+    # machine- and clone-dependent, and the headline jumps when clones appear
+    # (the 491→650 overnight move on 2026-07-08 was purely tube gaining clones,
     # not new work). Annotate it so the next run reads a jump correctly.
-    dolt_open = sum(r["open_count"] for r in results if r.get("backend") == "dolt")
-    jsonl_open = sum(r["open_count"] for r in results if r.get("backend") != "dolt")
+    total_open = sum(r["open_count"] for r in results)
     visibility_note = (
-        f"{dolt_open} open on Dolt boards (visible from any machine — shared DB is "
-        f"the index); {jsonl_open} open on JSONL boards (visible ONLY where cloned — "
-        f"this run saw clones under {', '.join(str(r) for r in roots)}). The JSONL "
-        f"total changes per machine; a headline jump between runs is usually clones "
-        f"appearing, not work created."
+        f"{total_open} open on the boards cloned under "
+        f"{', '.join(str(r) for r in roots)} (plus ~/.claude and ~/.dotfiles). "
+        f"A board not cloned here is not counted, so the total changes per "
+        f"machine; a headline jump between runs is usually clones appearing, "
+        f"not work created."
     )
-    moved_unseen = moved_board_gaps(moved, boards)
-    if moved_unseen:
+    if stale_clones:
         visibility_note += (
-            f" {len(moved_unseen)} board(s) have moved from Dolt to JSONL but have "
-            f"no JSONL clone here, so they are MISSING from these totals: "
-            + ", ".join(g["repo"] or g["prefix"] for g in moved_unseen)
-            + " (see moved_unseen)."
+            f" {len(stale_clones)} stale clone(s) not pulled since Dolt retired "
+            f"were not counted — git pull in each (see stale_clones)."
         )
 
     return {
         "roots": [str(r) for r in roots],
-        "dolt": dolt_mode,
         "window_days": window_days,
-        "unmapped_prefixes": sorted(unmapped),
-        "moved_prefixes": sorted(moved),
-        "moved_unseen": moved_unseen,
-        "duplicate_prefixes": detect_duplicate_prefixes(boards, repos_map),
+        "stale_clones": stale_clones,
+        "duplicate_prefixes": detect_duplicate_prefixes(boards),
         "jobs_unassigned": sorted(
             r["repo"] for r in results if not r.get("job")
         ),
-        "total_open": sum(r["open_count"] for r in results),
+        "total_open": total_open,
         "total_recent_dones": sum(r.get("recent_done_count", 0) for r in results),
-        "dolt_open": dolt_open,
-        "jsonl_open": jsonl_open,
         "visibility_note": visibility_note,
         "repos_reported": len(results),
         "repos": results,
@@ -1033,7 +637,7 @@ def apply_job_filter(
     Jobs were readable in the output but not selectable, so the review skill's
     "scope by jobs group" position documented a workaround (run the full survey,
     narrow the later phases by eye) rather than a mechanism. Exact slug match:
-    slugs are curated by `bon register --job` / `.bon/job`, so a near-miss is a
+    slugs are curated in each board's `.bon/job`, so a near-miss is a
     typo, not a shorthand — and an unknown slug exits naming the live set rather
     than returning a confidently empty survey.
 
@@ -1229,46 +833,18 @@ def main():
         full_dones=full_dones,
     )
 
-    if output["unmapped_prefixes"]:
+    for stale in output["stale_clones"]:
         print(
-            f"Note: unmapped prefixes (no repos-table row — triage as "
-            f"orphaned): "
-            f"{', '.join(output['unmapped_prefixes'])}",
+            f"WARNING: {stale['local_path']} ({stale['prefix']}) is a stale "
+            f"clone ({stale['state']}) — Dolt was retired on 2026-10-24, so git "
+            f"pull there. Its items are missing from this survey until then.",
             file=sys.stderr,
         )
-
-    for gap in output["moved_unseen"]:
-        where = gap["repo"] or gap["prefix"]
-        if gap["state"] == "stale_clone":
-            print(
-                f"WARNING: {where} ({gap['prefix']}) moved to JSONL on "
-                f"{gap['moved_at']}, but the clone here still says backend=dolt "
-                f"— git pull in {', '.join(gap['local_paths'])}. Its items are "
-                f"missing from this survey until then.",
-                file=sys.stderr,
-            )
-        elif gap["state"] == "half_pulled":
-            print(
-                f"WARNING: {where} ({gap['prefix']}) moved to JSONL on "
-                f"{gap['moved_at']}, and the clone here has lost .bon/backend but "
-                f"git does not yet track its items.jsonl (or still tracks the "
-                f"backend) — finish the git pull in {', '.join(gap['local_paths'])}, "
-                f"or commit the board if this is the clone that migrated. Its "
-                f"items are missing from this survey until then.",
-                file=sys.stderr,
-            )
-        else:
-            print(
-                f"WARNING: {where} ({gap['prefix']}) moved to JSONL on "
-                f"{gap['moved_at']} and is not cloned under the scan roots — its "
-                f"items are missing from this survey.",
-                file=sys.stderr,
-            )
 
     if output["duplicate_prefixes"]:
         dupes = "; ".join(
             f"{d['prefix']}: " + ", ".join(
-                f"{b['local_path']} ({b['backend']})" for b in d["boards"]
+                f"{b['local_path']} ({b['origin'] or 'no origin'})" for b in d["boards"]
             )
             for d in output["duplicate_prefixes"]
         )

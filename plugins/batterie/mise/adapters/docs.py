@@ -80,6 +80,37 @@ def _build_legacy_tab(doc: dict[str, Any]) -> DocTab:
     )
 
 
+# A download restriction (set by the owner, a Shared Drive, an admin policy, or
+# restrictedForWriters) disables the Drive export too, while the Docs API read
+# still works (mise-radija measured 9 of 9 natives served) — so the oracle alone
+# fails, 403 reason cannotExportFile (mise-kebiwo). Say so, not "Client error
+# 403", and don't name an actor: a Shared Drive file has no owner.
+_EXPORT_RESTRICTED_WARNING = (
+    "Checkbox tick-state unavailable — export is disabled for this account (by the "
+    "owner, the Shared Drive or an admin policy), and ticks are only readable "
+    "through the export. The text deposited as plain bullets."
+)
+
+
+def _is_export_restricted(exc: httpx.HTTPStatusError) -> bool:
+    """True only for Google's structured cannotExportFile 403. Any other body —
+    non-JSON, or JSON of another shape — is False, never an exception: this runs
+    inside an except handler, where a raise would fail the whole fetch."""
+    if exc.response is None or exc.response.status_code != 403:
+        return False
+    try:
+        body = exc.response.json()
+    # a non-JSON 403 body says nothing about which refusal; deep nesting makes
+    # json.loads raise RecursionError, which is not a ValueError
+    except (ValueError, RecursionError):
+        return False
+    error = body.get("error") if isinstance(body, dict) else None
+    errors = error.get("errors") if isinstance(error, dict) else None
+    if not isinstance(errors, list):
+        return False
+    return any(isinstance(e, dict) and e.get("reason") == "cannotExportFile" for e in errors)
+
+
 def _apply_checkbox_states(client: Any, document_id: str, data: DocData) -> None:
     """Annotate checkbox paragraphs with checked-state via the markdown-export oracle.
 
@@ -105,6 +136,13 @@ def _apply_checkbox_states(client: Any, document_id: str, data: DocData) -> None
             params={"mimeType": "text/markdown"},
         )
         states = parse_checkbox_markers(md_bytes.decode("utf-8"))
+    except httpx.HTTPStatusError as exc:
+        data.adapter_warnings.append(
+            _EXPORT_RESTRICTED_WARNING if _is_export_restricted(exc)
+            else f"Checkbox tick-state unavailable: markdown export failed ({exc}). "
+            "Rendering plain bullets."
+        )
+        return
     except Exception as exc:  # export is best-effort — never fail the whole fetch
         data.adapter_warnings.append(
             f"Checkbox tick-state unavailable: markdown export failed ({exc}). "

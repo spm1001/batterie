@@ -88,24 +88,37 @@ def _why_and_route(metadata: dict[str, Any]) -> tuple[str, str]:
     )
 
 
-def refuse_if_download_restricted(file_id: str, metadata: dict[str, Any]) -> None:
-    """Raise a teaching PERMISSION_DENIED if this route would download a file Google won't release."""
+def restriction_message(file_id: str, metadata: dict[str, Any], needs: str) -> str | None:
+    """The teaching text for a file this account cannot download, or None if it can.
+
+    `needs` says why mise wanted the bytes ("reads this kind of file", "edits
+    this kind of file"), so fetch and the plain-file edit path (mise-togeha)
+    share one explanation. Only an explicit canDownload=False counts.
+    """
     if (metadata.get("capabilities") or {}).get("canDownload") is not False:
-        return
-    if not _downloads_bytes(metadata.get("mimeType", "")):
-        return
+        return None
     name = metadata.get("name", "untitled")
     why, route = _why_and_route(metadata)
     link = metadata.get("webViewLink")
     browser = f" It can still be read in the browser: {link}" if link else ""
+    return (
+        f"'{name}' ({file_id}) can be opened but not downloaded by this "
+        f"account: {why} mise {needs} by downloading its "
+        f"bytes, which Google refuses here (403 cannotDownloadFile), so "
+        f"mise stopped before asking. {route}{browser}"
+    )
+
+
+def refuse_if_download_restricted(file_id: str, metadata: dict[str, Any]) -> None:
+    """Raise a teaching PERMISSION_DENIED if this route would download a file Google won't release."""
+    if not _downloads_bytes(metadata.get("mimeType", "")):
+        return
+    message = restriction_message(file_id, metadata, "reads this kind of file")
+    if message is None:
+        return
     raise MiseError(
         ErrorKind.PERMISSION_DENIED,
-        (
-            f"'{name}' ({file_id}) can be opened but not downloaded by this "
-            f"account: {why} mise reads this kind of file by downloading its "
-            f"bytes, which Google refuses here (403 cannotDownloadFile), so "
-            f"mise stopped before asking. {route}{browser}"
-        ),
+        message,
         details={"file_id": file_id, "reason": "cannotDownloadFile", "diagnosed": True},
         retryable=False,
     )

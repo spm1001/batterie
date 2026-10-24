@@ -43,9 +43,11 @@ from tools.elicit import (
     ORPHANED,
     TOO_LONG,
     UNAVAILABLE,
+    UNSAFE,
     ConfirmAnswer,
     GateQuestion,
     client_supports_elicitation,
+    dialog_safe,
     fits_dialog,
 )
 from tools.share import share_confirm_message
@@ -106,6 +108,8 @@ def gate_question(
     else:
         if message is None:
             question = GateQuestion()
+        elif not dialog_safe(message):
+            question = GateQuestion(message=message, skipped=UNSAFE)
         elif not fits_dialog(message):
             question = GateQuestion(message=message, skipped=TOO_LONG)
         else:

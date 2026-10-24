@@ -17,6 +17,7 @@ from google.auth.exceptions import TransportError as GoogleTransportError
 from logging_config import logger, log_retry
 from models import MiseError, ErrorKind
 from adapters.http_client import clear_sync_client
+from token_store import CredentialsUnavailable
 
 T = TypeVar("T")
 P = ParamSpec("P")
@@ -148,6 +149,14 @@ def _convert_to_mise_error(exception: Exception) -> MiseError:
     """Convert an exception to a MiseError if not already one."""
     if isinstance(exception, MiseError):
         return exception
+
+    # No usable credential is an auth kind wherever the client was reached —
+    # adapters and the do ops built in tools/ alike (mise-lokowo). Only the
+    # subclass: a plain FileNotFoundError (httpx reading a missing
+    # SSL_CERT_FILE) is not an auth problem and falls through to UNKNOWN.
+    if isinstance(exception, CredentialsUnavailable):
+        return MiseError(ErrorKind.AUTH_EXPIRED, str(exception),
+                         details={"credentials_unavailable": True})
 
     # Check HTTP status first (more reliable than string matching)
     status = _get_http_status(exception)

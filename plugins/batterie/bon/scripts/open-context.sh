@@ -559,7 +559,8 @@ fi
 # --- 2a. Crumbs: unclosed sessions (bon-cedeze) ---
 # Last week's sessions with two or more human messages, no handoff, not
 # running, not dismissed — shown so Sameer can decide; nothing is drafted.
-# A launch outside any git repo (~, a phone or Paseo chat) sees them all; a
+# A launch outside any git repo (~, a phone or Paseo chat) sees every repo's
+# (newest 5, then a +N more line); a
 # repo launch sees only sessions that ran inside that repo, at most 3 so the
 # block cannot push the board out of the ~2KB preview. --read-only (the
 # roaming collector) never shows them. Silent when there are none; a scanner

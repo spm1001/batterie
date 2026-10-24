@@ -330,6 +330,7 @@ timestamps rather than commit order. Never hand-edit the board to recover one.
 | Handoff format spec | `docs/HANDOFF-CONTRACT.md` |
 | Where handoffs/understanding.md resolve (READ+WRITE share this) | `scripts/lib-handoff.sh` |
 | Test bon-read.sh | `tests/test_bon_read.py` |
+| Crumb list: unclosed sessions shown at session start (scanner, cache, `--dismiss`) | `scripts/crumbs.py` (section 2a of `open-context.sh`; tests `tests/test_crumbs.py`) |
 
 
 

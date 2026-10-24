@@ -185,23 +185,26 @@ def read_tail(path: Path, size: int) -> tuple[dict | None, str | None, bool]:
     """(last human entry, last user/assistant timestamp, wrote a handoff)
     from the back.
 
-    The third is the transcript's own testimony: a handoffs/…-<id8>.md path in
-    the bytes read means /close wrote one, wherever it landed — the estate
-    walk alone missed ~/.dotfiles and ~/.claude handoffs (3 of 10 listed on
-    24 Oct 2026 were closed), and a teammate's repos need not be in ~/repos.
+    The third is the transcript's own testimony, CHECKED against disk: an
+    absolute …/handoffs/…-<id8>.md path in the bytes read counts only if that
+    file exists. An attempt is not a close: bb3ec529's /close write was
+    blocked by a safety classifier and never ran, yet its path sat in the
+    tool call's input (24 Oct 2026). A relative path cannot be resolved and is
+    ignored; the estate walk covers the usual homes either way.
     """
     last_ts = None
     # no backslash in the run: inside JSON a newline is the two bytes \n, and
     # /close's preamble prints HANDOFF_DIR=…/handoffs and HANDOFF_FILE=…-<id8>.md
     # on separate lines — a started-but-abandoned close must not match
-    closed = re.compile(rb"handoffs/[^\"\s\\]*-" + re.escape(path.stem[:8].encode()) + rb"\.md")
+    closed = re.compile(rb"(/[^\"\s\\]*/handoffs/[^\"\s\\]*-" + re.escape(path.stem[:8].encode()) + rb"\.md)")
     wrote = False
     with open(path, "rb") as f:
         for step in TAIL_STEPS:
             start = max(0, size - step)
             f.seek(start)
             chunk = f.read(size - start)
-            wrote = wrote or bool(closed.search(chunk))
+            if not wrote:
+                wrote = any(os.path.isfile(m.decode("utf-8", "replace")) for m in set(closed.findall(chunk)))
             lines = chunk.split(b"\n")
             if start > 0:
                 lines = lines[1:]  # first line is partial

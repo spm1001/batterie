@@ -25,7 +25,7 @@ from zoneinfo import ZoneInfo
 from adapters.calendar import (
     freebusy_query,
     list_status_events,
-    resolve_calendar_timezone,
+    lookup_calendar_timezone,
 )
 from cues_util import current_user_email, with_identity
 from models import ErrorKind, MiseError
@@ -74,7 +74,7 @@ def do_freebusy(
 
     # Naive times and bare dates mean the user's wall-clock, as they do for
     # create_event — read as UTC they slid the window an hour in BST (mise-lemawe).
-    tz_name = resolve_calendar_timezone()
+    tz_name, tz_reason = lookup_calendar_timezone()
     tz = ZoneInfo(tz_name or "UTC")
     try:
         window_min, window_max = parse_time_window(time_min, time_max, tz)
@@ -94,6 +94,11 @@ def do_freebusy(
     try:
         calendars = freebusy_query(emails, window_min, window_max)
     except MiseError as e:
+        # No usable token at all: the message already carries the client's own
+        # remedy (setup_oauth, or the embedding app's in guest mode) — the scope
+        # advice would tell someone with no token that theirs lacks a scope.
+        if e.details.get("credentials_unavailable"):
+            return _error(e.kind.value, e.message)
         if e.kind in (ErrorKind.PERMISSION_DENIED, ErrorKind.AUTH_EXPIRED):
             return _error(e.kind.value, e.message + _FREEBUSY_REAUTH_ADVICE)
         return _error(e.kind.value, e.message)
@@ -136,9 +141,11 @@ def do_freebusy(
             events = list_status_events(
                 email, window_min, window_max, ["workingLocation"],
             )
-        except Exception:
+        except MiseError as e:  # with_retry converts every failure to one
             people[email]["office_days"] = (
                 "location not visible (their sharing is free/busy-only)"
+                if e.kind is ErrorKind.NOT_FOUND  # the sharing shape, per list_status_events
+                else f"location unavailable — the lookup failed ({e.message})"
             )
             continue
         days = {}
@@ -166,9 +173,9 @@ def do_freebusy(
     # end 09:00+00:00, which reads as zero-length (2026-08-19).
     if not tz_name:
         warnings.append(
-            "No timezone found on your calendar — times without an offset were "
-            "read as UTC" + (", and office hours (09:00–17:30) applied in UTC."
-                             if duration is not None else ".")
+            f"Timezone fell back to UTC ({tz_reason}) — times without an offset "
+            "were read as UTC" + (", and office hours (09:00–17:30) applied in UTC."
+                                  if duration is not None else ".")
         )
 
     result: dict[str, Any] = {

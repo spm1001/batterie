@@ -15,6 +15,8 @@ from validation import extract_drive_file_id, extract_gmail_draft_id, extract_gm
 from .decorations import UrlDecorations, apply_url_decorations, parse_drive_url_decorations
 from .gmail import fetch_gmail, fetch_attachment
 from .drive import fetch_drive
+from .chat import fetch_chat
+from validation import parse_chat_reference
 
 # Tool bodies run concurrently since the serializer was lifted (mise-bapije,
 # 2026-08-24). Deposits are the one per-resource shared state: two concurrent
@@ -125,6 +127,14 @@ def do_fetch(file_id: str, base_path: Path | None = None, attachment: str | None
                     f"'markup' — got {suggestions!r}"
                 ),
             )
+        # Google Chat space/thread/message (mise-lumaha): its own id space, so it
+        # routes before the Gmail pre-flight that would refuse a #chat URL.
+        chat_ref = parse_chat_reference(file_id)
+        if chat_ref is not None:
+            if attachment:
+                return FetchError(kind="invalid_input", message="attachment= works with Gmail threads only; Chat attachments are listed in the chat deposit")
+            with _deposit_lock(chat_ref.name):
+                return fetch_chat(chat_ref, base_path=base_path)
         # Pre-flight: catch the two input shapes agents reliably get wrong (a 12-char
         # deposit-folder prefix; a non-fetchable URL) with a teaching error, before they
         # fall through to a bare Google 404 (mise-dizupe).

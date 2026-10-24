@@ -1231,8 +1231,8 @@ def main():
 
     if output["unmapped_prefixes"]:
         print(
-            f"Note: unmapped prefixes (no repos-table row — run `bon register` "
-            f"from a clone, or triage as orphaned): "
+            f"Note: unmapped prefixes (no repos-table row — triage as "
+            f"orphaned): "
             f"{', '.join(output['unmapped_prefixes'])}",
             file=sys.stderr,
         )

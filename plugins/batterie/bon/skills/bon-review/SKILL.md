@@ -80,7 +80,7 @@ uv run --script ${CLAUDE_SKILL_DIR}/scripts/audit_survey.py --full-dones   # lif
 | `open_child_count` (on outcomes) | Open children in the same board — closing this outcome would strand them (the kegewe trap). Non-zero means re-home or close children first. |
 | `recent_dones` / `recent_done_count` | Items closed inside `window_days` (default 30), newest first. The list is capped at 10; the count is the TRUE total — trust the count, not the list length. Feeds the pyramid's Recent Progress lines. **`--full-dones` lifts the cap** — right for the queue-line annotation join, which needs every close to match a line against its card. The cap is not cosmetic: 15 boards were being truncated on 2026-08-31, `~/.claude` at 129 dones and mise-en-space at 91. |
 | `git` | Light motion signal for boards with a clone here: `commits_window` + `last_commit` (date and subject). Absent for uncloned boards and non-repos. |
-| `job` | The board's jobs-group slug (Dolt: `repos.job` via `bon register --job`; JSONL: `.bon/job` marker). Drives the pyramid grouping. |
+| `job` | The board's jobs-group slug, from the board's `.bon/job` marker (the Dolt-era `repos.job` column was carried into `.bon/job` at migration). Drives the pyramid grouping. |
 | `jobs_unassigned` (top-level) | Boards reporting items but carrying no job — surface these for assignment, never guess a group. |
 | `repos_reported` (top-level) | Boards in the output. Includes boards with zero open items whose work all closed inside the window — a recent win is reportable even when nothing remains open. |
 
@@ -92,7 +92,7 @@ uv run --script ${CLAUDE_SKILL_DIR}/scripts/audit_survey.py --full-dones   # lif
 2. **Draft** to the draft path the accent's `review.personal` section names (default `/tmp/estate-pyramid-<date>.md`): headline counts **Desired Outcomes, not items** (Parked boards excluded); Cross-cutting Work first with the ranked top-4; then each jobs-group's ✅/🚧 lists, one human-grain line per repo, small/dormant boards collapsed to a named tail line; Parked/Someday last.
 3. **Alignment block**: the lanes ARE the join now — membership answers whose move it is, order answers what's next (where accomplis exists, invoke `batterie:gtd` first for Todoist semantics). Render both directions from the annotation pass: queue → boards (every cited bon verified live) and boards → queue (the drift sweep — board motion with no queue line). No Todoist in this book at all (no accomplis, no queue project) → skip the block in one named line, a non-event rather than a fault. Todoist expected but unreachable → say the block is missing rather than omitting it silently.
 4. **Queue population (socket: `review.populate-queue`)**: where the operator runs a dispatch queue, populating its lanes IS the ceremony's product — not a proposed top-N for hand adoption. Pre-annotate every queue line with board truth from the one survey pass, triage bucket-is-verdict, and write only inside announced write-windows **at adjudication** — drafting writes nothing; the STOP gate below holds until the operator is in the conversation. **A live ceremony has two writers on one queue** (the human dragging in the app, the session writing through the API), and the races are silent. Recipe, buckets and the write-window protocol: `references/pyramid-format.md` → Queue population. The queue is the one the operator's accent names (`review.personal`, docs/ACCENT.md); no accent naming a queue → no dispatch queue in this book — one plain line ("no dispatch queue in this book, so no lane population this review"), the rite complete without it, and NEVER map a task system the accent didn't name into the ceremony, however available accomplis makes it. The socket name stays stage direction, never rendered at the human.
-5. **Boards in `jobs_unassigned`** get asked about, then persisted (`bon register --job` / `.bon/job`).
+5. **Boards in `jobs_unassigned`** get asked about, then persisted by writing the slug into that board's `.bon/job` and committing it.
 
 Alongside the pyramid, give the survey's one-line vitals: total open, `visibility_note` (a headline jump is usually clones appearing, not work), old-item flags, orphaned prefixes.
 
@@ -299,7 +299,7 @@ facteur/mise-armed session) can tick them in one pass instead of digging.
 
 | Prefix | Open items | Triage options |
 |--------|-----------|----------------|
-| ... | ... | register from a clone / `bon move` the live ones / close as retired (Phase 4 orphan-close recipe) |
+| ... | ... | `bon move` the live ones from a clone / report the rest as archived history (Phase 4 orphan note) |
 
 ### Unclear — Needs Human ({count})
 
@@ -336,35 +336,7 @@ bon done {id}
 2. Defer with a note in the summary — closure waits for a session on the right machine
 3. Clone fresh from `origin_url` only if the user wants it — cloning just to close items is usually overkill
 
-**For orphan boards (a prefix with NO clone anywhere — a retired repo whose Dolt items linger; e.g. consomme/gm/tmig/day on 2026-07-08):**
-
-Only inside the review venue, and only after the user confirms the board is retired (the desire axis — a git-quiet orphan can be a finished-and-*absorbed* tool, not a dead one). Reach it by a scratch reconnect to the shared Dolt DB — the real `bon` CLI keeps proper commit provenance, unlike raw SQL (which leaves the change uncommitted in Dolt's working set and skips the unblock cascade):
-
-```bash
-t=$(mktemp -d); cd "$t"
-bon init --prefix <orphan-prefix> --backend dolt   # reconnects; now sees the orphan items
-bon done <prefix-xxx> --note "board retired: <evidence>. audit <date>"
-# test-litter → done THEN archive to remove entirely. archive needs done first, and an
-# outcome won't archive until ITS actions are archived, so do children before parents:
-#   bon done <child> --note "..."; bon archive <child>; bon archive <parent>
-```
-
-`bon init` writes ONE scratch row into the `repos` label table (`<prefix> → <tmpdir>, no origin`). Since you close every open item, that board then has zero open items and never surfaces in a survey again — the row is invisible. Tidy it anyway, in one committed DELETE at the end:
-
-```bash
-uv run --with pymysql - <<'PY'
-import pymysql, tomllib; from pathlib import Path
-cfg={"host":"127.0.0.1","port":3306,"database":"bon","user":"root","password":""}
-p=Path.home()/".config/bon/dolt.toml"
-if p.exists():
-    fc=tomllib.load(open(p,"rb")); cfg.update({k:fc[k] for k in cfg if k in fc})
-c=pymysql.connect(autocommit=True, **cfg); cur=c.cursor()
-cur.execute("DELETE FROM repos WHERE prefix IN ('<p1>','<p2>')")   # the orphan prefixes
-cur.execute("CALL DOLT_COMMIT('-A','-m','repos: remove scratch label rows from orphan-close')")
-PY
-```
-
-If this dance (or the `ssh`-to-clone step above) starts to grate, that's the trigger to build **`bon --board <prefix>`** — act on any Dolt board by prefix with no cwd, no scratch dir, no label-row to tidy. Filed with that tripwire, not built speculatively: **bon-wezahu**.
+**For orphan boards (a prefix with NO clone anywhere):** these lived only in the shared Dolt database. Since Dolt was retired (2026-10-24) their items survive only in `spm1001/bon-dolt-backup` (`readable/` JSONL, or a native `dolt clone`), so there is no live board to close them on. Report them as archived history; never recreate a board just to close its items. (The old scratch-reconnect recipe used `bon init --backend dolt`, which no longer exists.)
 
 **Commit strategy (JSONL boards only — Dolt boards have no file to commit):**
 ```bash
@@ -418,7 +390,7 @@ uv run --script ${CLAUDE_SKILL_DIR}/scripts/audit_survey.py
 
 | Skill | Relationship |
 |-------|-------------|
-| **bon** | Audit uses bon CLI for closures, and `bon register` maintains the repos mapping (labels + jobs-groups) the survey reads. Does not duplicate draw-down teaching. Assumes bon is loaded. |
+| **bon** | Audit uses bon CLI for closures; each board's `.bon/job` marker carries the jobs-group the survey reads. Does not duplicate draw-down teaching. Assumes bon is loaded. |
 | **batterie:gtd** | Invoke before touching Todoist for the alignment block and queue population — it holds structure discovery and GTD semantics. The review renders the bon↔Todoist join and, at the ceremony with the operator present, populates the queue lanes inside announced write-windows (pyramid-format.md). Never an automatic sync — queue writes happen only in the ceremony, adjudicated line by line. |
 | **close** | Audit's Phase 3→4 mirrors close's Decide→Act. But audit is estate-wide; close is single-session. |
 | **open** | After review, /open re-orients to whatever's next. |

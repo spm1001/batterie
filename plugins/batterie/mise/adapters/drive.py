@@ -97,6 +97,7 @@ FILE_METADATA_FIELDS = (
     "webViewLink,"
     "parents,"
     "shortcutDetails(targetId,targetMimeType),"  # fetch follows shortcuts (mise-rosifa)
+    "capabilities(canDownload),downloadRestrictions,driveId,"  # refuse-before-download, with the why (mise-radija)
     "description"  # Contains Message ID for exfil'd email attachments
 )
 

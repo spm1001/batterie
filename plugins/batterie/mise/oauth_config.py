@@ -124,6 +124,20 @@ SCOPE_PURPOSE: dict[str, str] = {
     # measured and rejected: its prefix query matches names and emails only
     # (a job title returns zero) and it has no reverse lookup.
     'https://www.googleapis.com/auth/admin.directory.user.readonly': "search(sources=['people']) and sender placement on Gmail results",
+
+    # Google Chat, read-only, as the signed-in user (mise-lumaha, 2026-10-24).
+    # No Chat app needs configuring for user-auth reads since Google's GA of
+    # 17 Jul 2026 — measured on ITV with a token holding only these four: all
+    # reads answered 200. chat.messages.readonly is on Google's RESTRICTED
+    # list; an Internal consent screen exempts it from verification. Both
+    # kits ask for them (Sameer, 2026-10-24: one scope set, unused is
+    # harmless), so chat.googleapis.com must be enabled on BOTH OAuth clients'
+    # projects (see "ADDING A SCOPE?" above). A token without them gets the
+    # setup_oauth(force=True) teaching error from adapters/chat.py, not a 403.
+    'https://www.googleapis.com/auth/chat.spaces.readonly': "fetch of a Chat space or DM (its type, name and link)",
+    'https://www.googleapis.com/auth/chat.memberships.readonly': "naming Chat DMs and group chats after their members",
+    'https://www.googleapis.com/auth/chat.messages.readonly': "search(sources=['chat']) and fetch of Chat messages and threads",
+    'https://www.googleapis.com/auth/chat.users.readstate.readonly': "unread messages marked in a fetched Chat space",
 }
 SCOPES = list(SCOPE_PURPOSE)
 

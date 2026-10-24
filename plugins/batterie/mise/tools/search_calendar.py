@@ -14,11 +14,9 @@ from datetime import datetime, timezone, tzinfo
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from google.auth.exceptions import RefreshError, TransportError
-
-from adapters.calendar import resolve_calendar_timezone
+from adapters.calendar import lookup_calendar_timezone
 from html_convert import html_to_text_with_links
-from models import CalendarEvent, MiseError
+from models import CalendarEvent
 
 # httpx's own message quotes the status: "Client error '404 Not Found' for url '…'"
 _HTTPX_STATUS = re.compile(r"'(\d{3} [^']*)' for url")
@@ -230,25 +228,15 @@ def window_timezone() -> tuple[tzinfo, str | None]:
 
     The user's own diary zone, resolved the way freebusy and create_event
     resolve it, so "3 Aug" means the same day on every calendar surface
-    (mise-cujihu). On failure: UTC, today's behaviour, plus the reason as a
-    cue — a timezone lookup must never fail the search it serves.
+    (mise-cujihu). On an anticipated failure: UTC, today's behaviour, plus the
+    reason as a cue — a token or network fault never fails the search it serves.
     """
-    # The lookup builds the HTTP client outside its own try, so a credential
-    # failure escapes it: the client constructor raises FileNotFoundError for
-    # every token state (missing, corrupt, expired, revoked) and google-auth's
-    # TransportError/RefreshError when a refresh cannot reach Google. Caught by
-    # name; the calendar source then reports the same failure per-source.
-    try:
-        name = resolve_calendar_timezone()
-    except MiseError as e:
-        return timezone.utc, f"could not read your calendar timezone ({e.message})" + _UTC_FALLBACK
-    except (FileNotFoundError, TransportError, RefreshError) as e:
-        return timezone.utc, f"could not read your calendar timezone ({e})" + _UTC_FALLBACK
+    # The lookup names what it anticipates (credentials, HTTP, network) and
+    # returns the reason; anything else is a bug and raises out of the search,
+    # loudly, rather than reading as "no zone in your diary" (mise-nodavu).
+    name, reason = lookup_calendar_timezone()
     if not name:
-        return timezone.utc, (
-            "could not resolve your calendar timezone (the lookup failed, or "
-            "no recent event in your diary carries one)" + _UTC_FALLBACK
-        )
+        return timezone.utc, f"could not resolve your calendar timezone ({reason})" + _UTC_FALLBACK
     try:
         return ZoneInfo(name), None
     except (ZoneInfoNotFoundError, ValueError):

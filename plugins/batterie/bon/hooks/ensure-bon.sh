@@ -34,8 +34,8 @@ if [ -f "$PLUGIN_ROOT/instructions.md" ]; then
 fi
 
 # Resolve install source. No [dolt] extra since Dolt retired (2026-10-24, bon-comowa):
-# every board is JSONL, so pymysql is no longer installed. (The extra itself stays in
-# pyproject until dolt.py is deleted, bon-sujeno.)
+# every board is JSONL, so pymysql is no longer installed (the extra and dolt.py
+# were deleted the same evening, bon-sujeno).
 if [ -n "$PLUGIN_ROOT" ] && [ -f "$PLUGIN_ROOT/pyproject.toml" ]; then
     INSTALL_SRC="$PLUGIN_ROOT"
 elif _WHEELS=("$(dirname "$HOOK_DIR")"/wheels/bon-*.whl) && [ -f "${_WHEELS[0]}" ]; then

@@ -13,20 +13,13 @@
 
 set -euo pipefail
 
-# Dolt backend: fall back to bon CLI (slower but correct)
-if [ -f ".bon/backend" ] && grep -q dolt ".bon/backend"; then
-    MODE="${1:-}"
-    if [ "$MODE" = "list" ]; then
-        bon list 2>/dev/null
-    elif [ "$MODE" = "ready" ]; then
-        bon list --ready 2>/dev/null
-    elif [ "$MODE" = "current" ]; then
-        bon show --current 2>/dev/null
-    else
-        echo "Usage: bon-read.sh {list|ready|current}" >&2
-        exit 1
-    fi
-    exit $?
+# A clone still saying backend=dolt hasn't pulled since Dolt retired
+# (2026-10-24): its items.jsonl, if any, is stale. Refuse loudly, as the CLI does.
+if [ -f ".bon/backend" ] && [ "$(tr -d '[:space:]' < .bon/backend | tr '[:upper:]' '[:lower:]')" = "dolt" ]; then
+    echo "bon-read: this clone still says .bon/backend=dolt, but Dolt was retired on 2026-10-24." >&2
+    echo "Every board now lives in its repo as .bon/items.jsonl. Run: git pull" >&2
+    echo "(if it refuses over .bon/README.md, run git checkout -- .bon/README.md first)" >&2
+    exit 1
 fi
 
 if [ -f ".bon/items.jsonl" ]; then

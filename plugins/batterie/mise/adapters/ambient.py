@@ -22,6 +22,7 @@ never as the folder's contents.
 from typing import Any
 
 from oauth_config import ambient_scopes
+from token_store import CredentialsUnavailable
 
 
 def load_ambient_credentials() -> Any:
@@ -32,7 +33,7 @@ def load_ambient_credentials() -> Any:
     try:
         creds, _project = google.auth.default(scopes=ambient_scopes())
     except DefaultCredentialsError as e:
-        raise FileNotFoundError(
+        raise CredentialsUnavailable(
             "MISE_CREDENTIALS=ambient, but no Application Default Credentials "
             f"were found ({e}). On Cloud Run/GCE the metadata server provides "
             "them automatically; elsewhere set GOOGLE_APPLICATION_CREDENTIALS "
@@ -42,7 +43,7 @@ def load_ambient_credentials() -> Any:
     return creds
 
 
-def ambient_refresh_refusal() -> FileNotFoundError:
+def ambient_refresh_refusal() -> CredentialsUnavailable:
     """Teaching error for a refresh refusal in ambient mode.
 
     http_client's reload-then-retry path is token-file medicine: for
@@ -50,7 +51,7 @@ def ambient_refresh_refusal() -> FileNotFoundError:
     identity, so a refusal means the service account or its key is the
     problem — nothing inside mise can re-auth it.
     """
-    return FileNotFoundError(
+    return CredentialsUnavailable(
         "Ambient credentials were refused on refresh. The platform identity "
         "that minted them (metadata server / workload identity / the "
         "GOOGLE_APPLICATION_CREDENTIALS key) is where to look — setup_oauth "

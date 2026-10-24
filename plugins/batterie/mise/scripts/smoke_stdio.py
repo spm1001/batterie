@@ -21,6 +21,7 @@ Usage (from the repo root):
 
 import asyncio
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -38,9 +39,18 @@ CASES = [
         ["draft", "404 forever"],
     ),
     (
-        "chat link (jujoti refusal, already shipped — regression guard)",
-        "https://mail.google.com/chat/u/0/#chat/space/AAQAXm1PxYs",
-        ["Google Chat link"],
+        "chat VIEW link (names no space) — still refused with teaching; Chat "
+        "links that name a space are fetched since mise-lumaha",
+        "https://mail.google.com/chat/u/0/#chat/home",
+        ["Google Chat link", "names no space"],
+    ),
+    (
+        "chat link to a space that cannot exist (synthetic id) — whatever the "
+        "token, the failure is a Chat-named teaching error, never a raw 403: "
+        "a token minted before the Chat scopes is told setup_oauth(force=True), "
+        "a scoped one is told the name is malformed (mise-lumaha)",
+        "https://chat.google.com/room/AAAAnotarealspace",
+        ["Google Chat"],
     ),
     (
         "garbage drive-shaped id",
@@ -93,7 +103,23 @@ CASES = [
         "https://mail.google.com/mail/#drafts/r1234567890123456789",
         ["sent or discarded", "expired"],
     ),
+
 ]
+
+# Download-restricted file (mise-radija): a teaching PERMISSION_DENIED before
+# any download, instead of Google's raw 403. Opt-in by env var because no
+# pinnable fixture can exist: an owner can always download their own file, so
+# the case needs a PDF/Office/text/image file someone ELSE owns with download
+# disabled for you — and this repo is public, so a third party's file id never
+# goes in it. Find one with files.list and capabilities(canDownload).
+RESTRICTED_ID = os.environ.get("MISE_SMOKE_RESTRICTED_ID")
+if RESTRICTED_ID:
+    CASES.append((
+        "DOWNLOAD-RESTRICTED binary (or a shortcut to one) — refused before "
+        "the download with the why and the route (mise-radija)",
+        RESTRICTED_ID,
+        ["permission_denied", "can be opened but not downloaded", "mise stopped before asking"],
+    ))
 
 
 async def main() -> int:
@@ -105,6 +131,9 @@ async def main() -> int:
         ],
     )
 
+    if not RESTRICTED_ID:
+        print("[SKIP] download-restricted case — set MISE_SMOKE_RESTRICTED_ID "
+              "to a file someone else owns with download disabled (mise-radija)\n")
     failures = 0
     async with stdio_client(params) as (read, write):
         async with ClientSession(read, write) as session:

@@ -125,14 +125,26 @@ def configured_credentials() -> Any | None:
     return _CONFIGURED.get("credentials")
 
 
-def injected_refresh_refusal() -> FileNotFoundError:
+class CredentialsUnavailable(FileNotFoundError):
+    """No usable credential, by design: missing, corrupt, revoked, refused on
+    refresh, minted by another client, or absent from ADC. The message carries
+    the remedy (setup_oauth, the embedding app, the platform identity).
+
+    A FileNotFoundError so every existing catch keeps working, and its own
+    class so a converter can tell it from an unrelated one raised in the same
+    call — an unreadable SSL_CERT_FILE in httpx's client constructor, a
+    missing `security` binary — which is not an auth problem (mise-nodavu).
+    """
+
+
+def injected_refresh_refusal() -> CredentialsUnavailable:
     """Teaching error for a refresh refusal on constructor-injected credentials.
 
     http_client's reload-then-retry path is token-file medicine: a
     caller-owned credentials OBJECT has no path to re-read, and mise
     cannot re-mint what it never minted.
     """
-    return FileNotFoundError(
+    return CredentialsUnavailable(
         "The credentials passed to mise in code (Mise(credentials=...)) were "
         "refused on refresh. mise cannot re-mint a caller-owned credential — "
         "construct a new Mise with fresh credentials, or use token_path= / "
@@ -450,7 +462,7 @@ def _refuse_foreign_token(path: Path) -> None:
         return  # the credential loader diagnoses unreadable files
     want = configured_client_id()
     if minted_by and want and minted_by != want:
-        raise FileNotFoundError(
+        raise CredentialsUnavailable(
             f"The token at {path} was minted by OAuth client "
             f"{minted_by.split('-')[0]}…, but the configured client is "
             f"{want.split('-')[0]}… — two different Workspace identities, and "

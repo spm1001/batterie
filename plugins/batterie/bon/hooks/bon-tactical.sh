@@ -12,8 +12,8 @@ CWD=$(python3 -c "import json,sys; print(json.loads(sys.stdin.read()).get('cwd',
 
 # Detect backend
 BON_BACKEND="none"
-if [ -f .bon/backend ] && [ "$(cat .bon/backend 2>/dev/null)" = "dolt" ]; then
-    BON_BACKEND="dolt"
+if [ -f .bon/backend ] && [ "$(tr -d '[:space:]' < .bon/backend 2>/dev/null | tr '[:upper:]' '[:lower:]')" = "dolt" ]; then
+    exit 0  # a clone that hasn't pulled since Dolt retired (2026-10-24): bon itself says pull
 elif [ -f .bon/items.jsonl ]; then
     BON_BACKEND="jsonl"
 elif [ -f .arc/items.jsonl ]; then
@@ -21,12 +21,7 @@ elif [ -f .arc/items.jsonl ]; then
 fi
 [ "$BON_BACKEND" = "none" ] && exit 0
 
-if [ "$BON_BACKEND" = "dolt" ]; then
-    # Dolt: use bon CLI
-    command -v bon &>/dev/null || exit 0
-    tactical=$(bon show --current 2>/dev/null || true)
-else
-    # JSONL: parse file directly (faster, no CLI dependency)
+# Parse the JSONL directly (faster, no CLI dependency)
     ITEMS_FILE=".bon/items.jsonl"
     [ -f .arc/items.jsonl ] && [ ! -f .bon/items.jsonl ] && ITEMS_FILE=".arc/items.jsonl"
 
@@ -71,7 +66,6 @@ if lines:
     print("\n".join(lines))
 PYEOF
     )
-fi
 
 [ -z "$tactical" ] && exit 0
 

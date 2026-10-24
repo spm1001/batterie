@@ -43,7 +43,7 @@ from adapters.conversion import cleanup_orphaned_temp_files
 from logging_config import configure_call_logging, log_mcp_call
 from tools import do_search, do_fetch
 from tools.dispatch import DO_DESCRIPTION_FULL, DO_DESCRIPTION_REMOTE, run_operation
-from tools.share import ShareAnswer
+from tools.confirm_gate import ConfirmGate
 from tools.remote import REMOTE_ALLOWED_OPS, fetch_remote, search_remote
 from tools.search import VALID_TYPE_FILTERS, CANONICAL_TYPE_NAMES
 from validation import looks_like_drive_query
@@ -131,9 +131,9 @@ def search(
 
     Args:
         query: Search terms. Optional when type or folder_id is set.
-        sources: ['drive', 'gmail'] — default: both (drive only in guest mode). Also: 'activity' (recent comments), 'calendar' (events, ±7 days unless time_min/time_max), 'people' (staff directory: role, dept, reporting line — mise://docs/search)
+        sources: ['drive', 'gmail'] — default: both (drive only in guest mode). Also: 'activity' (recent comments), 'calendar' (events, ±7 days unless time_min/time_max), 'people' (staff directory: role, reporting line), 'chat' (Google Chat) — grammar: mise://docs/search
         max_results: Maximum results per source
-        base_path: Directory for deposits — pass your cwd so files land beside your project
+        base_path: Directory for deposits — pass your cwd
         folder_id: Optional Drive folder ID to scope results to immediate children
             only. Non-recursive; forces sources=['drive'] (Gmail has no folders).
         type: Optional Drive file type filter. Applies to Drive only.
@@ -222,7 +222,7 @@ def _log_search_result(call_params: dict[str, Any], result: dict[str, Any]) -> N
         log_mcp_call("search", params=call_params, ok=False, error=result.get("message"))
     else:
         log_mcp_call("search", params=call_params, result_summary={
-            k: result[k] for k in ("drive_count", "gmail_count", "activity_count", "calendar_count")
+            k: result[k] for k in ("drive_count", "gmail_count", "activity_count", "calendar_count", "chat_count")
             if k in result and result[k]
         })
 
@@ -230,7 +230,7 @@ def _log_search_result(call_params: dict[str, Any], result: dict[str, Any]) -> N
 @mcp.tool()
 def fetch(file_id: str, base_path: str = "", attachment: str | None = None, tabs: list[str] | None = None, recursive: bool = False, suggestions: str = "accepted", raw: bool = False, thumbnails: bool = True, crops: bool = True) -> dict[str, Any]:
     """
-    Fetch content to .mise/ — auto-detects type (Drive file, Gmail thread, folder).
+    Fetch content to .mise/ — auto-detects type (Drive file, Gmail thread, folder, Chat space/thread).
 
     Pass WHOLE URLs, not extracted ids: ?gid/?tab/#heading/#slide/?disco resolve to a
     cues.pointer naming the deposited artefact (per-tab CSV, content.md line, slide,
@@ -337,7 +337,7 @@ def do(
     properties: dict[str, str] | None = None,
     color: str | None = None,
     visibility: str | None = None,
-    transparency: str | None = None, share_answer: ShareAnswer = None,  # resolved by mcp, never a wire param
+    transparency: str | None = None, confirm_gate: ConfirmGate = None,  # resolved by mcp, never a wire param
 ) -> dict[str, Any]:
     """Act on Google Workspace."""
     # Build log params — include operation and non-None values that matter,
@@ -412,7 +412,7 @@ def do(
         "send_updates": send_updates, "duration": duration,
         "properties": properties, "color": color,
         "visibility": visibility, "transparency": transparency,
-        "_elicit": share_answer,  # the share dialog's outcome, if a client rendered one (tools/elicit.py)
+        "_elicit": confirm_gate,  # what the confirm dialog asked and what came back (tools/confirm_gate.py)
     }
 
     # Validation, metadata prefetch, and execution live in tools/dispatch.py.

@@ -35,6 +35,7 @@ from .common import (
 )
 from .decorations import build_doc_structure, build_slides_index
 from .drive_shortcut import follow_shortcut
+from .drive_restricted import refuse_if_download_restricted
 
 
 # Manifest provenance (dates + last-modifier) lives in common.py beside the
@@ -52,6 +53,7 @@ def fetch_drive(file_id: str, base_path: Path | None = None, recursive: bool = F
 
 def _route_drive(file_id: str, metadata: dict[str, Any], *, base_path: Path | None, recursive: bool, tabs: list[str] | None, suggestions: str, thumbnails: bool, crops: bool) -> FetchResult | FetchError:
     """Route by MIME type with metadata in hand. Never follows shortcuts, so a shortcut's target cannot loop."""
+    refuse_if_download_restricted(file_id, metadata)  # Google won't release the bytes: teach, before asking (mise-radija)
     mime_type = metadata.get("mimeType", "")
     title = metadata.get("name", "untitled")
     # Parse email context for cross-source linkage (exfil'd files)

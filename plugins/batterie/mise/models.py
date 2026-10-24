@@ -645,6 +645,7 @@ class SearchResult:
     activity_results: list[dict[str, Any]] = field(default_factory=list)
     calendar_results: list[dict[str, Any]] = field(default_factory=list)
     people_results: list[dict[str, Any]] = field(default_factory=list)
+    chat_results: list[dict[str, Any]] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
     # Path to deposited results file (filesystem-first pattern)
     path: str | None = None
@@ -664,6 +665,8 @@ class SearchResult:
             result["calendar_results"] = self.calendar_results
         if "people" in self.sources:
             result["people_results"] = self.people_results
+        if "chat" in self.sources:
+            result["chat_results"] = self.chat_results
         if self.errors:
             result["errors"] = self.errors
         return result
@@ -747,6 +750,19 @@ class SearchResult:
                         item[key] = r[key]
                 people_items.append(item)
             preview["people"] = people_items
+        if self.chat_results:
+            # Space, voice, time and a one-line snippet: enough to choose which
+            # conversation to fetch (the `space`/`thread` names are fetchable).
+            preview["chat"] = [
+                {k: v for k, v in (
+                    ("space_name", r.get("space_name") or r.get("space", "")),
+                    ("from", r.get("from", "")),
+                    ("time", r.get("time", "")),
+                    ("snippet", " ".join(str(r.get("text", "")).split())[:160]),
+                    ("thread", r.get("thread", "")),
+                ) if v}
+                for r in self.chat_results[:max_per_source]
+            ]
         return preview
 
     def to_dict(self) -> dict[str, Any]:
@@ -767,6 +783,7 @@ class SearchResult:
                 "activity_count": len(self.activity_results) if "activity" in self.sources else 0,
                 "calendar_count": len(self.calendar_results) if "calendar" in self.sources else 0,
                 "people_count": len(self.people_results) if "people" in self.sources else 0,
+                "chat_count": len(self.chat_results) if "chat" in self.sources else 0,
             }
             preview = self._build_preview()
             if preview:

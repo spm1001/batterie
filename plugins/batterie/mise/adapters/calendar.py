@@ -13,15 +13,23 @@ from datetime import datetime, timedelta, timezone
 from urllib.parse import quote
 from typing import Any
 
+import httpx
+import orjson
+from google.auth.exceptions import RefreshError, TransportError
+
+from adapters.credential_errors import credentials_as_auth
 from adapters.http_client import get_sync_client
+from logging_config import logger
 from models import (
     CalendarAttachment,
     CalendarAttendee,
     CalendarEvent,
     CalendarSearchResult,
     InviteState,
+    MiseError,
 )
 from retry import with_retry
+from token_store import CredentialsUnavailable
 
 
 # Google Calendar API v3 base URL
@@ -127,6 +135,7 @@ def _event_start_dt(event: CalendarEvent) -> datetime:
 
 
 @with_retry(max_attempts=3, delay_ms=1000, idempotent=True)
+@credentials_as_auth
 def list_events(
     days_back: int = 7,
     days_forward: int = 7,
@@ -238,6 +247,7 @@ def _cap_events(
 
 
 @with_retry(max_attempts=3, delay_ms=1000, idempotent=True)
+@credentials_as_auth
 def find_event_by_ical_uid(uid: str) -> dict[str, Any] | None:
     """Resolve an iCalUID to the RAW primary-calendar event, or None.
 
@@ -259,12 +269,14 @@ def find_event_by_ical_uid(uid: str) -> dict[str, Any] | None:
 
 
 @with_retry(max_attempts=3, delay_ms=1000, idempotent=True)
+@credentials_as_auth
 def get_event(event_id: str) -> dict[str, Any]:
     """Fetch one raw event from the primary calendar by event id."""
     client = get_sync_client()
     return client.get_json(f"{_CALENDAR_API}/primary/events/{event_id}")
 
 
+@credentials_as_auth
 def respond_to_event(event: dict[str, Any], response_status: str) -> dict[str, Any]:
     """Set the user's own responseStatus on an event they were invited to.
 
@@ -297,6 +309,7 @@ def respond_to_event(event: dict[str, Any], response_status: str) -> dict[str, A
 
 
 @with_retry(max_attempts=3, delay_ms=1000, idempotent=False)
+@credentials_as_auth
 def patch_event(
     event_id: str, body: dict[str, Any], send_updates: str = "none",
 ) -> dict[str, Any]:
@@ -322,6 +335,7 @@ def patch_event(
 
 
 @with_retry(max_attempts=3, delay_ms=1000, idempotent=True)
+@credentials_as_auth
 def freebusy_query(
     emails: list[str], time_min: datetime, time_max: datetime,
 ) -> dict[str, Any]:
@@ -351,6 +365,7 @@ def freebusy_query(
 
 
 @with_retry(max_attempts=3, delay_ms=1000, idempotent=True)
+@credentials_as_auth
 def list_status_events(
     calendar_id: str,
     time_min: datetime,
@@ -380,48 +395,56 @@ def list_status_events(
     return items
 
 
-# Process-lifetime cache: the user's timezone doesn't change mid-session
-_TZ_CACHE: list[str | None] = []
+# A lookup that ANSWERED (a zone, or none in the diary) is cached for the process —
+# the user's timezone doesn't change mid-session. A failure is not cached.
+_TZ_CACHE: list[tuple[str | None, str | None]] = []
+# Anticipated, by name: no usable credential (CredentialsUnavailable, never a bare
+# FileNotFoundError), Google's answer or the network (httpx), the token endpoint.
+_TZ_LOOKUP_FAILURES = (MiseError, CredentialsUnavailable, httpx.HTTPError, TransportError,
+                       RefreshError)
 
 
-def resolve_calendar_timezone() -> str | None:
-    """The user's IANA timezone, read from their own diary.
+def lookup_calendar_timezone() -> tuple[str | None, str | None]:
+    """The user's IANA timezone, read from their own diary, as (zone, reason).
 
-    calendars.get('primary') needed a scope mise didn't hold (probed 403,
-    2026-08-19; calendar.readonly covers it since 2026-09-14, but tokens
-    predating that still lack it), and UI-created events carry
-    start.timeZone — the diary itself is the source. Recurring events REQUIRE an IANA zone to survive
-    DST (a fixed offset turns a 10:00 BST series into 09:00 after the clock
-    change), which is why callers resolve this rather than passing offsets.
-
-    Returns None when no recent event carries a zone; callers fall back to
-    UTC with a warning rather than guessing.
+    calendars.get('primary') needed a scope older tokens lack (probed 403,
+    2026-08-19), and UI-created events carry start.timeZone — so the diary is
+    the source. Recurring events REQUIRE an IANA zone to survive DST, which is
+    why callers resolve this rather than passing offsets. Exactly one of the
+    pair is set; the reason (no zone in the diary, or a _TZ_LOOKUP_FAILURES
+    failure) lets callers cue their UTC fallback. Anything else raises: a bare
+    except here once made a broken lookup read as an empty diary (mise-nodavu).
     """
     if _TZ_CACHE:
         return _TZ_CACHE[0]
-    client = get_sync_client()
     now = datetime.now(timezone.utc)
     try:
-        response = client.get_json(
-            f"{_CALENDAR_API}/primary/events",
-            params={
-                "timeMin": (now - timedelta(days=60)).isoformat(),
-                "timeMax": (now + timedelta(days=60)).isoformat(),
-                "maxResults": 50,
-                "fields": "items(start(timeZone),organizer(self))",
-            },
-        )
-    except Exception:
-        return None  # best-effort — never fail the write over a tz lookup
+        response = get_sync_client().get_json(f"{_CALENDAR_API}/primary/events", params={
+            "timeMin": (now - timedelta(days=60)).isoformat(),
+            "timeMax": (now + timedelta(days=60)).isoformat(),
+            "maxResults": 50, "fields": "items(start(timeZone),organizer(self))",
+        })
+    except _TZ_LOOKUP_FAILURES as e:
+        detail = e.message if isinstance(e, MiseError) else str(e) or type(e).__name__
+        return None, f"calendar timezone lookup failed ({detail})"
+    except orjson.JSONDecodeError as e:  # a 2xx whose body isn't JSON (a proxy page, say)
+        return None, f"calendar timezone lookup got a malformed answer ({e})"
     items = response.get("items", [])
     zones = [i.get("start", {}).get("timeZone") for i in items]
-    self_zones = [
-        z for i, z in zip(items, zones)
-        if z and i.get("organizer", {}).get("self")
-    ]
+    self_zones = [z for i, z in zip(items, zones) if z and i.get("organizer", {}).get("self")]
     resolved = self_zones[0] if self_zones else next((z for z in zones if z), None)
-    _TZ_CACHE.append(resolved)
-    return resolved
+    answer = (resolved, None if resolved else "no recent event in your diary carries a timezone")
+    _TZ_CACHE.append(answer)
+    return answer
+
+
+def resolve_calendar_timezone() -> str | None:
+    """lookup_calendar_timezone's zone alone, its reason logged — for callers
+    with no cue to carry it (they warn on None themselves)."""
+    zone, reason = lookup_calendar_timezone()
+    if reason:
+        logger.warning("calendar timezone unresolved, UTC fallback: %s", reason)
+    return zone
 
 
 def get_event_by_ical_uid(uid: str) -> InviteState | None:

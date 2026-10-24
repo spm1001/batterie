@@ -19,6 +19,7 @@ from typing import Any
 import httpx
 
 from adapters.calendar import _CALENDAR_API
+from adapters.credential_errors import credentials_as_auth
 from adapters.http_client import get_sync_client
 from models import ErrorKind, MiseError
 from retry import with_retry
@@ -104,7 +105,9 @@ def _naming_the_id(e: MiseError, event_id: str, may_have_landed: bool) -> MiseEr
     would book twice (essayeur, 2026-10-24)."""
     details = {**e.details, "event_id": event_id, "may_have_landed": may_have_landed}
     if not may_have_landed:
-        return MiseError(e.kind, f"{e.message} (event id {event_id}; Google refused it, "
+        # No usable credential fails before the request exists: Google refused nothing.
+        how = "no request was sent" if e.details.get("credentials_unavailable") else "Google refused it"
+        return MiseError(e.kind, f"{e.message} (event id {event_id}; {how}, "
                          f"nothing was booked)", details=details, retryable=e.retryable)
     return MiseError(
         e.kind,
@@ -116,6 +119,7 @@ def _naming_the_id(e: MiseError, event_id: str, may_have_landed: bool) -> MiseEr
 
 
 @with_retry(max_attempts=3, delay_ms=1000, idempotent=True)
+@credentials_as_auth
 def _post_event(
     body: dict[str, Any], params: dict[str, str], attempts: _Attempts,
 ) -> dict[str, Any]:

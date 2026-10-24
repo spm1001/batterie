@@ -9,6 +9,7 @@ Patterns adopted from mcp-google-workspace.
 """
 
 import re
+from dataclasses import dataclass
 from base64 import b64decode, b64encode
 from datetime import datetime, timedelta, timezone, tzinfo
 from urllib.parse import parse_qs, unquote_plus, urlsplit
@@ -27,6 +28,14 @@ GMAIL_API_ID_PATTERN = re.compile(r'^[0-9a-f]{16}$')
 GMAIL_WEB_ID_PREFIXES = ('FM', 'KtbxL', 'QgrcJHs', 'CLL', 'Gtj')
 # Gmail draft ids, as they appear in mise's own draft links and in drafts.list.
 GMAIL_DRAFT_ID_PATTERN = re.compile(r'^r-?\d+$')
+
+# Google Chat resource names (mise-lumaha). Message ids are '<thread>.<msg>' —
+# measured 2026-10-24: 1127 of 1127 messages across 15 spaces had the thread id
+# as the prefix, and a thread's head message is '<thread>.<thread>'.
+CHAT_RESOURCE_PATTERN = re.compile(
+    r'^spaces/([A-Za-z0-9_-]+)(?:/(threads|messages)/([A-Za-z0-9_.-]+))?/?$'
+)
+_CHAT_ID_RE = re.compile(r'^[A-Za-z0-9_-]+$')
 
 
 
@@ -519,10 +528,14 @@ def diagnose_gmail_url(url: str) -> str | None:
         )
 
     if segments[0].lower() == 'chat':
+        # Reached only by a Chat link naming no conversation: fetch routes the
+        # ones that do (parse_chat_reference) before this pre-flight runs.
         return (
-            "This is a Google Chat link, not a mail thread. Chat is served from "
-            "mail.google.com but is a different product with its own id space, so "
-            "mise cannot read it — there is no mail thread behind this URL."
+            "This is a Google Chat link that names no space or conversation (a "
+            "Chat view rather than a chat). fetch() reads a Chat space, DM or "
+            "thread: pass a link that opens one (…#chat/space/<id>, "
+            "#chat/dm/<id>, chat.google.com/room/<id>) or its resource name "
+            "spaces/<id>. To find messages, use search(sources=['chat'], query=…)."
         )
 
     token = segments[-1]
@@ -596,6 +609,92 @@ def is_self_sent_gmail_url(url: str) -> bool:
         return False
     decoded = _decode_gmail_web_token(token)
     return bool(decoded and 'thread-a:' in decoded)
+
+
+# =============================================================================
+# GOOGLE CHAT REFERENCES (mise-lumaha)
+# =============================================================================
+
+
+@dataclass(frozen=True)
+class ChatRef:
+    """A Chat space, thread or message, as API resource names.
+
+    `space` is always set ('spaces/S'); `thread` ('spaces/S/threads/T') and
+    `message` ('spaces/S/messages/T.M') when the input named one.
+    """
+    space: str
+    thread: str | None = None
+    message: str | None = None
+
+    @property
+    def name(self) -> str:
+        """The most specific resource named — also the deposit-lock key."""
+        return self.message or self.thread or self.space
+
+
+def _chat_ref_from_ids(ids: list[str]) -> ChatRef | None:
+    """Build a ChatRef from a URL's [space, thread?, message?] path ids."""
+    if not ids or not all(_CHAT_ID_RE.match(i) for i in ids):
+        return None
+    space = ids[0]
+    thread = ids[1] if len(ids) > 1 else None
+    message = ids[2] if len(ids) > 2 else None
+    base = f"spaces/{space}"
+    return ChatRef(
+        space=base,
+        thread=f"{base}/threads/{thread}" if thread else None,
+        # A URL's message segment is the part after the dot: the API spells the
+        # message '<thread>.<msg>' (verified 2026-10-24 on a mail.google.com
+        # #chat/space/S/T/M link — messages.get answered 200 for T.M, 403 for M.M).
+        message=f"{base}/messages/{thread}.{message}" if thread and message else None,
+    )
+
+
+def parse_chat_reference(value: str) -> ChatRef | None:
+    """
+    Recognise a Google Chat space/thread/message in any shape fetch accepts.
+
+    - API resource names: spaces/S, spaces/S/threads/T, spaces/S/messages/T.M
+    - chat.google.com/room/S and chat.google.com/dm/S (optionally /u/N/ first,
+      ?cls=… after) — the two shapes Chat's own `spaceUri` field emits
+      (50 of 50 spaces measured 2026-10-24) — with /T or /T/M after S
+    - mail.google.com …#chat/space/S[/T[/M]] and #chat/dm/S — Chat inside Gmail
+      (the DM and S/T/M shapes resolved live against the API, 2026-10-24)
+
+    Returns None for anything else, including a Chat URL that names no space
+    (#chat/home) — diagnose_gmail_url teaches that case. Pure, no I/O.
+    """
+    if not value:
+        return None
+    s = value.strip()
+    m = CHAT_RESOURCE_PATTERN.match(s)
+    if m:
+        space, kind, child = m.groups()
+        base = f"spaces/{space}"
+        if kind == 'threads':
+            return ChatRef(space=base, thread=f"{base}/threads/{child}")
+        if kind == 'messages':
+            thread_id = child.split('.', 1)[0]
+            return ChatRef(space=base, thread=f"{base}/threads/{thread_id}",
+                           message=f"{base}/messages/{child}")
+        return ChatRef(space=base)
+
+    if 'mail.google.com' in s:
+        segments = gmail_fragment_segments(s)
+        if len(segments) >= 3 and segments[0].lower() == 'chat' and segments[1] in ('space', 'dm'):
+            return _chat_ref_from_ids([seg.split('?', 1)[0] for seg in segments[2:5]])
+        return None
+
+    parts = urlsplit(s if '://' in s else f"https://{s}")
+    if parts.hostname != 'chat.google.com':
+        return None
+    path = [seg for seg in parts.path.split('/') if seg]
+    if len(path) >= 2 and path[0] == 'u' and path[1].isdigit():
+        path = path[2:]
+    if len(path) >= 2 and path[0] in ('room', 'dm'):
+        return _chat_ref_from_ids(path[1:4])
+    return None
 
 
 def is_gmail_web_id(id_value: str) -> bool:

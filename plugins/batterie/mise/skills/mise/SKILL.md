@@ -155,6 +155,8 @@ rather than ignored — a dangling gid or slide id means the link rotted, which 
 telling the person who pasted it. Strip the URL to a bare ID and all of this silently disappears.
 So: whole URL, always.
 
+**Google Chat links and names fetch too** (since mise-lumaha): `spaces/<id>`, `spaces/<id>/threads/<id>`, a search row's `message` name, `chat.google.com/room/…` or `/dm/…`, and Gmail's own `#chat/space/…` / `#chat/dm/…` URLs. A space deposits its newest 200 messages, a thread (or a linked message's thread) up to 500 — newest LAST, sender names and UTC times, replies under the message that began their thread, unread messages marked, and `cues.chat_truncated` whenever older messages exist. Unread in the file comes from two read clocks (the space's for thread starters, each thread's for replies); `cues.unread_older_than_window` counts unread messages older than the deposited window, which are NOT in the file. When any part could not be read, or your own address is unknown, `cues.unread_unknown` replaces `unread_messages` and says why. Attachments are listed, not downloaded; a Drive attachment carries a `fetch('<id>')` you can run.
+
 **Gmail URLs work harder than they look.** The thread token is the **last** fragment segment, so a
 search-scoped URL like `#search/from%3Aalice+lantern/FMfcgz…` resolves fine — mise reads the token
 at the end, not the search terms in the middle, and carries the search query (or `#label/` name)
@@ -415,13 +417,14 @@ See `references/filtering-results.md` for patterns.
 
 ### Search Sources
 
-Default sources are `['drive', 'gmail']`. Three additional sources are available:
+Default sources are `['drive', 'gmail']`. Four additional sources are available:
 
 | Source | What it returns | When to use |
 |--------|----------------|-------------|
 | `activity` | Recent comment events from Drive Activity API | "What's been discussed recently?" / "Any comments on my files?" |
 | `calendar` | Events ±7 days around now, or any explicit `time_min`/`time_max` window — query optional | "Is my meeting with X still on?" / "What's in the diary Tuesday?" / clash-checking / meeting context for Drive files |
-| `people` | Staff directory: role, department, location, reporting line | "Who is Richard Pearce?" / "Who does she report to?" / placing an unfamiliar name before replying |
+| `people` | Staff directory: role, department, location, reporting line | "Who is Robin Example?" / "Who does she report to?" / placing an unfamiliar name before replying |
+| `chat` | Google Chat messages across every space and DM: space, sender, time, text, thread | "What did Alex say in Chat about the budget?" / "What's unread in Chat?" |
 
 ```python
 # Recent comment activity
@@ -441,7 +444,7 @@ search(sources=["calendar"], base_path="...")
 search("Q4 report", sources=["drive", "calendar"], base_path="...")
 
 # Who is this person? A SINGLE hit auto-expands with manager + direct reports
-search("Richard Pearce", sources=["people"], base_path="...")
+search("Robin Example", sources=["people"], base_path="...")
 
 # Everyone in a team — bare words match name/email only, so scope by field
 search("orgDepartment:MIT", sources=["people"], base_path="...")
@@ -449,9 +452,17 @@ search("orgDepartment:MIT", sources=["people"], base_path="...")
 # Any value with a SPACE needs = and SINGLE quotes. The colon form returns
 # zero silently, which reads exactly like nobody holding that job.
 search("orgTitle='Head of Strategy'", sources=["people"], base_path="...")
+
+# Google Chat: one keyword, or an exact phrase; is:unread for unread messages
+search("budget", sources=["chat"], base_path="...")
+search("is:unread", sources=["chat"], base_path="...")
+# then read a whole conversation: a row's `thread` or `space`, or a Chat link
+fetch("spaces/AAAA…/threads/…", base_path="...")
 ```
 
 **`people`** reads the Workspace staff directory. Query grammar is the Admin SDK's, not Drive's: **bare words match name and email only** — a job title returns zero, so use `orgDepartment:X` or `email:prefix*` to search by role or team. **Any value containing a space needs `=` and single quotes** — `orgTitle='Head of Strategy'` works, while both `orgTitle:Head of Strategy` and `orgTitle:"Head of Strategy"` return zero with no error, which is indistinguishable from nobody holding that job. One hit expands automatically with the manager resolved to a name and the direct reports listed; several hits return flat profiles, so narrow and look again. Two things to pass on honestly rather than assert: `manager` is the Workspace *account* field, not an HR record (at board level it can record who administers the account), and colleagues can opt out of the directory, so an empty result is not proof someone doesn't exist.
+
+**`chat`** searches Google Chat as the signed-in user. Its grammar is Google's, not Gmail's: words are matched as **one exact phrase** (Chat's search cannot AND separate terms — two quoted words returned 50 messages, 35 holding neither, measured 2026-10-24 — so several quoted terms are refused), `is:unread` lists unread messages — those Google's own read flag marks unread, never your own — and takes one keyword, matched as whole words in the message text (Google's own combination returned read messages, your own, and messages without the word), and Gmail operators (`from:`, `in:`, dates) are refused rather than searched as text. Rows arrive newest first, and DMs and group chats are named after their members ("DM with …"). **Google's Chat search skips muted spaces, app messages and private messages**, and `cues.chat_coverage` says so on every chat search — so a zero is never "nothing was said"; fetch the space to read it whole. A `chat_count` of 0 with an error naming `setup_oauth` means the token predates Chat: pass on the one-off `setup_oauth(force=True)` re-consent, after which a new session is needed.
 
 **`activity`** returns comment events — who commented, on what, when. Actors show as "Unknown" (people/ID limitation); the content and file are accurate. The query is NOT applied to activity — it always returns recent events.
 
@@ -477,8 +488,8 @@ search("orgTitle='Head of Strategy'", sources=["people"], base_path="...")
 | `draft` | Compose a new Gmail draft — or update an existing one in place | `to`, `subject`, `content`, optional `include` (Drive file IDs); update: `file_id` (draft ID) + `content` |
 | `reply_draft` | Reply draft in an existing thread, quoting the message it answers | `file_id` (thread ID), `content`, optional `include`, `to=` to override the inferred recipient, `quote='none'` to leave it bare |
 | `respond` | Accept/decline/tentative a calendar invite — the RSVP lands live, organiser sees it | `file_id` (invite thread ID or Calendar event ID), `action` (`accept`/`decline`/`tentative`) |
-| `create_event` | Book a calendar event — invites, Meet link, recurrence, Drive attachments | `title`, `time_min`/`time_max` (start/end); with `attendees`: preview → `confirm=True` |
-| `update_event` | Edit an event — quiet description edits direct; time/attendee/series changes gated | `file_id` (event ID or invite thread ID), then the fields to change |
+| `create_event` | Book a calendar event — invites, Meet link, recurrence, Drive attachments | `title`, `time_min`/`time_max` (start/end); with `attendees`: the client's dialog OR preview → `confirm=True` (see Calendar) |
+| `update_event` | Edit an event — quiet description edits direct; time/attendee/series changes gated (dialog OR preview → `confirm=True`) | `file_id` (event ID or invite thread ID), then the fields to change |
 | `freebusy` | Busy blocks + common free slots + office days for a set of people | `attendees`, `time_min`/`time_max`, optional `duration` (minutes) |
 | `archive` | Remove thread(s) from Inbox | `file_id` (str or list) |
 | `star` | Star thread(s) | `file_id` (str or list) |
@@ -574,9 +585,11 @@ do(operation="create_event", title="LSM catch-up",
 do(operation="create_event", ..., confirm=True)
 ```
 
+**The yes has two paths, the same as share's.** In a client that renders MCP elicitation (Claude Code's interactive TUI does), step 2's call does not return a preview: the server parks it and the client shows the human the preview's `message` as a dialog, which you never see. An accept books (or, for `update_event`, patches) and `cues.confirm_gate` reads `elicitation: the client answered proceed=true; booked on that answer`. A decline returns the preview with `confirm_required` withdrawn: the user said no, so don't call again with `confirm=True`. Where no dialog decides — `claude -p`, a client without the capability, a dismissed dialog — you get the preview with `confirm_required`, and step 3 applies. **The dialog only appears when the whole message fits it.** Claude Code clips each dialog line at the terminal width and shows at most 4 lines (measured live 2026-09-28 on CC 2.1.283; its bundle unchanged for mise on 2.1.303 and 2.1.310, 2026-10-24), so mise asks only when the message fits 4 lines of 74 columns — an 80-column terminal. A booking with a warning, a long title, a clash with a long name or a long guest list comes back as the preview instead, with a `confirm_gate` cue beginning `no dialog:`, so show the user the preview's `message` in full. **An accept covers exactly the words shown.** If the diary or the event changes while the dialog waits, so that what would be written no longer renders to those words, nothing is written: you get the current preview with a `confirm_gate` cue saying it no longer matches, and step 3 applies. Either way, never write "the human approved" from a cue, because the server cannot tell a person's accept from an auto-resolved one. A pre-supplied `confirm=True` skips the dialog.
+
 **The gate is blast radius, not ceremony.** `create_event` with attendees and any `update_event` that moves time, adds people, changes recurrence or adds Meet previews first, then emails attendees on confirm (`send_updates` defaults to `all` — the invite IS the proposal, so send-immediately is the smooth path). Quiet edits — description, title, location, attachments, `properties` (queryable extendedProperties key-values; merge semantics, existing keys survive), `color` (name like 'tomato' or 1–11), `visibility` ('private' hides detail), `transparency` ('free' shows the event without blocking availability — right for holds and focus blocks) — run directly with no emails, and `cues.previous` carries the old values: events have no version history, so that cue is the only undo reference. A solo event (no attendees) books directly.
 
-**Recurrence is an RRULE line**: `recurrence="RRULE:FREQ=WEEKLY;INTERVAL=2;BYDAY=TU"` on create makes a fortnightly series; the same param on `update_event` converts an existing single event into one. Mind the start date: Google keeps a start that falls outside BYDAY as a stray extra instance (the tool warns). Naive times mean wall-clock in the user's own timezone, resolved from their diary — pass offsets only when you mean them.
+**Recurrence is an RRULE line**: `recurrence="RRULE:FREQ=WEEKLY;INTERVAL=2;BYDAY=TU"` on create makes a fortnightly series; the same param on `update_event` converts an existing single event into one. Mind the start date: Google keeps a start that falls outside BYDAY as a stray extra instance (the tool warns). Naive times mean wall-clock in the user's own timezone, resolved from their diary — pass offsets only when you mean them, and on both bounds or neither (a mixed pair is refused). A naive time the clocks skip or repeat that day (the spring and autumn changes) is refused too, naming the gap, or the offsets to give both bounds. A preview whose span touches the repeated hour marks each time (`00:30 BST–01:30 GMT`), and one that contains a change states its real length (`00:30–02:30 Europe/London (3h, clocks go back)`).
 
 **freebusy's two honesty cues are load-bearing.** People in `not_visible` have sharing that hides even free/busy — they are EXCLUDED from slot arithmetic, so a proposed slot may clash with them; say so when proposing. And `office_days: "location not visible"` means their sharing is free/busy-only, never "not in the office". `include=[Drive file ids]` on create/update attaches docs to the event (the 1:1-doc-on-the-invite pattern).
 
@@ -636,7 +649,7 @@ do(operation="rename", file_id="1abc...", title="Final Q4 Report")
 # Share — TWO-STEP confirm gate
 # Step 1: Preview (returns what would happen, does NOT share)
 do(operation="share", file_id="1abc...", to="alice@example.com")
-# → {"preview": true, "message": "Would share 'Report' with alice@example.com as reader", ...}
+# → {"preview": true, "message": "Share 'Report' as reader with:\nalice@example.com", ...}
 
 # Step 2: Execute after user approves
 do(operation="share", file_id="1abc...", to="alice@example.com", confirm=True)
@@ -645,7 +658,7 @@ do(operation="share", file_id="1abc...", to="alice@example.com", confirm=True)
 do(operation="share", file_id="1abc...", to="alice@example.com, bob@example.com", role="writer", confirm=True)
 ```
 
-**Share requires user approval, and there are two honest paths to it.** Call once WITHOUT `confirm=True`. In a client that renders MCP elicitation (Claude Code's interactive TUI does — measured live 2026-09-14 on CC 2.1.270), the server parks the call and the client shows the human a dialog carrying the preview text; you never see it. Accepted with Proceed ticked → the share executes and `cues.confirm_gate` reads `elicitation: the client answered proceed=true; shared on that answer`. Declined → nothing shared, `cues.confirm_gate` says so and `confirm_required` is withdrawn: the user said no, so do not call again with `confirm=True`. Where no dialog can render — `claude -p`, a client without the capability — the same call returns the preview with `confirm_required` and a `confirm_gate` cue of `cancel`; show the preview, and call again with `confirm=True` on the user's yes. A pre-supplied `confirm=True` skips the dialog and executes (Sameer's policy A, 2026-09-06). Never write "the human approved" from the cue: the server cannot tell a person's accept from an auto-resolved one — the client's UI is the trust anchor. Roles: `reader` (default), `writer`, `commenter`.
+**Share requires user approval, and there are two honest paths to it.** Call once WITHOUT `confirm=True`. In a client that renders MCP elicitation (Claude Code's interactive TUI does — measured live 2026-09-14 on CC 2.1.270), the server parks the call and the client shows the human a dialog carrying the preview text; you never see it. Accepted with Proceed ticked → the share executes and `cues.confirm_gate` reads `elicitation: the client answered proceed=true; shared on that answer`. Declined → nothing shared, `cues.confirm_gate` says so and `confirm_required` is withdrawn: the user said no, so do not call again with `confirm=True`. Where no dialog decides, the same call returns the preview with `confirm_required`: show it, and call again with `confirm=True` on the user's yes. `claude -p` declares the capability and auto-cancels, so its preview carries a `confirm_gate` cue of `cancel`; a client without the capability gets no `confirm_gate` cue at all. A pre-supplied `confirm=True` skips the dialog and executes (Sameer's policy A, 2026-09-06). The preview's `message` is two parts: `Share 'NAME' as ROLE with:` on the first line, then every recipient, packed onto lines that fit the dialog (since 2026-10-24; it fitted 15 of the 29 real shares in the call log on 24 Oct). A preview too long for the dialog to show whole on an 80-column terminal — a file name over about 50 characters, or more recipients than three lines hold — skips the dialog, and its `confirm_gate` cue begins `no dialog:` and says so, because Claude Code clips dialog lines rather than wrapping them and would hide who gets access. Show the user that preview's `message` in full. Never write "the human approved" from the cue: the server cannot tell a person's accept from an auto-resolved one — the client's UI is the trust anchor. Roles: `reader` (default), `writer`, `commenter`.
 
 **Non-Google accounts** (iCloud, Outlook, etc.): Google requires a notification email. The tool handles this automatically — check `cues.notified` to see which recipients got an invite email.
 
@@ -942,7 +955,7 @@ Draft-only — Claude composes, the user reviews and sends from Gmail. This is a
 
 **`respond` is the one op in this family that ACTS rather than drafts:** the RSVP registers on the live event immediately and the organiser sees it, exactly as if clicked in Calendar. Use it on an explicit ask ("accept it", "decline that meeting") — never speculatively during triage. `file_id` takes the invite's thread ID (resolved to the event via its iCalUID, disclosed in cues) or the event ID; it refuses cancelled meetings and events the user isn't an attendee of.
 
-**What recipients see from `include=`** (characterised live, 2026-08-09): each file renders as a **Gmail Drive chip** — the grey rounded card with the file-type icon, same as the composer's own "insert from Drive" — because mise emits Gmail's own chip markup (plain styled HTML; Gmail never upgrades bare links to chips at read time, so markup at compose time is the only route). The text/plain part carries emoji + URL lines for non-HTML clients. **One thing the native composer does that mise does not: check the recipient can access the file.** Gmail's compose UI offers "Share & send"; mise sends the chip regardless, and a recipient without access hits "request access" on click. Before including a file someone outside the owner's domain needs, share it first (`do(share)`) — mise won't warn you.
+**What recipients see from `include=`** (characterised live, 2026-08-09): each file renders as a **Gmail Drive chip** — the grey rounded card with the file-type icon, same as the composer's own "insert from Drive" — because mise emits Gmail's own chip markup (plain styled HTML; Gmail never upgrades bare links to chips at read time, so markup at compose time is the only route). The text/plain part carries emoji + URL lines for non-HTML clients. **Don't tell the user to share linked files before sending — Gmail does it at Send.** mise only drafts, so the user always sends from Gmail, and Gmail's Send checks whether each recipient can open the linked or chipped Drive files and offers to grant access in that same step (the user's own account, 2026-10-24; an atelier session was corrected the same way on 2026-10-07, mise-muwana). So the draft and the sharing happen together, and a separate `do(share)` beforehand is a redundant confirm-gated detour. Reach for `do(share)` first only when the role must differ from what the user will pick in Gmail's prompt and they've asked for it, or when the mail will not be sent from Gmail. External recipients are unmeasured: the prompt may offer less, or your domain's policy may block it — if the user says Gmail refused, then share.
 
 Both draft ops auto-append the user's Gmail signature (from their sendAs settings, links intact) to the body. **Don't write a sign-off in `content`** — no "Best regards, ..." — end at the last sentence; the real signature lands below it. The `signature` cue in the response confirms it was appended.
 
@@ -955,6 +968,10 @@ Both draft ops auto-append the user's Gmail signature (from their sendAs setting
 **One draft per thread.** Gmail's conversation view shows only ONE draft inline per thread — a second draft object exists but hides exactly where the user hits Send. So `reply_draft` refuses when the thread already carries a draft, naming its id. The right move is almost always to **update the existing draft**: `do(operation="draft", file_id="<draft_id>", content=...)`. Pass `supersede=True` only when you deliberately want to discard the old draft and start fresh (permanent — and it may eat the user's hand-edits, so check whose words are in it first: the refusal includes a snippet).
 
 **Don't update a draft the user has open.** Gmail's composer holds its own copy, and their Send ships that copy: on 2026-09-09 an update reported "Draft updated in place", and the mail sent an hour later carried the old body. The API reports success either way. If they may be editing, give them the replacement lines to paste, or ask them to close the composer first, and after any in-place update confirm the body from Gmail before relying on it (carte-divufu).
+
+**Pull, merge, then push when updating a draft.** The user may have touched it in Gmail since you wrote it (a tweak, a doubled signature from an autosave). Read the draft's current body first, apply your change onto that, then `do(draft, file_id=…)` — never rewrite from your own earlier copy. A replaced human edit is gone, and mise's "changed since mise last wrote it" signal is the evidence that you skipped the pull (Sameer, 2026-10-24; mise-cijugo).
+
+**Check that a draft is still unsent before nudging the user to send it.** "That draft still needs sending" is usually carried forward from a handoff, a task list or an earlier turn, and the user has often sent it since. Fetch the draft's link (`…/mail/#drafts/<r-id>`, from the draft result): a live draft resolves to its thread, while a sent or discarded one comes back NOT_FOUND with lifecycle wording. To tell sent from discarded, look for the user's own message in that thread (or `in:sent` with the subject) dated after the draft. Scheduled sends are invisible to the API (mise-redoha), so a dead draft with no sent message may be scheduled — say so rather than nudging. If you can't check, don't nudge: say "if you haven't already sent it".
 
 ### Common mistakes
 
@@ -1015,7 +1032,7 @@ So for the "No" rows, one attempt from you. If the answer is unclear, look befor
 | `replace_text` without checking cues | No longer silent, but still a no-op | Read `cues.warning` for `NO CHANGE`, or `cues.occurrences_changed > 0` |
 | A find string copied from `content.md` | `**`, `` ` ``, `~~`, `{++` are rendering, not document text — can never match | Search the plain words; the `NO CHANGE` warning names the marker |
 | A find string spanning a PDF page break | The form feed can never be in a Doc — Docs deletes it on every write | Search within one page; the warning names the character |
-| Share with `confirm=True` first time | Skips the client's dialog AND the preview — the yes came from you | Call without confirm first; the dialog or the preview carries the human's yes |
+| Share, or book with attendees, with `confirm=True` first time | Skips the client's dialog AND the preview — the yes came from you | Call without confirm first; the dialog or the preview carries the human's yes |
 | Archive/star one thread at a time | Slow — one tool call per thread | Pass `file_id` as a list for batch operations |
 | Looking for a `mark_read` operation | Doesn't exist | Use `label` with `label="UNREAD"`, `remove=True` |
 

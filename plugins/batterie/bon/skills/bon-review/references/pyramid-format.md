@@ -44,7 +44,7 @@ Where the queue exists and the workable lane is dry (or draining), the pyramid o
 
 ## Jobs-group display mapping
 
-The survey emits `job` slugs (from Dolt `repos.job` via `bon register --job`, or a JSONL board's `.bon/job` marker). Render them as:
+The survey emits `job` slugs from each board's `.bon/job` marker. Render them as:
 
 | slug | header |
 |------|--------|

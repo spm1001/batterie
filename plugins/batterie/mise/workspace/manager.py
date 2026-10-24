@@ -23,7 +23,7 @@ from typing import Any, Literal
 DEPOSIT_DIR = ".mise"
 
 # Type aliases
-ContentType = Literal["slides", "doc", "sheet", "form", "gmail", "pdf", "docx", "xlsx", "pptx", "video", "image", "text", "web", "folder"]
+ContentType = Literal["slides", "doc", "sheet", "form", "gmail", "pdf", "docx", "xlsx", "pptx", "video", "image", "text", "web", "folder", "chat"]
 
 
 def slugify(text: str, max_length: int = 50) -> str:

@@ -4,9 +4,9 @@ Guidance for working on bon (the codebase, not with bon).
 
 ## What This Is
 
-Bon is a lightweight work tracker for Claude-human collaboration. JSONL default, optional Dolt backend, Git-tracked. A couple of dozen commands (incl. cross-repo `bon move`, Dolt `bon register`, and `someday`/`unsomeday` parking), a few thousand lines of core plus an optional Dolt module, and a pytest suite with opt-in Dolt integration (`BON_DOLT_TEST=1`). For exact counts ask the code (`bon --help`; `uv run pytest --collect-only -q`), not this file — hand-maintained numbers rot, and rotted ones get quoted into briefs (bon-niloza).
+Bon is a lightweight work tracker for Claude-human collaboration. JSONL in the repo, Git-tracked, self-syncing. A couple of dozen commands (incl. cross-repo `bon move` and `someday`/`unsomeday` parking), a few thousand lines of core, and a pytest suite. (An optional Dolt backend existed from March to October 2026; it was retired on 2026-10-24 and its code deleted the same evening — see Storage.) For exact counts ask the code (`bon --help`; `uv run pytest --collect-only -q`), not this file — hand-maintained numbers rot, and rotted ones get quoted into briefs (bon-niloza).
 
-**This repo went PRIVATE in the 2026-09-23 security triage; it was public before that**, so everything pushed before then (handoffs, `understanding.md`, `docs/`) was world-readable and may still be cached elsewhere. It also means plugin users can't see this repo unless they are collaborators. Two family collaborators were added with write access to every private suite repo on 2026-09-23, so family fixes can land as PRs again. Anyone else's report reaches us by message: read it as a pull request with nowhere to land. The public-era guidance below still applies if the repo is ever made public again. (Handoffs moved out of `.bon/` to the visible root `handoffs/` in the 2026-08-22 migration, and `.bon/handoffs/` stopped being a resolution rung at all in bon-sedoze; `.bon/` is still tracked here for the bottle and understanding.md. The board items themselves stay private only by accident of backend: bon's own board is Dolt-backed, so there's no items.jsonl here.) Most sibling repos are private, and that asymmetry is the trap. A finding about a live service belongs in the repo that owns the service, with only a pointer left here; a handoff describing an unfixed weakness publishes that weakness. One command settles which world you're in: `gh repo view <repo> --json visibility`.
+**This repo went PRIVATE in the 2026-09-23 security triage; it was public before that**, so everything pushed before then (handoffs, `understanding.md`, `docs/`) was world-readable and may still be cached elsewhere. It also means plugin users can't see this repo unless they are collaborators. Two family collaborators were added with write access to every private suite repo on 2026-09-23, so family fixes can land as PRs again. Anyone else's report reaches us by message: read it as a pull request with nowhere to land. The public-era guidance below still applies if the repo is ever made public again. (Handoffs moved out of `.bon/` to the visible root `handoffs/` in the 2026-08-22 migration, and `.bon/handoffs/` stopped being a resolution rung at all in bon-sedoze; `.bon/` is still tracked here for the bottle and understanding.md. Since 2026-10-24 bon's own board is `.bon/items.jsonl` in this repo, so the board is exactly as private as the repo.) Most sibling repos are private, and that asymmetry is the trap. A finding about a live service belongs in the repo that owns the service, with only a pointer left here; a handoff describing an unfixed weakness publishes that weakness. One command settles which world you're in: `gh repo view <repo> --json visibility`.
 
 ## Versioning & releasing (suite-managed)
 
@@ -34,7 +34,6 @@ uv run bon --help                # CLI help
 src/bon/
 ├── cli.py        # All commands, argparse setup, main entry point
 ├── storage.py    # JSONL I/O, validation, prefix management, dedup, backend dispatch
-├── dolt.py       # Optional Dolt backend (lazily imported, requires pymysql)
 ├── ids.py        # ID generation (pronounceable 3-syllable)
 ├── display.py    # Output formatting (hierarchical, JSON, JSONL)
 └── queries.py    # Filtering (ready, waiting)
@@ -49,21 +48,18 @@ skills/open/SKILL.md     # Claude Code integration (session ritual + draw-down d
 Verified against imports (2026-06-20). Intra-package edges only:
 
 ```
-cli      ──▶ display, storage, ids, queries     (+ dolt, lazy/function-local)
-storage  ──▶ ids                                (+ dolt, lazy)   ── dolt ⇄ storage (mutual, lazy)
+cli      ──▶ display, storage, ids, queries
+storage  ──▶ ids
 display  ──▶ ids, queries
-dolt     ──▶ storage
 ids, queries ── leaves (no intra-package imports)
 ```
 
 - **`ids` and `queries` are leaves** — nothing in-package depends *up* from them; safe to read first.
 - **A change to `ids`** (ID generation, ordering) is the most load-bearing leaf — it ripples into `storage`, `display`, and `cli`.
-- **`dolt` ⇄ `storage` are mutually dependent, but lazily**: `storage` imports `dolt` functions only inside backend branches; `dolt` imports `storage` helpers. Edit either, check the other.
-- Dolt imports are function-local throughout, so the optional backend never loads unless a repo uses it.
 
 ## Data Model
 
-Items live in `.bon/items.jsonl` (or a Dolt database when using the optional backend). Two types:
+Items live in `.bon/items.jsonl`. Two types:
 
 - **Outcome**: Desired result (has children)
 - **Action**: Concrete step (has parent)
@@ -121,11 +117,6 @@ consumer never sees it. `how` was lost this way on the first big review run
 8. **Docs:** `docs/CONTRACT.md` (it is contract surface), CLAUDE.md's Data Model,
    README's command table and JSON shape, and the brief table in `skills/open/SKILL.md`.
 
-**No Dolt work is needed** — `brief` is a single JSON column serialised whole, so a
-new subfield needs no migration *and* survives a write by an older client (unlike a
-new top-level column, which the fixed `_ITEM_COLUMNS` list strips). Verify that still
-holds before relying on it.
-
 ## Critical Behaviors
 
 ### Unblock on Done
@@ -152,8 +143,8 @@ Users can type `gabdur` instead of `bon-gabdur`. The `find_by_id()` function han
 Claude (no CLI, any vendor) how to read the board and route writes as handoff
 candidates — and prints a CLAUDE.md/AGENTS.md discovery stanza. The canonical text
 is `BOARD_README` in `storage.py`. Every `save_items()`/`save_items_at()` refreshes
-a missing or stale copy on the back of the write (same parasitic pattern as Dolt
-repos-table registration), and `bon doctor` reports staleness / `bon doctor --fix`
+a missing or stale copy on the back of the write (same parasitic pattern the
+old Dolt repos-table registration used), and `bon doctor` reports staleness / `bon doctor --fix`
 repairs it without touching items. So a wording change to `BOARD_README` converges
 the estate's static copies as boards get written; dormant boards take the doctor
 route.
@@ -264,29 +255,16 @@ which made a shell-mangled closing note permanent.
 | Adding a nested tactical key | Put it INSIDE the tactical object, not beside it as an item column. `tactical` round-trips as one opaque JSON value, so a nested key survives a write by an older client — where a new top-level column is stripped by the fixed `_ITEM_COLUMNS` list (the someday-decay lesson, one level deeper) |
 | Tactical lookup ignoring session | Always pass `session=os.getcwd()` to `find_active_tactical()`. Omitting it returns only unscoped (legacy) tacticals. |
 | Stale global install after code changes | `uv tool install` reuses a cached *build* of the local source, and `uv cache clean bon` does **not** clear it. Since bon's version is dynamic from `plugin.json` (hatchling regex-read), a bump touching only `plugin.json`/CLAUDE.md leaves `src/` byte-identical, so the old wheel is reused and the version never moves (verified 2026-06-17). Force a real rebuild with `--no-cache`: `uv tool install ~/repos/spm1001/bon --force --reinstall --no-cache --with pymysql` |
-| Calling `items_path()` in Dolt mode | Raises `BonError`. Check `_get_backend()` first, or use `load_items()`/`save_items()` which dispatch automatically. |
-| Dolt backend without pymysql | `BonError` with install instructions. Install: `pip install bon[dolt]` |
-| Session identity differs per backend | Use `get_session_identity()` not `os.path.realpath(os.getcwd())`. Dolt mode prefixes with hostname. |
-| `_get_backend()` caching | Follows same pattern as `_data_dir()`. One file read per process. Reset with `_reset_backend()` in tests. |
+| Session identity | Use `get_session_identity()` not `os.path.realpath(os.getcwd())`: it is the realpath of the board root, so every subdir of one repo shares one claim. |
+| A clone still carrying `.bon/backend=dolt` | It predates its board's move (Dolt retired 2026-10-24). `check_initialized()` and every board write refuse with `storage.DOLT_RETIRED`, which says `git pull`. Never restore a Dolt path to read such a clone. |
 
-## Storage Backends
+## Storage
 
-Bon supports two backends: **JSONL** (default) and **Dolt** (optional).
+Every board is `.bon/items.jsonl` (plus `archive.jsonl`) in its own repo, git-tracked, zero dependencies.
 
-- JSONL: `.bon/items.jsonl`, git-tracked, zero dependencies
-- Dolt: MySQL-compatible DB with git semantics, requires `pymysql` (`pip install bon[dolt]`)
+**History: Dolt, March to October 2026.** Bon had an optional Dolt (MySQL-compatible) backend from 2026-03-21. On 2026-10-24 all 18 Dolt boards migrated back to JSONL in their repos with empty id+content diffs (bon-bozocu), the `dolt-bon` server was stopped, and the same evening `dolt.py`, `migrate`, `register`, `init --backend`, the `[dolt]` extra and the Dolt tests were deleted (bon-sujeno). The full Dolt history is archived in the private, archived repo `spm1001/bon-dolt-backup`: a native `dolt clone`-able copy, a tarball of the data directory as a release asset, and `readable/` (plain JSONL of every board and every recorded change). What survives in code: a clone still carrying `.bon/backend=dolt` is refused with `storage.DOLT_RETIRED` ("git pull"), and the half-pulled guard (bon-famuwi: `.bon/backend` gone from disk but still tracked by git as `dolt`, `items.jsonl` untracked) still refuses a write that would start a second board. The review survey's Dolt reader (`skills/bon-review/scripts/audit_survey.py`, `net_motion.py`) is still present but switched off — it reports Dolt `retired` when no `~/.config/bon/dolt.toml` exists, which is everywhere — and is the last Dolt code to remove.
 
-Backend is set per-project in `.bon/backend` (absent = jsonl). All Dolt code lives in `src/bon/dolt.py`, lazily imported. Dispatch happens at the function boundary in `storage.py` — cli.py doesn't change.
-
-**The Dolt database carries a `repos` mapping table** (prefix → repo_name, origin_url, job) so estate-wide consumers (the /bon-review survey) can label prefixes without a local clone. Boards self-register: every Dolt write upserts the row inside the existing transaction (SELECT-compare first, so unchanged identity writes nothing), `init --backend dolt` and `migrate --to dolt` register explicitly, and `bon register` is the manual/backfill path. The `job` column is the review pyramid's jobs-group and is human-curated: only `bon register --job` touches it (`--job ""` clears); parasitic writes preserve it. JSONL boards carry the same fact as a `.bon/job` marker file, which `migrate --to jsonl` writes from the repos row and commits with the board. Unmapped prefixes are surfaced as such — never guessed. The estate readers (`skills/bon-review/scripts/audit_survey.py`, `net_motion.py`) skip every prefix carrying a `moved:` marker, because a migrated board's rows stay in Dolt frozen: the board is counted from its JSONL clone, and a moved board with no JSONL clone on the machine is named in `moved_unseen` (bon-lapine).
-
-**Dolt write strategy is item-grain diff-at-save** (bon-resena, 2026-08-23 — this REVERSES the earlier "truncate-and-reinsert, never per-item" doctrine, with cause). `dolt_load_items` snapshots the normalised board per prefix; `dolt_save_items` diffs against it and writes only changed/new rows plus explicit deletions, so concurrent lanes editing different items commute. The old whole-prefix rewrite let a load that caught another lane's write mid-flight persist a half-board as truth — 7 rows lost in production under two ordinary lanes (restored from Dolt history), 42 of 60 in the scripted reproduction. Loads read `AS OF 'HEAD'` (committed state — Dolt's sql-server otherwise serves other connections' in-flight transaction state to plain reads). The population fallback (a save with no prior load in-process: migrate, init import) still rewrites the whole prefix, deliberately — those paths are single-lane. JSONL now has the same property (bon-beneba, 2026-09-25): every JSONL save takes a per-board flock (lock file under `$XDG_CACHE_HOME/bon/locks/`, outside the repo) and merges at item grain with the file on disk before its atomic rename, so two processes on one clone commute too; an item both changed refuses loudly. Across clones, gitsync's rebase + item-grain merge does the same job. **Dolt was retired on 2026-10-24** (decided 2026-09-23, bon-nudano): all 18 boards migrated to JSONL in their repos with empty id+content diffs, the `dolt-bon` server stopped and disabled, `~/dolt-data` kept read-only, and the final state pushed to `spm1001/bon-dolt-backup` (native + `readable/`). With no `~/.config/bon/dolt.toml` the survey readers report Dolt as `retired` and skip it, and a stale clone still carrying `.bon/backend=dolt` is told to `git pull` (`dolt.DOLT_RETIRED`). The Dolt code, its tests and the `[dolt]` extra stay one release for stragglers, then go (bon-sujeno). The paragraphs below describe the Dolt machinery as it ran. `migrate --to jsonl` freezes the Dolt copy first (a `moved:<prefix>` row in the `config` table, bon-lowija): every Dolt write on that prefix then refuses with a `git pull` instruction, and loads warn "frozen board". Any new Dolt write path must call `_refuse_if_moved(prefix)` before it writes. The JSONL side has the matching guard (bon-famuwi): a JSONL write refuses in a **half-pulled clone** — `.bon/backend` gone from disk but still tracked by git with content `dolt`, and `items.jsonl` untracked — naming `git pull` and, if the pull changes nothing, `git checkout HEAD -- .bon/backend` (`gitsync.unpulled_move`, `storage._refuse_if_half_pulled`; migrate's own writes are exempt via `migrating_board`). And `migrate --to jsonl` is **all-or-nothing**: if its adopt commit does not land, it rolls back (index reset, `backend=dolt` restored, the derived JSONL deleted, its own freeze lifted by compare-and-delete on the marker value) and exits non-zero naming the git error; it refuses up front under `BON_SYNC=off`; and it reports a failed push as not pushed. A migrate killed mid-way (SIGKILL) is the one gap — re-run `bon migrate --to jsonl` in that clone to finish.
-
-```bash
-bon init --prefix myproj --backend dolt   # New project with Dolt
-bon migrate --to dolt                      # Existing project to Dolt
-bon migrate --to jsonl                     # Back to JSONL
-```
+**Concurrency on one clone** (bon-beneba, 2026-09-25): every JSONL save takes a per-board flock (lock file under `$XDG_CACHE_HOME/bon/locks/`, outside the repo) and merges at item grain with the file on disk before its atomic rename, so two processes on one clone commute; an item both changed refuses loudly. Across clones, gitsync's rebase + item-grain merge does the same job.
 
 **JSONL boards sync themselves on write (bon-guritu, `src/bon/gitsync.py`).** Every
 mutating verb on a JSONL board runs fetch → rebase → item-grain merge → write →
@@ -307,7 +285,7 @@ reviewed and deleted. Offline degrades to write + commit locally with one warnin
 and a later verb pushes the backlog; a push is refused (with the reason named) when
 unpushed commits touch non-board files, so a board verb can never publish code as a
 side effect. The item-grain three-way
-merge (`merge_items`) is the same grain lesson as Dolt's diff-at-save: a whole-file
+merge (`merge_items`) is the same grain lesson as the old Dolt diff-at-save: a whole-file
 write after an integrate would clobber the other clone. `bon init` seeds
 `.bon/.gitattributes` (`*.jsonl merge=union`) so the git-level merge is line-wise
 under rebase.
@@ -324,7 +302,6 @@ timestamps rather than commit order. Never hand-edit the board to recover one.
 | See expected outputs | `fixtures/*.jsonl` |
 | Add/modify command | `cli.py` |
 | Change storage format | `storage.py` |
-| Dolt backend logic | `dolt.py` |
 | Update Claude integration | `skills/open/SKILL.md` |
 | Docket/rite boundary (probe, query surface, ownership) | `docs/CONTRACT.md` |
 | Handoff format spec | `docs/HANDOFF-CONTRACT.md` |

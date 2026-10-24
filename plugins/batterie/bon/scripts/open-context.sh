@@ -431,7 +431,9 @@ while [ "$BWALK" != "/" ]; do
 done
 if [ -n "$BON_ROOT" ]; then
     if [ -f "$BON_ROOT/.bon/backend" ] && [ "$(cat "$BON_ROOT/.bon/backend" 2>/dev/null)" = "dolt" ]; then
-        BON_BACKEND="dolt"
+        # Dolt was retired on 2026-10-24: a clone still saying so hasn't pulled.
+        BON_BACKEND="stale"
+        BON_DOLT_ERROR="This clone still says .bon/backend=dolt, but Dolt was retired on 2026-10-24 and every board lives in its repo as .bon/items.jsonl. Run git pull in $BON_ROOT (if it refuses over .bon/README.md, git checkout -- .bon/README.md first)."
     elif [ -f "$BON_ROOT/.bon/items.jsonl" ]; then
         BON_BACKEND="jsonl"
     fi
@@ -443,16 +445,11 @@ if [ "$READ_ONLY" -eq 1 ] && [ "$BON_BACKEND" != none ]; then
     if [ "$BON_BACKEND" = jsonl ] && [ -x "$BON_READ" ]; then
         read_board BON_LIST_OUTPUT "$BON_READ" list
         read_board BON_CURRENT_OUTPUT "$BON_READ" current
+    elif [ "$BON_BACKEND" = stale ]; then
+        BOARD_ERRORS="$BON_DOLT_ERROR"
     elif command -v bon &>/dev/null; then
-        # Use the source paired with this collector even when the installed
-        # Python entrypoint predates BON_SKIP_SCHEMA_INIT. Its interpreter still
-        # supplies the installed transport dependencies; no install/sync runs.
-        if [ ! -f "$SCRIPT_DIR/../src/bon/dolt.py" ]; then
-            BOARD_ERRORS="Collector source unavailable; refusing a potentially migrating CLI read"
-        else
-            read_board BON_LIST_OUTPUT env PYTHONPATH="$SCRIPT_DIR/../src" BON_SKIP_SCHEMA_INIT=1 bon list
-            read_board BON_CURRENT_OUTPUT env PYTHONPATH="$SCRIPT_DIR/../src" BON_SKIP_SCHEMA_INIT=1 bon show --current
-        fi
+        read_board BON_LIST_OUTPUT bon list
+        read_board BON_CURRENT_OUTPUT bon show --current
     else
         BOARD_ERRORS="Board reader unavailable; backend=$BON_BACKEND"
     fi
@@ -465,19 +462,6 @@ elif [ "$BON_BACKEND" = "jsonl" ]; then
         BON_LIST_OUTPUT=$(cd "$BON_ROOT" && bon list 2>/dev/null || true)
         BON_READY_OUTPUT=$(cd "$BON_ROOT" && bon list --ready 2>/dev/null || true)
         BON_CURRENT_OUTPUT=$(cd "$BON_ROOT" && bon show --current 2>/dev/null || true)
-    fi
-elif [ "$BON_BACKEND" = "dolt" ]; then
-    if command -v bon &>/dev/null; then
-        BON_LIST_OUTPUT=$(cd "$BON_ROOT" && bon list 2>&1 || true)
-        BON_READY_OUTPUT=$(cd "$BON_ROOT" && bon list --ready 2>&1 || true)
-        BON_CURRENT_OUTPUT=$(cd "$BON_ROOT" && bon show --current 2>/dev/null || true)
-        if echo "$BON_LIST_OUTPUT" | grep -q "Cannot connect"; then
-            BON_DOLT_ERROR="$BON_LIST_OUTPUT"
-            BON_LIST_OUTPUT=""
-            BON_READY_OUTPUT=""
-        fi
-    else
-        BON_DOLT_ERROR="Backend is dolt but bon CLI not in PATH"
     fi
 fi
 
@@ -500,22 +484,15 @@ elif [ -n "${BON_DOLT_ERROR:-}" ]; then
     {
         echo "# Bon Context (generated $(date '+%Y-%m-%d %H:%M'))"
         echo "# Generated for: $CWD"
-        echo "# Backend: dolt (CONNECTION FAILED)"
+        echo "# Backend: dolt (RETIRED — this clone has not pulled)"
         echo ""
         echo "## Error"
         echo "$BON_DOLT_ERROR"
         echo ""
-        echo "Recovery: systemctl --user start dolt-bon.service"
+        echo "Recovery: git pull in $BON_ROOT"
     } > "$BON_FILE"
 else
     rm -f "$BON_FILE"
-fi
-
-# === GHOST FILE WARNING ===
-if [ "$BON_BACKEND" = "dolt" ] && [ -f ".bon/items.jsonl" ]; then
-    echo "Warning: .bon/items.jsonl exists but backend is Dolt — this file is stale (pre-migration ghost)."
-    if [ "$READ_ONLY" -eq 0 ]; then echo "  Remove it: rm .bon/items.jsonl"; fi
-    echo ""
 fi
 
 # === STDOUT BRIEFING ===
@@ -706,8 +683,8 @@ fi
 # --- 5. Open work: outcomes, then standalone ---
 if [ "$BON_BACKEND" != "none" ]; then
     if [ -n "${BON_DOLT_ERROR:-}" ]; then
-        echo "Bon: backend is dolt but server is unreachable"
-        echo "  Run: systemctl --user start dolt-bon.service"
+        echo "Bon: this clone still says backend=dolt, but Dolt was retired on 2026-10-24"
+        echo "  Run: git pull in $BON_ROOT"
         echo ""
     elif [ -n "$BON_LIST_OUTPUT" ]; then
         # Top-level outcomes sit at column 0; standalone actions sit indented

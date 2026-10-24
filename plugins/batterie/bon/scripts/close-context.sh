@@ -52,7 +52,7 @@ validate_dependencies
 emit_board_motion() {
     local since="$1" root="$2" cmd="$3"
     # `|| true` inside the subshell, for the second time in this file and the
-    # same reason: on a Dolt board with the server down, `bon log` exits 1,
+    # same reason: if `bon log` exits 1,
     # pipefail lifts that to the pipeline, and `set -e` then kills the whole
     # script HERE — losing every section after BOARD MOTION, including the
     # migration-bridge block below. The bon-cuvice death again, and the

@@ -35,7 +35,7 @@ I wanted something that had the best of all these ideas:
 
 | Verb | Purpose | Deposits files? |
 |------|---------|-----------------|
-| `search` | Find files and emails across Drive and Gmail (plus activity and calendar) | Yes — results JSON |
+| `search` | Find files and emails across Drive and Gmail (plus activity, calendar, the staff directory and Google Chat) | Yes — results JSON |
 | `fetch` | Extract content to `.mise/` as markdown/CSV | Yes — content folder |
 | `do` | Act on Workspace — 23 operations: create, copy, move, rename, share, overwrite, prepend, append, replace_text, draft, reply_draft, archive, star, label, comment, comment_reply, suggest, trash, respond, create_event, update_event, freebusy, setup_oauth | Varies |
 
@@ -149,7 +149,7 @@ uv run python -m auth --code URL_OR_CODE # Exchange the code from the headless f
 
 With `--auto`, grant permissions in the browser and you're done.
 
-**Scopes requested:** Drive (read+write), Gmail (read+write), Docs/Sheets/Slides (read+write), Drive Activity, Drive Labels, Calendar (events on any calendar you can name, your calendar list, free/busy), Forms, and the staff directory (read). The directory scope is `admin.directory.user.readonly`, which reads more alarming than it is — mise only ever calls the Directory API's `domain_public` view, documented by Google as available to any user on the domain, and never the administrator view. See [`oauth_config.py`](oauth_config.py) for the full list and rationale.
+**Scopes requested:** Drive (read+write), Gmail (read+write), Docs/Sheets/Slides (read+write), Drive Activity, Drive Labels, Calendar (events on any calendar you can name, your calendar list, free/busy), Forms, the staff directory (read), and Google Chat (read: spaces, members, messages, read state — `search(sources=['chat'])` and `fetch` of a space, DM or thread). The directory scope is `admin.directory.user.readonly`, which reads more alarming than it is — mise only ever calls the Directory API's `domain_public` view, documented by Google as available to any user on the domain, and never the administrator view. See [`oauth_config.py`](oauth_config.py) for the full list and rationale.
 
 <details>
 <summary>Bringing your own GCP project (advanced)</summary>
@@ -159,7 +159,7 @@ If you prefer your own OAuth credentials instead of the bundled ones:
 1. Create or select a [Google Cloud project](https://console.cloud.google.com)
 2. Enable these APIs in [APIs & Services > Library](https://console.cloud.google.com/apis/library):
    - Google Drive API, Gmail API, Google Docs API, Google Sheets API
-   - Google Slides API, Google Calendar API, Drive Activity API, Drive Labels API
+   - Google Slides API, Google Calendar API, Drive Activity API, Drive Labels API, Google Chat API
 3. Configure [OAuth consent screen](https://console.cloud.google.com/apis/credentials/consent) (External, add your email as test user)
 4. Create [OAuth credentials](https://console.cloud.google.com/apis/credentials) (Web Application type)
    - Add `http://localhost:3000/oauth/callback` as an authorized redirect URI

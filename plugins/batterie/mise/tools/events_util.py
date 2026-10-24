@@ -5,19 +5,19 @@ Timezone policy (mise-rijeco): recurring events REQUIRE an IANA zone to
 survive DST — a fixed offset turns a 10:00 BST series into 09:00 after the
 clock change — and a naive datetime means wall-clock time in the user's
 world, not UTC. Both resolve from the user's own diary
-(resolve_calendar_timezone); when nothing resolves, the fallback to UTC is
+(lookup_calendar_timezone); when nothing resolves, the fallback to UTC is
 LOUD (warning cue), never silent.
 """
 
 import re
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Any
 
-from adapters.calendar import resolve_calendar_timezone
+from adapters.calendar import lookup_calendar_timezone
 from adapters.drive import get_file_metadata
-
-_DATE_ONLY_RE = re.compile(r"\d{4}-\d{2}-\d{2}")
+from models import MiseError
+from tools.event_clock import parse_event_time, refuse_unclear_wall_times, zoned_datetime
 
 # Same advice string family as respond.py, for the older failure (pre-2026-08-09
 # tokens lack calendar.events entirely).
@@ -39,53 +39,8 @@ def error(kind: str, message: str) -> dict[str, Any]:
     return {"error": True, "kind": kind, "message": message}
 
 
-def parse_event_time(
-    raw: str, param: str, tz: str | None, warnings: list[str],
-) -> dict[str, Any]:
-    """One event bound → Google start/end dict ({'date':…} or {'dateTime':…}).
-
-    Bare date = all-day (Google's end date is EXCLUSIVE — a one-day event ends
-    on the NEXT day's date). Naive datetime gets the resolved zone attached;
-    offset-carrying datetimes pass through untouched.
-
-    Raises ValueError with teaching text on unparseable input.
-    """
-    text = raw.strip()
-    if _DATE_ONLY_RE.fullmatch(text):
-        return {"date": text}
-    try:
-        dt = datetime.fromisoformat(text)
-    except ValueError:
-        raise ValueError(
-            f"{param} must be an ISO date or datetime — '2026-09-08' or "
-            f"'2026-09-08T14:00' or '2026-09-08T14:00:00+01:00' — got {text!r}"
-        ) from None
-    # Always re-serialise: Google rejects seconds-less RFC3339 ('T13:00'),
-    # which the preview used to echo happily and the confirmed insert then
-    # 400'd on — after the human had approved it (mise-duralu).
-    if dt.tzinfo is None:
-        if tz:
-            return {"dateTime": dt.isoformat(), "timeZone": tz}
-        warnings.append(
-            f"{param} has no timezone and none could be resolved from your "
-            "calendar — treated as UTC. Pass an offset (e.g. +01:00) if that "
-            "is wrong."
-        )
-        return {"dateTime": dt.replace(tzinfo=timezone.utc).isoformat()}
-    return {"dateTime": dt.isoformat()}
-
-
-def bound_datetime(time_dict: dict[str, Any]) -> datetime:
-    """A start/end dict → aware datetime, for ordering checks and clash windows.
-
-    Naive dateTimes (zone attached separately) and bare dates are pinned to
-    UTC — fine for ordering and a clash window, not for display.
-    """
-    raw = time_dict.get("dateTime") or time_dict["date"]
-    dt = datetime.fromisoformat(raw)
-    if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=timezone.utc)
-    return dt
+def _is_naive(raw: str) -> bool:
+    return datetime.fromisoformat(raw.strip()).tzinfo is None
 
 
 def build_event_times(
@@ -100,15 +55,31 @@ def build_event_times(
     (Google 400s), end not after start, or a recurring event with no
     resolvable zone on a naive time (attached as loud-fallback UTC).
     """
-    tz = resolve_calendar_timezone()
-    start = parse_event_time(time_min, "time_min", tz, warnings)
-    end = parse_event_time(time_max, "time_max", tz, warnings)
+    tz, tz_reason = lookup_calendar_timezone()
+    start = parse_event_time(time_min, "time_min", tz, warnings, tz_reason)
+    end = parse_event_time(time_max, "time_max", tz, warnings, tz_reason)
     if ("date" in start) != ("date" in end):
         raise ValueError(
             "time_min and time_max must be the same kind — both bare dates "
             "(all-day event) or both datetimes."
         )
-    if bound_datetime(end) <= bound_datetime(start):
+    if "dateTime" in start and _is_naive(time_min) != _is_naive(time_max):
+        # One bound naive (wall-clock in your zone), the other with an offset:
+        # every rendering of the pair then pairs one clock with the other's
+        # zone, and the ordering check compares a guess (mise-pukiri). Decided
+        # on the raw input: with the zone unresolved a naive bound comes back
+        # as +00:00 with no timeZone key, indistinguishable by keys from an
+        # offset one (mise-mafori).
+        raise ValueError(
+            "time_min and time_max must both carry an offset or both omit one — "
+            "got one of each. Give both as wall-clock times (e.g. "
+            "'2026-09-08T14:00') or both with offsets."
+        )
+    if "dateTime" in start and _is_naive(time_min):
+        refuse_unclear_wall_times(
+            [("time_min", time_min.strip()), ("time_max", time_max.strip())], tz, warnings,
+        )
+    if zoned_datetime(end) <= zoned_datetime(start):
         raise ValueError(
             f"time_max ({time_max}) must be after time_min ({time_min})."
         )
@@ -121,7 +92,8 @@ def build_event_times(
         if not tz:
             warnings.append(
                 "Recurring event minted in UTC — no timezone found on your "
-                "calendar. Across a DST change the wall-clock time will shift."
+                f"calendar ({tz_reason or 'reason unknown'}). Across a DST "
+                "change the wall-clock time will shift."
             )
     return start, end
 
@@ -348,13 +320,19 @@ def validate_send_updates(send_updates: str | None) -> str | None:
 def clash_summaries(start_dt: datetime, end_dt: datetime) -> list[str]:
     """The user's own events overlapping [start, end) — the preview's clash
     check. Events the user has DECLINED are excluded (declined slots are
-    free in intent). Best-effort: a lookup failure returns a marker string
-    rather than blocking the preview."""
+    free in intent). Best-effort on Google's failures: a read that fails
+    returns a marker string rather than blocking the preview. NOT on a missing
+    or unusable credential, which is re-raised: the booking cannot happen, so
+    the preview must not be dressed as a dialog over it (mise-pukiri x
+    mise-nodavu seam). list_events converts every failure to MiseError
+    (with_retry), so that is the one type caught."""
     from adapters.calendar import list_events
 
     try:
         result = list_events(time_min=start_dt, time_max=end_dt, max_results=10)
-    except Exception:
+    except MiseError as e:
+        if e.details.get("credentials_unavailable"):
+            raise
         return ["(clash check unavailable — calendar read failed)"]
     clashes = []
     for event in result.events:

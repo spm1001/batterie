@@ -41,7 +41,7 @@ from google.auth.transport.requests import Request as GoogleAuthRequest
 
 from jeton import load_credentials
 from oauth_config import TOKEN_FILE, SCOPES, ClientNotConfigured, cli_auth_command, configured_client_id
-from token_store import _has_keychain, resolve_token_path, stored_refresh_token
+from token_store import CredentialsUnavailable, _has_keychain, resolve_token_path, stored_refresh_token
 
 logger = logging.getLogger(__name__)
 
@@ -91,7 +91,7 @@ def _load_and_diagnose_credentials(token_path: str | Path) -> Any:
     guest_mode = override_path() is not None
 
     if not token_path.exists():
-        raise FileNotFoundError(
+        raise CredentialsUnavailable(
             f"No OAuth token found at {token_path}"
             + (" (also checked Keychain)" if not guest_mode and _has_keychain() else "")
             + f". {_bootstrap_hint(guest_mode)}"
@@ -101,7 +101,7 @@ def _load_and_diagnose_credentials(token_path: str | Path) -> Any:
     try:
         token_data = json.loads(token_path.read_text())
     except (json.JSONDecodeError, IOError) as e:
-        raise FileNotFoundError(
+        raise CredentialsUnavailable(
             f"OAuth token at {token_path} is corrupt ({type(e).__name__}). "
             f"{_bootstrap_hint(guest_mode)}"
         )
@@ -116,7 +116,7 @@ def _load_and_diagnose_credentials(token_path: str | Path) -> Any:
         try:
             return GoogleUserCredentials.from_authorized_user_info(token_data)
         except ValueError as e:
-            raise FileNotFoundError(
+            raise CredentialsUnavailable(
                 f"Credential file at {token_path} is not a valid "
                 f"authorized_user file ({e}). {_bootstrap_hint(guest_mode)}"
             )
@@ -131,13 +131,13 @@ def _load_and_diagnose_credentials(token_path: str | Path) -> Any:
     has_expiry = bool(token_data.get("expiry"))
 
     if not has_refresh:
-        raise FileNotFoundError(
+        raise CredentialsUnavailable(
             f"OAuth token at {token_path} has no refresh_token — cannot auto-refresh. "
             f"{_bootstrap_hint(guest_mode)}"
         )
 
     # Has refresh_token but load_credentials still returned None — refresh must have failed
-    raise FileNotFoundError(
+    raise CredentialsUnavailable(
         f"OAuth token at {token_path} is expired and refresh failed "
         f"(refresh_token may be revoked). {_bootstrap_hint(guest_mode)}"
     )
@@ -200,7 +200,7 @@ class MiseHttpClient:
             token_path = resolve_token_path(TOKEN_FILE)
             if stored_refresh_token(token_path) == old_refresh:
                 from token_store import override_path
-                raise FileNotFoundError(
+                raise CredentialsUnavailable(
                     "OAuth token was refused by Google (refresh failed — "
                     f"likely revoked) and the token on disk at {token_path} "
                     "is the same grant. "
@@ -453,7 +453,7 @@ class MiseSyncClient:
             token_path = resolve_token_path(TOKEN_FILE)
             if stored_refresh_token(token_path) == old_refresh:
                 from token_store import override_path
-                raise FileNotFoundError(
+                raise CredentialsUnavailable(
                     "OAuth token was refused by Google (refresh failed — "
                     f"likely revoked) and the token on disk at {token_path} "
                     "is the same grant. "

@@ -35,6 +35,7 @@ from validation import (
 )
 from token_store import ambient_mode, override_path
 from tools.search_drive_cues import drive_incomplete_cue, name_semantics_cue
+from tools.search_chat import collect_chat_results, run_chat_search
 # Re-exported for callers and tests that have always imported these from here;
 # they moved to a sibling for the module-size ceiling (mise-jefaki).
 from tools.search_format import (
@@ -75,6 +76,7 @@ _TYPE_MIME_MAP: dict[str, str] = {
 _TYPE_ALIASES: frozenset[str] = frozenset({"document", "sheet", "presentation"})
 # All accepted values (includes aliases)
 VALID_TYPE_FILTERS: frozenset[str] = frozenset(_TYPE_MIME_MAP)
+SOURCES: frozenset[str] = frozenset({"drive", "gmail", "activity", "calendar", "people", "chat"})
 # Canonical names for user-facing messages (no aliases, alphabetical)
 CANONICAL_TYPE_NAMES: frozenset[str] = VALID_TYPE_FILTERS - _TYPE_ALIASES
 
@@ -107,7 +109,7 @@ def do_search(
             Optional when type or folder_id is set.
         sources: List of sources to search (default: ['drive', 'gmail'],
             or ['drive'] in guest mode where the token has no Gmail scope).
-            Valid sources: 'drive', 'gmail', 'activity', 'calendar', 'people'.
+            Valid sources: 'drive', 'gmail', 'activity', 'calendar', 'people', 'chat'.
             'people' searches the Workspace staff directory — bare words match
             name and email, `orgDepartment:X` scopes by team; a single hit is
             expanded with the manager and direct reports resolved to names.
@@ -144,6 +146,9 @@ def do_search(
         # (mise-kivane). Ambient mode narrows identically: no mailbox (wasagu).
         narrow = override_path() is not None or ambient_mode()
         sources = ["drive"] if narrow else ["drive", "gmail"]
+    unknown = sorted(set(sources) - SOURCES)  # a typo'd source used to return nothing, silently
+    if unknown:
+        raise ValueError(f"Unknown source(s) {unknown}. Valid: {', '.join(sorted(SOURCES))}")
 
     # Colleague-diary detail lane (mise-wavotu): read another person's visible
     # calendar. Forces the calendar source (like folder_id forces drive), and
@@ -228,7 +233,7 @@ def do_search(
         names = ", ".join(s.capitalize() for s in ambient_blocked)
         result.errors.append(
             f"{names} unavailable in ambient (service-account) mode — a service "
-            "account has no Gmail mailbox, personal calendar, or directory "
+            "account has no Gmail mailbox, personal calendar, Chat or directory "
             "identity. Drive remains searchable.")
 
     search_drive = "drive" in sources
@@ -297,6 +302,8 @@ def do_search(
         active_sources.append(("calendar", _run_calendar))
     if search_directory:
         active_sources.append(("people", _run_people))
+    if "chat" in sources:
+        active_sources.append(("chat", lambda: run_chat_search(query, max_results)))
 
     if active_sources:
         with ThreadPoolExecutor(max_workers=len(active_sources)) as executor:
@@ -467,6 +474,9 @@ def do_search(
             result.errors.append(f"Directory search failed: {e.message}")
         except Exception as e:
             result.errors.append(f"Directory search failed: {str(e)}")
+
+    if "chat" in futures:
+        collect_chat_results(futures["chat"], result)
 
     # Cross-reference: enrich Drive results with meeting context
     if result.drive_results and calendar_events:

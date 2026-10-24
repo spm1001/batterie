@@ -97,6 +97,21 @@ _DOLT_DEFAULTS = {
 }
 
 
+def dolt_configured() -> bool:
+    """Is this machine still a Dolt client? (bon-comowa, 2026-10-24.)
+
+    Every board moved to JSONL and the server was stopped on 2026-10-24, and
+    each machine's ~/.config/bon/dolt.toml was removed with it. Without that
+    file or a BON_DOLT_* override there is nothing to query, so the readers
+    report Dolt as "retired" instead of spending a connect timeout to print an
+    "unreachable" warning that would be a false alarm on every review.
+    """
+    if (Path.home() / ".config" / "bon" / "dolt.toml").exists():
+        return True
+    return any(os.environ.get(k) for k in (
+        "BON_DOLT_HOST", "BON_DOLT_PORT", "BON_DOLT_DATABASE", "BON_DOLT_USER", "BON_DOLT_PASSWORD"))
+
+
 def load_dolt_config() -> dict:
     """Connection config: env vars > ~/.config/bon/dolt.toml > defaults."""
     config = dict(_DOLT_DEFAULTS)
@@ -729,18 +744,21 @@ def survey(
     dolt_dones: dict[str, list[dict]] = {}
     repos_map: dict[str, dict] = {}
     moved: dict[str, dict] = {}
-    try:
-        dolt_items, dolt_dones, repos_map, moved = query_dolt_global(done_cutoff)
-    except Exception as e:
-        dolt_mode = "unreachable"
-        print(
-            f"WARNING: Dolt server unreachable ({e}).\n"
-            f"Falling back to filesystem survey: repos not cloned under "
-            f"{', '.join(str(r) for r in roots)} are MISSING from this output, "
-            f"and local Dolt-backed boards will read empty if the server is "
-            f"down — this output may be JSONL boards only.",
-            file=sys.stderr,
-        )
+    if not dolt_configured():
+        dolt_mode = "retired"  # every board is JSONL; the filesystem survey is the whole estate
+    else:
+        try:
+            dolt_items, dolt_dones, repos_map, moved = query_dolt_global(done_cutoff)
+        except Exception as e:
+            dolt_mode = "unreachable"
+            print(
+                f"WARNING: Dolt server unreachable ({e}).\n"
+                f"Falling back to filesystem survey: repos not cloned under "
+                f"{', '.join(str(r) for r in roots)} are MISSING from this output, "
+                f"and local Dolt-backed boards will read empty if the server is "
+                f"down — this output may be JSONL boards only.",
+                file=sys.stderr,
+            )
 
     results = []
     unmapped = []

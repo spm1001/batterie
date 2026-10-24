@@ -479,7 +479,7 @@ Four batterie tools install a CLI with `uv tool install`, and since bds-timule (
 
 | Component | CLI binary / package | Extras |
 |--------|----------------------|--------|
-| bon | `bon` | `[dolt]` |
+| bon | `bon` | (none since Dolt retired, 2026-10-24) |
 | accomplis | `accomplis` | |
 | passe | `passe` | |
 | sonner | `sonner` | |
@@ -498,7 +498,7 @@ For each CLI (all four ship in the kit):
    - `url` carries `vcs_info` (an old git install) or the CLI is **not on PATH** → reinstall from the shipped wheel.
    - `url` carries `dir_info` (a local working tree, e.g. a maintainer's `~/repos` clone) → reinstall from the shipped wheel too, and say so in the report ("was a working-tree install — now on the shipped wheel"). **Every machine runs what everyone else runs**, maintainers included, even when that is a faff (Sameer, 2026-09-23: a maintainer running something different from teammates has bitten us before). Testing a local build is a deliberate, temporary act; the next update puts the machine back. The old rule from bds-zojide still holds in its original direction: never switch an install *onto* a working tree just because a clone exists.
    - The component ships **no** `wheels/` (a copy older than bds-timule) → say so and fall back to `uv tool install "<package>[<extras>] @ git+https://github.com/spm1001/<package>"`, which needs GitHub credentials.
-4. Reinstall: `uv tool install "<shipped wheel><extras>" --force --reinstall --no-cache` — e.g. `uv tool install "/…/batterie/1.88.0/bon/wheels/bon-1.85.19-py3-none-any.whl[dolt]" …`. Extras follow the path directly. `--no-cache` is load-bearing (bds-vanuta). Never install from a bare PyPI name: none of these CLIs is on PyPI.
+4. Reinstall: `uv tool install "<shipped wheel><extras>" --force --reinstall --no-cache` — e.g. `uv tool install "/…/batterie/2.9.2/bon/wheels/bon-2.9.2-py3-none-any.whl" …`. Extras, when a row has any, follow the path directly (`…whl[extra]`). `--no-cache` is load-bearing (bds-vanuta). Never install from a bare PyPI name: none of these CLIs is on PyPI.
 5. After any reinstall, **re-read `<cli> --version` and report the version that actually landed** (sonner has no `--version`; report "installed"). The CLI's number is its own, not the suite number.
 
 ### 5. Summarise

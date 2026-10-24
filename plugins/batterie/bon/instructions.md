@@ -29,23 +29,17 @@ When a skill or tool fails during real work: file a Field Report bon item in the
 
 Frame outcomes as achievements: "Taught Claude to generate charts" not "Create chart generation skill." Past-tense verb + the "so what."
 
-## Dolt Backend
+## Storage: JSONL in the repo
 
-Some repos use Dolt instead of JSONL. The `bon` CLI handles both transparently. If bon commands fail with "Cannot connect," the Dolt server may be down:
+Every board is `.bon/items.jsonl` in its own repo, and syncs itself on each write (fetch, rebase, merge by item, commit, push). Dolt was retired on 2026-10-24: the server is stopped, and its final state is in `spm1001/bon-dolt-backup`.
 
-```bash
-systemctl --user start dolt-bon.service   # on tube (moved from hezza 2026-07-07)
-```
-
-If the error instead *names the move* (error 9999, "bon Dolt moved to tube"), your `~/.config/bon/dolt.toml` still points at hezza — set `host = "100.124.115.49"`.
-
-If a repo has both `.bon/backend=dolt` and a stale `items.jsonl`, the JSONL file is a pre-migration ghost — bon ignores it.
+A clone that still carries `.bon/backend` containing `dolt` hasn't pulled the migrate commit. bon says so and asks for `git pull`. If the pull refuses because `.bon/README.md` is modified, run `git checkout -- .bon/README.md` first; bon rewrote that file, so nothing is lost. Never restart Dolt or recreate `~/.config/bon/dolt.toml` to get a board back.
 
 ## Commit Citation
 
 A commit doing work tracked by a bon cites it: trailing `(bon-ID)` in the subject or body (e.g. `fix(close): resolve session id from env (bon-casovo)`). This is the link the orphans check reads — an open item no commit ever cites, or a commit citing an unknown ID, is a review-time signal. Untracked work commits normally; don't invent an item just to have an ID.
 
-**bon commits its own board changes — never `git add .bon` yourself.** Every write (`new`, `edit`, `done`, `wait`…) lands as its own `bon: …` commit on the checked-out branch, so staging `.bon/` afterwards does nothing, and on a Dolt board there is no `items.jsonl` to stage at all (seen 2026-09: `fatal: pathspec '.bon/items.jsonl' did not match any files`). If a board change must reach `main`, check which branch is checked out before writing.
+**bon commits its own board changes — never `git add .bon` yourself.** Every write (`new`, `edit`, `done`, `wait`…) lands as its own `bon: …` commit on the checked-out branch, so staging `.bon/` afterwards does nothing. If a board change must reach `main`, check which branch is checked out before writing.
 
 ## Discoverability
 

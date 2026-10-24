@@ -33,20 +33,22 @@ if [ -f "$PLUGIN_ROOT/instructions.md" ]; then
         && mv -f "$_tmp" "$RULES_DIR/bon.md"
 fi
 
-# Resolve install source (bon needs [dolt] extra)
+# Resolve install source. No [dolt] extra since Dolt retired (2026-10-24, bon-comowa):
+# every board is JSONL, so pymysql is no longer installed. (The extra itself stays in
+# pyproject until dolt.py is deleted, bon-sujeno.)
 if [ -n "$PLUGIN_ROOT" ] && [ -f "$PLUGIN_ROOT/pyproject.toml" ]; then
-    INSTALL_SRC="$PLUGIN_ROOT[dolt]"
+    INSTALL_SRC="$PLUGIN_ROOT"
 elif _WHEELS=("$(dirname "$HOOK_DIR")"/wheels/bon-*.whl) && [ -f "${_WHEELS[0]}" ]; then
     # The marketplace plugin ships no pyproject.toml, but the assembler builds
     # this CLI into a wheel beside this hook (bds-timule, 2026-09-23) — so a
     # clean machine installs from the public marketplace alone, and the source
     # repo can stay private.
-    INSTALL_SRC="${_WHEELS[0]}[dolt]"
+    INSTALL_SRC="${_WHEELS[0]}"
     WHEEL="${_WHEELS[0]}"
 else
     # Maintainer fallback: the source repo is private, so this works only with
     # GitHub credentials. Reached when a plugin copy predates shipped wheels.
-    INSTALL_SRC="bon[dolt] @ git+https://github.com/spm1001/bon"
+    INSTALL_SRC="bon @ git+https://github.com/spm1001/bon"
 fi
 
 # Check 1: CLI missing → auto-install.
@@ -77,19 +79,6 @@ if [ -n "${WHEEL:-}" ] && command -v bon &>/dev/null; then
             FIXED="${FIXED}• bon CLI updated v${HAVE:-unknown} → v${LANDED} from the plugin's own wheel\n"
         else
             ISSUES="${ISSUES}• bon CLI is v${HAVE:-unknown}, older than the plugin's v${WANT}, and the update failed (full error: ${UPDATE_LOG}). Run manually:\n\n  uv tool install \"$INSTALL_SRC\" --force --reinstall --no-cache\n"
-        fi
-    fi
-fi
-
-# Check 3: pymysql available (needed for any Dolt-backed repo)
-# Use bon's own venv Python, not system Python — pymysql lives in the uv tool venv
-if command -v bon &>/dev/null; then
-    BON_PYTHON=$(head -1 "$(command -v bon)" | sed 's/^#!//')
-    if [ -x "$BON_PYTHON" ] && ! "$BON_PYTHON" -c "import pymysql" 2>/dev/null; then
-        # Only warn if there are Dolt repos — check common locations
-        HAS_DOLT=$(find ~/repos -maxdepth 4 -name backend -path '*/.bon/*' -exec grep -l dolt {} + 2>/dev/null | head -1 || true)
-        if [ -n "$HAS_DOLT" ]; then
-            ISSUES="${ISSUES}• pymysql not found but Dolt-backed repos exist. Reinstall with extras:\n  uv tool install \"$INSTALL_SRC\"\n"
         fi
     fi
 fi

@@ -62,7 +62,7 @@ SUITE_REPO_DEFAULT = Path(__file__).resolve().parent.parent
 # Mirrors the table in skills/update/SKILL.md — the canonical "all plugins"
 # version of the pull. Keep them in sync.
 CLI_REPOS = {
-    "bon": ("bon", "[dolt]"),
+    "bon": ("bon", ""),  # [dolt] dropped: Dolt retired 2026-10-24 (bon-comowa)
     "passe": ("passe", ""),
     "accomplis": ("accomplis", ""),
     "sonner": ("sonner", ""),

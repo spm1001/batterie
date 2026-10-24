@@ -455,15 +455,18 @@ def render_text(result: dict, top: int) -> str:
 def run(weeks: list[str], roots: list[Path], today: date) -> dict:
     """Load both sources, tally, and return the full result dict (JSON-safe)."""
     dolt_state, dolt_records, dolt_notes = "global", [], None
-    try:
-        dolt_records, dolt_notes = load_dolt_records()
-    except Exception as e:  # pymysql errors, socket errors — all mean "not read"
-        dolt_state = "unreachable"
-        print(
-            f"WARNING: Dolt unreachable ({type(e).__name__}: {e}) — this table is "
-            f"DEGRADED: JSONL boards only, every Dolt board missing.",
-            file=sys.stderr,
-        )
+    if not audit_survey.dolt_configured():
+        dolt_state = "retired"  # bon-comowa: every board is JSONL, nothing to read
+    else:
+        try:
+            dolt_records, dolt_notes = load_dolt_records()
+        except Exception as e:  # pymysql errors, socket errors — all mean "not read"
+            dolt_state = "unreachable"
+            print(
+                f"WARNING: Dolt unreachable ({type(e).__name__}: {e}) — this table is "
+                f"DEGRADED: JSONL boards only, every Dolt board missing.",
+                file=sys.stderr,
+            )
     boards = audit_survey.discover_boards(roots)
     moved = (dolt_notes or {}).pop("moved", {})
     jsonl_records, jsonl_notes = load_jsonl_records(

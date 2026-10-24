@@ -14,10 +14,14 @@ mise is not on PyPI, and its jeton dependency is declared bare
 a consumer installs both explicitly:
 
     uv build --wheel ~/repos/spm1001/mise-en-space -o dist/
-    uv pip install dist/mise_en_space-*.whl "jeton @ git+https://github.com/spm1001/jeton.git"
+    uv pip install dist/mise_en_space-*.whl "jeton @ <the jeton wheel URL below>"
 
-(Or depend on the repo directly: `mise-en-space @ git+https://github.com/spm1001/mise-en-space.git`
-with the same jeton line.)
+(Or, with no access to this private repo, depend on the copy the public batterie
+shelf vendors, pinned by commit: `mise-en-space @ git+https://github.com/spm1001/
+batterie.git@<sha>#subdirectory=plugins/batterie/mise`, plus jeton as the wheel
+the shelf ships beside it, `https://raw.githubusercontent.com/spm1001/batterie/
+<sha>/plugins/batterie/mise/wheels/jeton-<version>-py3-none-any.whl` — ITV/mit-garni's
+requirements.txt is a worked example.)
 
 Credentials
 -----------

@@ -118,8 +118,10 @@ Three facts a headless PDF pipeline needs. **The bulk-text tool is poppler's `pd
 
 ### 1. Clone and install
 
+This source repo is private (since 2026-10-24). To use mise, install the batterie plugin, which ships it (`claude plugin install batterie@batterie`); collaborators working on mise itself clone it:
+
 ```bash
-git clone https://github.com/spm1001/mise-en-space.git
+git clone https://github.com/spm1001/mise-en-space.git   # private: needs your GitHub credentials
 cd mise-en-space
 uv sync    # requires uv — https://docs.astral.sh/uv/
 ```

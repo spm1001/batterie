@@ -556,6 +556,27 @@ if [ -n "$DIARY_LINES" ]; then
     echo ""
 fi
 
+# --- 2a. Crumbs: unclosed sessions (bon-cedeze) ---
+# Last week's sessions with two or more human messages, no handoff, not
+# running, not dismissed — shown so Sameer can decide; nothing is drafted.
+# A launch outside any git repo (~, a phone or Paseo chat) sees them all; a
+# repo launch sees only sessions that ran inside that repo, at most 3 so the
+# block cannot push the board out of the ~2KB preview. --read-only (the
+# roaming collector) never shows them. Silent when there are none; a scanner
+# failure says so in one line rather than vanishing.
+if [ "$READ_ONLY" -eq 0 ] && [ -f "$SCRIPT_DIR/crumbs.py" ]; then
+    CRUMB_TOP=$(git -C "$CWD" rev-parse --show-toplevel 2>/dev/null || true)
+    CRUMB_RC=0
+    # ${X:+...} rather than an array: an empty "${arr[@]}" dies under set -u on macOS bash 3.2
+    CRUMB_LINES=$(python3 "$SCRIPT_DIR/crumbs.py" ${CRUMB_TOP:+--within "$CRUMB_TOP" --max 3} 2>/dev/null) || CRUMB_RC=$?
+    if [ "$CRUMB_RC" -ne 0 ]; then
+        echo "Unclosed-sessions scan failed (exit $CRUMB_RC) — run: python3 $SCRIPT_DIR/crumbs.py"
+        echo ""
+    elif [ -n "$CRUMB_LINES" ]; then
+        printf '%s\n\n' "$CRUMB_LINES"
+    fi
+fi
+
 # --- 2b. Unprocessed handoffs (bon-supuko: the sweep replaces latest-wins) ---
 if [ -n "$UNPROCESSED_PATHS" ]; then
     UNPROCESSED_COUNT=$(printf '%s\n' "$UNPROCESSED_PATHS" | wc -l | tr -d ' ')

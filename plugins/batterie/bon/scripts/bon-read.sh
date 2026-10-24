@@ -50,10 +50,26 @@ def by_order(item):
 
 # Someday/Maybe (bon-majoca): parked subtrees leave the default views.
 # The someday field holds the revisit condition; children inherit at read
-# time. Mirrors the CLI's queries.someday_ids — keep in step.
-_flagged = {i["id"] for i in items if i.get("someday")}
+# time. Mirrors the CLI's queries.someday_ids — keep in step. Only an OPEN
+# item's flag counts (bon-comeka): bon done keeps the field, and a closed
+# parked outcome must not go on hiding its open children.
+_flagged = {i["id"] for i in items
+            if i.get("someday") and i.get("status") == "open"}
 _parked = {i["id"] for i in items
-           if i.get("someday") or i.get("parent") in _flagged}
+           if i["id"] in _flagged or i.get("parent") in _flagged}
+# A done outcome with open children stays visible — its stragglers are still
+# board work. Mirrors queries.open_child_parent_ids (bon-kegewe). Counted
+# AFTER the parked filter in list/ready, as the CLI does: a parked child
+# doesn't keep its done parent on the board.
+_hidden = _parked if mode in ("list", "ready") else set()
+_open_parents = {i.get("parent") for i in items
+                 if i.get("type") == "action" and i.get("status") == "open"
+                 and i.get("parent") and i["id"] not in _hidden}
+
+
+def board_visible(o):
+    return o.get("status") == "open" or o["id"] in _open_parents
+
 _n_parked = sum(1 for i in items
                 if i.get("someday") and i.get("status") == "open")
 if mode in ("list", "ready"):
@@ -70,7 +86,7 @@ if mode == "list":
         v.sort(key=by_order)
     # Show open outcomes
     outcomes = sorted(
-        [i for i in items if i.get("type") == "outcome" and i.get("status") == "open" and not i.get("parent")],
+        [i for i in items if i.get("type") == "outcome" and board_visible(i) and not i.get("parent")],
         key=by_order,
     )
     for i, o in enumerate(outcomes):
@@ -116,11 +132,12 @@ elif mode == "ready":
     for v in children.values():
         v.sort(key=by_order)
     outcomes = sorted(
-        [i for i in items if i.get("type") == "outcome" and i.get("status") == "open" and not i.get("parent")],
+        [i for i in items if i.get("type") == "outcome" and board_visible(i) and not i.get("parent")],
         key=by_order,
     )
     for i, o in enumerate(outcomes):
-        print(f'\u25cb {o["title"]} ({o["id"]})')
+        mark = "\u2713" if o.get("status") == "done" else "\u25cb"
+        print(f'{mark} {o["title"]} ({o["id"]})')
         for idx, a in enumerate(children.get(o["id"], []), 1):
             print(f'  {idx}. \u25cb {a["title"]} ({a["id"]})')
         if i < len(outcomes) - 1:

@@ -30,6 +30,9 @@ if [ "$READ_ONLY" -eq 0 ] && { [ -n "$TARGET" ] || [ "$HANDOFF_SCOPE" != nearest
     usage >&2; exit 2
 fi
 LAUNCH_DIR=$(pwd -P)
+# Resolve before the target cd: a relative $0 (bash scripts/open-context.sh
+# DIR) means nothing from inside DIR (bon-kigedu).
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 if [ -n "$TARGET" ]; then cd -- "$TARGET"; fi
 if [ "$READ_ONLY" -eq 1 ]; then export PYTHONDONTWRITEBYTECODE=1; fi
 
@@ -93,18 +96,31 @@ validate_dependencies
 
 # Shared handoff/understanding.md resolution — keeps this READER and the
 # /close WRITER (close-context.sh) in lockstep on the same convention.
-. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib-handoff.sh"
+. "$SCRIPT_DIR/lib-handoff.sh"
 
 # Both modes use the shared resolver. Read-only arrival defaults to the nearest
 # writing room; wider scopes remain visible without becoming this room's baton.
 RESOLVED_BOARD=$(board_root "$CWD" || true)
 READ_DIRS=$(handoff_read_dirs "$CWD" | awk '!seen[$0]++')
+GLOBAL_HANDOFFS="$HOME/.bon/handoffs"
+# Set when the selected scope is nothing but the office diary (see bon-babano
+# below): read-only then lists its recent threads instead of a HANDOFF= baton.
+DIARY_MODE=0
 if [ "$READ_ONLY" -eq 1 ]; then
     ALL_READ_DIRS="$READ_DIRS"
+    OWN_READ_DIRS=$(printf '%s\n' "$READ_DIRS" | awk -v global="$GLOBAL_HANDOFFS" 'NF && $0 != global')
     if [ "$HANDOFF_SCOPE" = nearest ]; then
         READ_DIRS=$(handoff_write_dir "$CWD")
-    elif [ -n "$RESOLVED_BOARD" ]; then
-        READ_DIRS=$(printf '%s\n' "$READ_DIRS" | awk -v global="$HOME/.bon/handoffs" '$0 != global')
+    elif { [ -n "$RESOLVED_BOARD" ] && [ -f "$RESOLVED_BOARD/.bon/prefix" ]; } || [ -n "$OWN_READ_DIRS" ]; then
+        # A real board, or any handoffs/ of the launch's own (a boardless
+        # repo's), excludes the diary — the hook's rule, bon-babano/bon-kigedu.
+        READ_DIRS="$OWN_READ_DIRS"
+    fi
+    if [ "$READ_DIRS" = "$GLOBAL_HANDOFFS" ]; then
+        # Boardless launch (~, an owner bucket, a repo with no handoffs/): the
+        # only candidate is the diary, other sessions' closes (bon-kigedu).
+        DIARY_MODE=1
+        READ_DIRS=""
     fi
     echo "=== READ-ONLY OPENING CONTEXT ==="
     echo "HOST=$(hostname)"
@@ -118,7 +134,11 @@ if [ "$READ_ONLY" -eq 1 ]; then
         echo "HANDOFF_DIR=$dir"
         if [ -f "$dir/LEDGER.md" ]; then echo "LEDGER=$dir/LEDGER.md"; fi
     done <<< "$READ_DIRS"
+    if [ "$DIARY_MODE" -eq 1 ]; then
+        echo "DIARY_DIR=$GLOBAL_HANDOFFS (office diary: other sessions' closes, listed as THREAD= suggestions; not this session's baton)"
+    fi
     while IFS= read -r dir; do
+        if [ "$DIARY_MODE" -eq 1 ] && [ "$dir" = "$GLOBAL_HANDOFFS" ]; then continue; fi
         if ! printf '%s\n' "$READ_DIRS" | grep -qxF -- "$dir"; then
             echo "OTHER_HANDOFF_DIR=$dir (outside selected scope; unread)"
         fi
@@ -132,7 +152,9 @@ if [ "$READ_ONLY" -eq 1 ]; then
     done
     if [ -n "$RESOLVED_BOARD" ]; then
         echo "BOARD_DETAIL: run bon list from $RESOLVED_BOARD"
-        if [ -d "$RESOLVED_BOARD/.bon/handoffs" ]; then
+        # At ~ the "board" is the bare stash and its .bon/handoffs IS the
+        # office diary (DIARY_DIR above), not an unmigrated pile.
+        if [ -d "$RESOLVED_BOARD/.bon/handoffs" ] && [ "$RESOLVED_BOARD/.bon/handoffs" != "$GLOBAL_HANDOFFS" ]; then
             echo "LEGACY_HANDOFF_DIR=$RESOLVED_BOARD/.bon/handoffs (unmigrated; inspect separately)"
         fi
     fi
@@ -248,7 +270,8 @@ find_latest_in() {
 # It used to compete on date with a board's own handoffs/, so whatever session
 # last closed at ~ became "Last session" everywhere: on 2026-10-24 a session
 # launched inside the bon repo was briefed on an unrelated mise close, Opportunities
-# and all. Two rules, both hook-mode only (--read-only keeps its own scopes):
+# and all. Two rules. Hook mode applies them here; --read-only applies the same
+# two in its scope selection near the top (DIARY_MODE, bon-kigedu):
 #   - a launch with any handoffs/ of its own (a board's, a room's, or a
 #     boardless repo's — four estate repos keep handoffs/ with no board) never
 #     reads the diary; the read-only collector's --scope board already
@@ -258,7 +281,6 @@ find_latest_in() {
 #     of HANDOFF=, and no Opportunities. HANDOFF= is the baton the /open sweep synthesises into
 #     understanding.md (skill step 1), so emitting a stranger's close there is
 #     the bug, not a label problem.
-GLOBAL_HANDOFFS="$HOME/.bon/handoffs"
 OWN_DIRS=$(printf '%s\n' "$READ_DIRS" | awk -v global="$GLOBAL_HANDOFFS" 'NF && $0 != global')
 if [ "$READ_ONLY" -eq 0 ] && [ -n "$OWN_DIRS" ]; then
     READ_DIRS="$OWN_DIRS"
@@ -309,8 +331,8 @@ while IFS= read -r HDIR; do
 done <<< "$READ_DIRS"
 
 DIARY_LINES=""
-if [ "$READ_ONLY" -eq 0 ] && [ -z "$OWN_DIRS" ] && [ -n "$LATEST_FILE" ] \
-    && [ "$(dirname "$LATEST_FILE")" = "$GLOBAL_HANDOFFS" ]; then
+if [ "$DIARY_MODE" -eq 1 ] || { [ "$READ_ONLY" -eq 0 ] && [ -z "$OWN_DIRS" ] && [ -n "$LATEST_FILE" ] \
+    && [ "$(dirname "$LATEST_FILE")" = "$GLOBAL_HANDOFFS" ]; }; then
     while IFS= read -r ROW; do
         [ -n "$ROW" ] || continue
         DPATH="${ROW#*|}"
@@ -390,7 +412,6 @@ fi
 
 # --- Bon context ---
 BON_FILE="$CONTEXT_DIR/bon.txt"
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BON_READ="$SCRIPT_DIR/bon-read.sh"
 [ -x "$BON_READ" ] || BON_READ="$HOME/.claude/scripts/bon-read.sh"
 BON_LIST_OUTPUT=""
@@ -522,7 +543,11 @@ if [ -n "$LATEST_FILE" ]; then
     echo ""
 fi
 if [ "$READ_ONLY" -eq 1 ] && [ -z "$LATEST_FILE" ]; then
-    echo "HANDOFF=none found in selected scope"
+    if [ "$DIARY_MODE" -eq 1 ]; then
+        echo "HANDOFF=none (no board here, or its .bon/prefix is missing; the office diary is not this session's baton)"
+    else
+        echo "HANDOFF=none found in selected scope"
+    fi
 fi
 if [ -n "$DIARY_LINES" ]; then
     # No board here, so no baton: these are other sessions' closes, offered as

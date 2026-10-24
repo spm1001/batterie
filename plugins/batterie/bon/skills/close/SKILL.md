@@ -242,7 +242,15 @@ Work through the list. Finish the quick fixes, close off completed Bon items - g
 
 ### File the new bons
 
-When filing bons, the `--why` should explain what's at stake — not just describe the work. Use `bon new --json` for anything with technical content. Capture enough detail in the `--how` that a future Claude could pick it up without your context load.
+When filing bons, the `--why` should explain what's at stake — not just describe the work. For anything with technical content, pipe the item as JSON on **stdin** — never pass the JSON as an argument, which bon takes as the title while it waits on a stdin that never closes (a session hung that way on 2026-10-17, bon-zutowo):
+
+```bash
+cat <<'EOF' | bon new -q
+{"title":"...","parent":"...","brief":{"why":"...","how":"...","what":"...","done":"..."}}
+EOF
+```
+
+Capture enough detail in the `how` that a future Claude could pick it up without your context load.
 
 **File it, then do it** (bon-nalube). After filing, sweep the just-filed items once more: any that are small, in-context and surgery-free — a doc line you already know the wording of, a config tweak, a one-function fix in a file you have open — get executed NOW, in this session, before you exit, **and closed (`bon done` with a note) so the board and the handoff's Done section carry the split, not just the chat**. Filing an item you could knock out in five minutes hands a future session your context-load for free, and the human had to ask for exactly this after nearly every close before it became a House rule. Say which you knocked out and which you deliberately left, so the split is visible. A nudge, not a gate: your own judgment on "inapt for this context" stands — bigger surgery, a cold-context need, a decision that isn't yours, or anything the user explicitly demoted to file-only during review, all stay filed.
 
@@ -366,7 +374,13 @@ Use HANDOFF_FILE from the script output verbatim — it generates `YYYY-MM-DD-HH
 
 #### Ledger line — in the same change as the handoff
 
-Append your handoff's line to `LEDGER.md` in the directory you wrote the handoff to (bon-supuko; the notes convention, now core). This is what lets the next `/open` sweep EVERY unprocessed handoff instead of just the newest — without your line, an interleaved close's baton is silently dropped by latest-wins. Format, newest first — as its own line after the header paragraph's blank line. Don't anchor an Edit on the first `- [ ]` in the file: the header itself contains one in backticks, and on 2026-09-25 a close spliced its line into the middle of the header sentence, which the next sweep flagged as unparseable.
+Append your handoff's line to `LEDGER.md` in the directory you wrote the handoff to (bon-supuko; the notes convention, now core). This is what lets the next `/open` sweep EVERY unprocessed handoff instead of just the newest — without your line, an interleaved close's baton is silently dropped by latest-wins. Let the script place it rather than editing by hand:
+
+```bash
+"$BON_SCRIPTS/close-context.sh" --ledger-append "<HANDOFF_DIR>" "<HANDOFF_FILE>" "<purpose line>"
+```
+
+It inserts the line immediately above the newest entry, or below the header when there are no entries yet. A room handoff with no ledger of its own goes to the nearest ancestor `handoffs/LEDGER.md` in the same repo, with the room named and a relative link, which is how ~/notes indexes its rooms. A dir with no ledger anywhere gets a new one with the header and the ticked backfill below. It prints `LEDGER_APPENDED=<path>`, which is the file to commit. It prints `LEDGER_ALREADY` and writes nothing if the handoff already has a line. It refuses with `LEDGER_ERROR` (file untouched) when the header looks damaged, in which case fix the header by hand and re-run. It also refuses when the header says the ledger is generated: mit-kg's is rebuilt by its own generator, so follow that repo's rule instead. It exists because the header itself contains a backticked `- [ ]`, and on 2026-09-25 a close that anchored its Edit on the first `- [ ]` spliced its line into the middle of the header sentence (bon-koduwi). Hand-editing (candidate mode, or no script) follows the same rule: your line goes immediately above the first entry line that starts at column 0 (`- [ ] ` or `- [x] `), and after the header only when there are no entries yet. The line it writes:
 
 ```markdown
 - [ ] {DATE} [{filename}]({filename}) — {purpose line}
@@ -380,7 +394,7 @@ The unticked checkbox means "not yet processed by an /open"; the sweep ticks it 
 One line per handoff, newest first. `- [ ]` = not yet processed by an /open sweep; every close appends its line in the same change that writes the handoff.
 ```
 
-**Adoption backfill — mandatory when the dir already holds handoffs.** The sweep treats a file with no ledger line as unprocessed, so a fresh one-line ledger beside 80 historical handoffs floods the next /open with the entire archive (measured on a replica: 13 files emitted, the real baton buried). Latest-wins already served that history — backfill it TICKED, below your own unticked line:
+**Adoption backfill — mandatory when the dir already holds handoffs.** The sweep treats a file with no ledger line as unprocessed, so a fresh one-line ledger beside 80 historical handoffs floods the next /open with the entire archive (measured on a replica: 13 files emitted, the real baton buried). Latest-wins already served that history — backfill it TICKED, below your own unticked line (`--ledger-append` does this itself when it creates the ledger; by hand):
 
 ```bash
 for f in <handoff-dir>/*.md; do b=$(basename "$f"); [ "$b" = LEDGER.md ] && continue; \
@@ -469,7 +483,7 @@ Once the board work is done — the Now items, the new bons filed, anything knoc
 
 MOTION_SINCE, not the `NOW=` line: `NOW` is local time and the wrong window (since Orient, not since the previous close). The script still accepts a `NOW` line pasted exactly as printed (`2026-08-31 12:48`) and converts it to UTC, saying so beside the result, and it refuses a window that starts in the future rather than printing zeroes — that is the tell of a local time re-typed into the UTC shape, which is how a BST close read minted 0 on 2026-09-13 (bon-huzuhi).
 
-Re-derive rather than reusing the Orient figures: this rite *mints and closes items after the context script ran*, so the earlier numbers are stale in exactly the direction that matters. The window is since the previous close, not since this session started — wider on purpose, because per-session windows leave motion nobody counts. Where you can see some of it wasn't yours, say so.
+Re-derive rather than reusing the Orient figures: this rite *mints and closes items after the context script ran*, so the earlier numbers are stale in exactly the direction that matters. The window is since the previous close, not since this session started — wider on purpose, because per-session windows leave motion nobody counts. Where you can see some of it wasn't yours, say so. Pass only the MOTION_SINCE from the full run you made at Orient, before the handoff was written. Re-running the full script now anchors on the handoff you just wrote, so the window starts at this close and under-reports (bon-bovuzu: closed 2 reported where 4 was true). The script cannot tell that handoff from an earlier close of this same session, so it does not skip either one. Instead its label says `this session's own` whenever the anchor carries your session id. If you see that label after writing your handoff, scroll back for the Orient value rather than trusting the new one.
 
 Then one line, using the script's numbers and naming the ids:
 

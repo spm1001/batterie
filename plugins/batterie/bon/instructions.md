@@ -41,6 +41,8 @@ A commit doing work tracked by a bon cites it: trailing `(bon-ID)` in the subjec
 
 **bon commits its own board changes — never `git add .bon` yourself.** Every write (`new`, `edit`, `done`, `wait`…) lands as its own `bon: …` commit on the checked-out branch, so staging `.bon/` afterwards does nothing. If a board change must reach `main`, check which branch is checked out before writing.
 
+**`Warning: board sync: board write landed on <branch>, not <default>` means exactly that** — the write was committed to that branch (and pushed when online), and sessions reading the remote's default branch won't see it. It stays silent when `<remote>/HEAD` is unset, since the default is then unknown. bon never refuses; if the branch was an accident, switch to the default and re-apply the change there.
+
 ## Discoverability
 
 `bon show ID --json` and `bon list --json` already pretty-print (indent=2). Pipe direct — no need to wrap in `python3 -m json.tool` or `json.dumps(d, indent=2)`.

@@ -253,3 +253,89 @@ understanding_path() {
     fi
     return 1
 }
+
+# handoff_hhmm NAME -> the HHMM a handoff filename carries right after its
+# date (YYYY-MM-DD-HHMM.md or YYYY-MM-DD-HHMM-<anything>.md), else nothing.
+# The ONE parser for that stamp: previous_handoff ranks by it and
+# close-context opens the window from it, so they cannot disagree (they did:
+# a bare 2026-05-08-1609.md ranked as 16:09 but opened at midnight).
+handoff_hhmm() {
+    printf '%s\n' "$1" | sed -n 's/^[0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}-\([0-9]\{4\}\)\(-.*\)\{0,1\}\.md$/\1/p'
+}
+
+# previous_handoff DIR -> basename of the handoff that marks the previous
+# close in DIR, for close-context's board-motion window. Prints nothing (and
+# returns 0) when there is none.
+#
+# Candidates are REGULAR .md files whose name starts YYYY-MM-DD and that are
+# recognisably handoffs (bon-cowowu): the name carries -HHMM after the date
+# (close-context's own scheme), or the first 15 lines carry a `# Handoff`
+# header or `session_id:` frontmatter (pre-v4 YYYY-MM-DD-id8.md names). The
+# old `ls | grep '^YYYY' | sort | tail -1` ranked a dated artefacts DIRECTORY
+# as newest, and a dated note (2026-09-15-retro-notes.md) still NARROWED the
+# window to its midnight. Excluding a doubtful file widens the window when an
+# older real handoff remains to anchor on. When nothing recognisable remains,
+# close-context falls back to the last 24h, which can be NARROWER than the
+# excluded file's date would have given; it names the excluded count in its
+# label so that case is visible (dated_file_count below).
+# Ranked by the filename stamp — date, then HHMM where the v4 name carries one
+# — because the window is computed from that same stamp. open-context ranks
+# by the '# Handoff — DATE' header instead; that suits "which handoff to
+# read", but here a handoff written just after midnight and dated the day
+# before would lose to an older one and the window would open too early.
+#
+# It never skips a handoff for being this session's own (bon-bovuzu, second
+# repair): on disk, "the handoff this close just wrote" and "an earlier close
+# by the same session" look identical, and skipping the newest own file
+# double-counted a same-day second close. Callers use handoff_is_sessions to
+# LABEL that case instead.
+previous_handoff() {
+    local dir="$1" f b hm rows=""
+    if [ ! -d "$dir" ]; then return 0; fi
+    for f in "$dir"/[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]*.md; do
+        if [ ! -f "$f" ]; then continue; fi
+        b=$(basename "$f")
+        hm=$(handoff_hhmm "$b")
+        if [ -z "$hm" ]; then
+            # One process, no pipe: `head | grep -q` under pipefail can read a
+            # match as a miss (grep quits, head takes SIGPIPE).
+            if ! awk 'NR > 15 { exit } /^(# Handoff([^[:alnum:]]|$)|session_id:)/ { found = 1; exit }
+                      END { exit !found }' "$f" 2>/dev/null; then
+                continue
+            fi
+            hm="0000"
+        fi
+        rows+="${b:0:10}.${hm}|${b}"$'\n'
+    done
+    if [ -z "$rows" ]; then return 0; fi
+    rows=$(printf '%s' "$rows" | LC_ALL=C sort -t'|' -k1,1r -k2,2r)
+    printf '%s\n' "$rows" | sed -n 1p | cut -d'|' -f2-
+}
+
+# dated_file_count DIR -> how many regular YYYY-MM-DD*.md files DIR holds,
+# recognisable as handoffs or not. close-context uses it to tell "no dated
+# file at all" from "dated files, none recognisable" in its fallback label.
+dated_file_count() {
+    local dir="$1" f n=0
+    for f in "$dir"/[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]*.md; do
+        if [ -f "$f" ]; then n=$((n + 1)); fi
+    done
+    printf '%s\n' "$n"
+}
+
+# handoff_is_sessions FILE SESSION_ID -> 0 when FILE was written by that
+# session: its name ends -<id8>.md or -<id8>-N.md (close-context's own scheme,
+# collision suffix included), or its YAML frontmatter carries
+# `session_id: <id>`. An empty id never matches.
+handoff_is_sessions() {
+    local f="$1" sid="$2" b fm
+    if [ -z "$sid" ]; then return 1; fi
+    b=$(basename "$f")
+    case "$b" in
+        *-"${sid:0:8}".md|*-"${sid:0:8}"-[0-9].md|*-"${sid:0:8}"-[0-9][0-9].md) return 0 ;;
+    esac
+    fm=$(awk 'NR==1 && $0!="---" {exit} NR>1 && $0=="---" {exit}
+              NR>1 && /^session_id:/ {sub(/^session_id:[ \t]*/, ""); gsub(/["'"'"' \t\r]/, ""); print; exit}' "$f" 2>/dev/null || true)
+    if [ -n "$fm" ] && [ "$fm" = "$sid" ]; then return 0; fi
+    return 1
+}

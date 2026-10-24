@@ -68,7 +68,7 @@ Items live in `.bon/items.jsonl`. Two types:
 
 Both require `brief: {why, what, done}` — all three non-empty. Two optional subfields: `how` captures approach/strategy, and `badly` carries a **pre-registered falsifier** — what would show the work went wrong, as against `--done`'s "how do we know it's complete".
 
-`badly` is outcomes-shaped (the CLI *warns* on an action via `check_falsifier_placement()` but accepts it — coaching, not validation), additive, and never backfilled: it joins `OPTIONAL_BRIEF_FIELDS` in `display.py` so `--json` emits `null` when absent, the jejuge read-boundary precedent. No Dolt work was needed — `brief` is a single JSON column serialised whole (`dolt.py`), verified before implementing, so a new subfield also survives a write by an older client. **The authorship rule is rite-side, not schema:** the data layer cannot know who wrote a string, so the human-facing rites ask — `/lay-out` at creation, `/bon-review` at the ceremony's apex (top-N only; adopted 2026-08-09, bon-hipapu) — and leave the field absent when unanswered. A Claude-authored falsifier is `--done` in a hat.
+`badly` is outcomes-shaped (the CLI *warns* on an action via `check_falsifier_placement()` but accepts it — coaching, not validation), additive, and never backfilled: it joins `OPTIONAL_BRIEF_FIELDS` in `display.py` so `--json` emits `null` when absent, the jejuge read-boundary precedent. (When it shipped, Dolt still existed and `brief` was one JSON column there too, so a new subfield also survived a write by an older client.) **The authorship rule is rite-side, not schema:** the data layer cannot know who wrote a string, so the human-facing rites ask — `/lay-out` at creation, `/bon-review` at the ceremony's apex (top-N only; adopted 2026-08-09, bon-hipapu) — and leave the field absent when unanswered. A Claude-authored falsifier is `--done` in a hat.
 
 Open items can be **parked Someday/Maybe**: the optional `someday` field holds a required revisit condition (`bon someday ID "condition"` / `bon unsomeday ID`). It's a flag, not a status — status stays open/done so older clients never lose sight of the item. Parked subtrees leave default views at read time (children inherit, no mutation) and `bon list` states the parked count in a tail line; `bon list --someday` is the parked view.
 
@@ -216,13 +216,15 @@ or list) creates the item born blocked, with cmd_wait's unresolvable-id warning.
 other key is a **hard error** (bon-gezela) — a silently-dropped key looks exactly like
 success, the same contract `bon edit` adopted in bon-cefisu.
 
+**Stdin never hangs (bon-zutowo).** Both `bon new` and `bon edit` wait at most 10 s for the first byte of piped JSON, then fail naming the cause; `BON_STDIN_TIMEOUT` overrides (`0`/`inf` = no limit). JSON passed as an argument is refused at once with a pipe hint — an agent's Bash tool hands an open-but-silent stdin, which used to block forever.
+
 ### `bon edit` Input Modes (bon-cefisu)
 
 Same auto-detection, same reason — flag quoting mangles briefs carrying quotes,
 backticks or `$`, and a mangled field looks exactly like an edited one.
 
 1. **JSON stdin (default for piped input)**: No edit flag + stdin piped → reads JSON.
-2. **Flags**: any of `--title/--outcome/--why/--how/--append-how/--what/--done/--note/--order/--area`.
+2. **Flags**: any of `--title/--outcome/--why/--how/--what/--done/--note/--order/--area`, and `--append-how/--append-why/--append-what/--append-done` to add to a field rather than overwrite it.
 3. **Explicit `--json`**: forces the stdin path; an empty stdin errors here rather
    than falling through.
 

@@ -67,13 +67,40 @@ def first_sentence(text: str) -> str:
     return text
 
 
+YAML_LINE_RE = re.compile(r"^(\s*$|\s*-(\s|$)|\s+\S|[A-Za-z0-9_][\w .-]*:(\s|$))")
+
+
+def strip_frontmatter(lines: list[str]) -> list[str]:
+    """Drop a leading `---` … `---`/`...` YAML block (bon-wekafu).
+
+    Its first key (`private: true`) used to become the room's one-liner. The
+    block is stripped only when it is closed AND every line inside looks like
+    YAML (a `key:` line, a list item, an indented continuation, a blank) and
+    none starts with `#`. Otherwise the leading `---` is a horizontal rule and
+    the file is returned whole: a rule, a title and prose followed by a second
+    rule must keep its title (essayeur, 2026-10-25). `#` lines are refused
+    outright because a YAML comment and a Markdown heading look the same.
+    A UTF-8 BOM before the opening fence is tolerated.
+    """
+    if not lines or lines[0].lstrip("\ufeff").strip() != "---":
+        return lines
+    for i in range(1, len(lines)):
+        line = lines[i]
+        if line.strip() in ("---", "..."):
+            return lines[i + 1:]
+        if line.lstrip().startswith("#") or not YAML_LINE_RE.match(line):
+            return lines
+    return lines
+
+
 def describe(claude_md: Path) -> str:
     """The room's one-liner: first prose line under the H1, as a single sentence.
 
     Falls back to the H1 heading text, then to '(no description)'.
     """
     heading = ""
-    for raw in claude_md.read_text(encoding="utf-8", errors="replace").splitlines():
+    lines = strip_frontmatter(claude_md.read_text(encoding="utf-8", errors="replace").splitlines())
+    for raw in lines:
         line = raw.strip()
         if not line:
             continue

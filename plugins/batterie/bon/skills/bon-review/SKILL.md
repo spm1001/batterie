@@ -46,11 +46,15 @@ A repeatable 5-phase review that gives the operator the shape of the estate: wha
 
 ### Phase 1: Survey (Gather)
 
+**Create the run directory first, before any survey runs** — `mktemp -d /tmp/bon-audit-$(date +%F)-XXXXXX` — and capture every survey into it as it runs. The before-survey is the baseline Phase 5 diffs against; left in context or a loose /tmp file "for Phase 5 to archive", it has vanished before the ceremony reached Phase 5 (bon-tapoli). Date alone doesn't make the directory unique: two audits on one day would share it and interleave their results (the bon-potipe collision shape, one directory up). Name the printed path to the user now and write it literally as `{run_dir}` in every later command (a shell variable does not survive from one tool call to the next); every later phase writes into the same one.
+
 Run the audit survey to get structured data on all open items:
 
 ```bash
-uv run --script ${CLAUDE_SKILL_DIR}/scripts/audit_survey.py
+uv run --script ${CLAUDE_SKILL_DIR}/scripts/audit_survey.py > {run_dir}/survey-before.json
 ```
+
+The JSON goes to the file, the narrowing notes stay on stderr where you will see them; read the file for the phases below rather than re-running. A scoped re-run gets its own name (`survey-before-batterie.json`), never an overwrite.
 
 Or scope it — by repo, or by jobs group:
 
@@ -94,7 +98,7 @@ Alongside the pyramid, give the survey's one-line vitals: total open, `visibilit
 ```bash
 uv run --script ${CLAUDE_SKILL_DIR}/scripts/net_motion.py                 # last 10 ISO weeks
 uv run --script ${CLAUDE_SKILL_DIR}/scripts/net_motion.py --from 2026-W27 --to 2026-W36
-uv run --script ${CLAUDE_SKILL_DIR}/scripts/net_motion.py --json          # for the draft
+uv run --script ${CLAUDE_SKILL_DIR}/scripts/net_motion.py --json > {run_dir}/net-motion.json   # for the draft, captured at once
 ```
 
 It buckets every item's `created_at` (minted) and `done_at` (closed) by ISO week across every board the survey would see, archives folded in, and prints minted, closed and **net = closed − minted** (negative: the boards grew), then a per-board table of who carries the growth. Read it with three things in hand (bon-dajusi, measured 2026-09-03): the **residual** line must read 0 — it is `open now − (open at window start − Σ net)`, the whole checked against its parts, and a non-zero one names its cause (a done item with no `done_at`, an unparseable stamp) rather than hiding it; the **current week is partial** and says how many of its seven days are in — a fortnight read on a Monday is mostly last week, which is how a 2026-09-01 read saw W36 at −9 when four days later it stood at −84; and the convergence line gives the prior weeks' **median beside the mean**, because one bulk-close sweep (W28 2026: 518 closes, 213 of them on 07-08) drags a mean positive for months. A stale clone (`backend = dolt`, not pulled since the retirement) and an id seen in a second clone are skipped and named under Notes. Render the all-boards weekly table and the top of the growth table in the pyramid's vitals; the one-sentence reading ("does the convergence hold, and which boards carry it") is the ceremony's to write, from the numbers.
@@ -128,7 +132,7 @@ behind=$(git -C {local_path} rev-list --count HEAD..@{u} 2>/dev/null || echo "?"
 
 Run the fetch pass once, up front, and tell the user which clones were refreshed and which are flagged before any verdicts land — a verdict from a silently-stale clone looks identical to one from a fresh clone, which is exactly the trap this closes.
 
-**Result files (bg survival):** create a run directory first — `mktemp -d /tmp/bon-audit-$(date +%F)-XXXXXX` — and pass its path into every subagent prompt so each Writes its own result JSON there as it finishes. In-context-only results die if the session gets backgrounded mid-run. Date alone doesn't make the directory unique: two audits on one day would share it and interleave their results (the bon-potipe collision shape, one directory up).
+**Result files (bg survival):** pass the run directory Phase 1 created (`{run_dir}`, already holding the before-survey) into every subagent prompt so each Writes its own result JSON there as it finishes. In-context-only results die if the session gets backgrounded mid-run. Don't mint a second directory here: the verdicts belong beside the survey they adjudicate.
 
 **Parallelism strategy (rolling dispatch, not strict waves):**
 - Repos with <5 open items: batch up to 3 repos per subagent
@@ -345,10 +349,10 @@ Apply via `bon edit {id}` with JSON stdin (read-modify-write; use the subprocess
 
 ### Phase 5: Snapshot (Remember)
 
-After all closures, re-run the survey and report the delta:
+After all closures, re-run the survey into the same run directory and report the delta against `survey-before.json`:
 
 ```bash
-uv run --script ${CLAUDE_SKILL_DIR}/scripts/audit_survey.py
+uv run --script ${CLAUDE_SKILL_DIR}/scripts/audit_survey.py > {run_dir}/survey-after.json
 ```
 
 > Audit complete. Closed {N} items.

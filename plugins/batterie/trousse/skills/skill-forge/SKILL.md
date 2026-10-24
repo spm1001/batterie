@@ -244,6 +244,25 @@ Creates `.skill` file (zip format) for distribution.
 - [ ] Prohibitions balanced with positive specifications
 - [ ] Constraints framed as craft standards, not threats
 
+## Where a Skill Lives — and Adding to One You Don't Own
+
+**Pick the home by who would patch it.**
+
+| Home | The test |
+|------|----------|
+| Public kit | A stranger with none of your context would install it and value it. |
+| Team kit | A teammate's patch would make sense, *and* they'd believe it was welcome. The test is contribution, not access: a useful tool in a drawer named after one person draws no patches. |
+| Personal kit (or `~/.claude/skills/` if you have no kit) | One person's conventions, anything carrying personal data, or a tool its owner keeps the right to break. |
+
+**To add your own touches to a skill you don't own, write a layer, not a copy or a rival.** When a team or public skill already does the job and you want your rooms, contacts or conventions on top:
+
+1. Give your skill the same name as the base, in your own kit.
+2. Start its description with "Layer on `<kit>:<name>`" and say what it adds.
+3. Open its body with "Load `<kit>:<name>` first; this adds to it."
+4. Hold only what differs. Never restate the base, and never loosen its safety rails; if a rail is wrong, patch the base instead.
+
+The base carries the mirror line: "If a skill in your list declares itself a layer on this one, load it after this." Then whichever one fires, both load. The declaration is the link, not the name alone: two kits can ship the same name as alternatives (one per Google Workspace, say), and those must never stack.
+
 ## Skill Patterns
 
 See `references/skill-patterns.md` for full taxonomy. Summary:

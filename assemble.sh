@@ -256,7 +256,7 @@ EOF
 # edit, same reason as stamp_version; plugin.json is already filtered from the
 # ratchet, and a plugin.json with no "repository" field is left alone.
 MARKETPLACE_HOME="https://github.com/spm1001/batterie#readme"
-PUBLIC_SOURCES="mise-en-space gueridon"
+PUBLIC_SOURCES="gueridon"   # mise-en-space went private 2026-10-24 (mise-ribife)
 stamp_repository() {
   case " $PUBLIC_SOURCES " in *" $2 "*) return 0 ;; esac
   python3 - "$1" "$MARKETPLACE_HOME" <<'PYEOF'

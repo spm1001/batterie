@@ -1,8 +1,8 @@
 #!/bin/bash
 # SessionEnd hook: archive the closing Claude Code session into notes.
 #
-# The go-forward capture path replacing the retiring garde-manger plugin
-# (garde decommission, gm-kenave). On session end this runs glaneur's
+# The go-forward capture path that replaced the garde-manger plugin
+# (decommissioned 3 Jun 2026, gm-kenave). On session end this runs glaneur's
 # `glean-code` CLI — the consolidated converter (glan-kohadu; formerly the
 # notes-owned convert-claude-code.py) — which applies the gm-firaso capture
 # predicate (/close OR substantial, minus subagents + tmux-labeler) and

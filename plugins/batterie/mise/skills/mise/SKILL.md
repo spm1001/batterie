@@ -988,7 +988,7 @@ Both draft ops auto-append the user's Gmail signature (from their sendAs setting
 | Error | Meaning | What to do |
 |-------|---------|------------|
 | `AUTH_EXPIRED` | OAuth token stale | Call `mise.do(operation="setup_oauth")` to re-authenticate (see First Run above) |
-| `NOT_FOUND` | File/thread doesn't exist | Verify the ID; file may have been deleted or moved |
+| `NOT_FOUND` | File/thread doesn't exist — or the ID was mis-copied | If the user pasted the ID, don't re-read it by eye: long IDs mis-transcribe (a 44-char Doc ID lost a letter twice in one session, 2026-08-06, mise-jafide). Search by property instead — `raw_query="modifiedTime > '<date>' and mimeType = 'application/vnd.google-apps.document'"`, or a name fragment — and confirm by title. A 404 from both the ITV and the family mise usually means transcription, not access. Otherwise the file may have been deleted or moved |
 | `PERMISSION_DENIED` | No access to resource | Tell user they need to request access |
 | `RATE_LIMITED` | Hit API quota | The server has already retried (below). A read: wait 30s and retry once. A write: look first (below) |
 | `EXTRACTION_FAILED` | Couldn't parse content | Report to user with the file type and error detail |

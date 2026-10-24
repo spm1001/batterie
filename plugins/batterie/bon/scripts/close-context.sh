@@ -583,8 +583,9 @@ fi
 # existence index of its CLAUDE.md rooms), refresh it so it rides this close's
 # commit — same-session freshness. Adoption is opt-in by the file's presence:
 # repos without a rooms.md are left untouched (no churn — the trap a
-# SessionStart hook would fall into). The nightly Hezza timer is the
-# all-surface guarantee; this is only the eager half. Fully guarded so a
+# SessionStart hook would fall into). This eager regen is the ONLY refresh:
+# the nightly timer that once ran on hezza went with that host (torn down
+# 2 Aug 2026) and nothing on tube replaced it. Fully guarded so a
 # generator hiccup can never abort /close (the script runs under `set -e`).
 echo ""
 echo "=== ROOMS ==="

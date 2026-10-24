@@ -103,7 +103,7 @@ def _do_batch_copy(file_ids: list[str], folder_id: str | None) -> dict[str, Any]
     dest_meta: dict[str, Any] | None = None
     if folder_id is not None:
         try:
-            dest_meta = _get_dest_meta(folder_id)
+            dest_meta = with_retry(idempotent=True)(_get_dest_meta)(folder_id)
         except MiseError as e:
             return {"error": True, "kind": e.kind.value, "message": e.message}
 

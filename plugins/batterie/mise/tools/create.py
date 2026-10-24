@@ -110,15 +110,14 @@ def _create_folder(title: str | None, folder_id: str | None) -> DoResult | dict[
 
     metadata = _mise_file_metadata(title, mime_type=GOOGLE_FOLDER_MIME, folder_id=folder_id)
 
-    client = get_sync_client()
-    try:
-        result = client.post_json(
+    try:  # retried for its error conversion: a missing token is auth_expired, not INTERNAL
+        result = with_retry(idempotent=False)(lambda: get_sync_client().post_json(
             _DRIVE_API,
             json_body=metadata,
             params={"fields": "id,name,webViewLink,parents", "supportsAllDrives": "true"},
-        )
-    except MiseError:
-        raise
+        ))()
+    except MiseError as e:  # run_operation turns a RAISED MiseError into INTERNAL
+        return _create_error(e.kind.value, e.message)
     except Exception as e:
         return _create_error("INTERNAL", f"Folder creation failed: {e}")
 

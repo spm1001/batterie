@@ -644,6 +644,9 @@ def _get_email_attachments_folder_id() -> str | None:
     # Auto-discover by name
     try:
         client = get_sync_client()
+        # My Drive only, by design (mise-vikide): the user's own Apps Script mints this folder
+        # in their My Drive; if it ever moves to a Shared Drive this misses and every attachment
+        # falls back to the slower Gmail download, silently.
         response = client.get_json(
             f"{_DRIVE_API}",
             params={
@@ -717,6 +720,7 @@ def lookup_exfiltrated(message_ids: list[str]) -> dict[str, list[dict[str, Any]]
         query = f"({id_clauses})"
 
     try:
+        # My-Drive corpus by design — see _get_email_attachments_folder_id (mise-vikide).
         response = client.get_json(
             f"{_DRIVE_API}",
             params={

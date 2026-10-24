@@ -115,7 +115,7 @@ def _do_batch_move(
 
     # Validate destination is a folder once — not per file
     try:
-        dest_meta = _get_dest_meta(destination_folder_id)
+        dest_meta = with_retry(idempotent=True)(_get_dest_meta)(destination_folder_id)
     except MiseError as e:
         return {"error": True, "kind": e.kind.value, "message": e.message}
 

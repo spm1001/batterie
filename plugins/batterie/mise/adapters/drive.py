@@ -96,6 +96,7 @@ FILE_METADATA_FIELDS = (
     "lastModifyingUser(displayName,emailAddress),"  # Shared Drive author signal (mise-tanoti)
     "webViewLink,"
     "parents,"
+    "shortcutDetails(targetId,targetMimeType),"  # fetch follows shortcuts (mise-rosifa)
     "description"  # Contains Message ID for exfil'd email attachments
 )
 
@@ -145,19 +146,11 @@ def _parse_datetime(dt_str: str | None) -> datetime | None:
         return None
 
 
-@with_retry(max_attempts=3, delay_ms=1000)
+@with_retry(max_attempts=3, delay_ms=1000, idempotent=True)
 def get_file_metadata(file_id: str) -> dict[str, Any]:
-    """
-    Get file metadata for routing decisions.
+    """Metadata for routing decisions: the fields named in FILE_METADATA_FIELDS.
 
-    Args:
-        file_id: The file ID
-
-    Returns:
-        Dict with: id, name, mimeType, modifiedTime, size, owners, webViewLink
-
-    Raises:
-        MiseError: On API failure
+    Raises MiseError on API failure (converted by @with_retry).
     """
     client = get_sync_client()
     return client.get_json(
@@ -166,7 +159,7 @@ def get_file_metadata(file_id: str) -> dict[str, Any]:
     )
 
 
-@with_retry(max_attempts=3, delay_ms=1000)
+@with_retry(max_attempts=3, delay_ms=1000, idempotent=True)
 def export_file(file_id: str, mime_type: str) -> bytes:
     """
     Export Google Workspace file to specified format.
@@ -191,7 +184,7 @@ def export_file(file_id: str, mime_type: str) -> bytes:
     )
 
 
-@with_retry(max_attempts=3, delay_ms=1000)
+@with_retry(max_attempts=3, delay_ms=1000, idempotent=True)
 def download_file(file_id: str, max_memory_size: int = STREAMING_THRESHOLD_BYTES) -> bytes:
     """
     Download file content (for binary/non-native files).
@@ -232,7 +225,7 @@ def download_file(file_id: str, max_memory_size: int = STREAMING_THRESHOLD_BYTES
     )
 
 
-@with_retry(max_attempts=3, delay_ms=1000)
+@with_retry(max_attempts=3, delay_ms=1000, idempotent=True)
 def download_file_to_temp(file_id: str, suffix: str = "") -> Path:
     """
     Download file content to a temporary file (streaming, memory-safe).
@@ -289,7 +282,7 @@ def get_file_size(file_id: str) -> int:
     return int(metadata.get("size", 0))
 
 
-@with_retry(max_attempts=3, delay_ms=1000)
+@with_retry(max_attempts=3, delay_ms=1000, idempotent=True)
 def search_files(
     query: str,
     max_results: int = 20,
@@ -395,6 +388,7 @@ GOOGLE_SHEET_MIME = "application/vnd.google-apps.spreadsheet"
 GOOGLE_SLIDES_MIME = "application/vnd.google-apps.presentation"
 GOOGLE_FOLDER_MIME = "application/vnd.google-apps.folder"
 GOOGLE_FORM_MIME = "application/vnd.google-apps.form"
+GOOGLE_SHORTCUT_MIME = "application/vnd.google-apps.shortcut"
 
 
 def is_google_workspace_file(mime_type: str) -> bool:
@@ -417,7 +411,7 @@ def is_text_mime(mime_type: str) -> bool:
     return mime_type.startswith("text/") or mime_type in TEXT_MIME_TYPES
 
 
-@with_retry(max_attempts=3, delay_ms=1000)
+@with_retry(max_attempts=3, delay_ms=1000, idempotent=True)
 def download_file_content(file_id: str) -> bytes:
     """
     Download file content for editing (no size pre-check).
@@ -442,7 +436,7 @@ def download_file_content(file_id: str) -> bytes:
     )
 
 
-@with_retry(max_attempts=3, delay_ms=1000)
+@with_retry(max_attempts=3, delay_ms=1000, idempotent=True)
 def upload_file_content(file_id: str, content: bytes, mime_type: str) -> dict[str, Any]:
     """
     Upload content to replace a file's content via Drive Files API.
@@ -478,7 +472,7 @@ FOLDER_LIST_MAX_PAGES = 3
 FOLDER_LIST_PAGE_SIZE = 100
 
 
-@with_retry(max_attempts=3, delay_ms=1000)
+@with_retry(max_attempts=3, delay_ms=1000, idempotent=True)
 def list_folder(folder_id: str) -> FolderListing:
     """
     List direct children of a Drive folder.
@@ -669,7 +663,7 @@ def _get_email_attachments_folder_id() -> str | None:
     return None
 
 
-@with_retry(max_attempts=3, delay_ms=1000)
+@with_retry(max_attempts=3, delay_ms=1000, idempotent=True)
 def lookup_exfiltrated(message_ids: list[str]) -> dict[str, list[dict[str, Any]]]:
     """
     Look up which messages have attachments pre-exfiltrated to Drive.
@@ -795,7 +789,7 @@ COMMENT_UNSUPPORTED_MIMES = {
 }
 
 
-@with_retry(max_attempts=3, delay_ms=1000)
+@with_retry(max_attempts=3, delay_ms=1000, idempotent=True)
 def fetch_file_comments(
     file_id: str,
     include_deleted: bool = False,
@@ -977,7 +971,7 @@ def fetch_file_comments(
     )
 
 
-@with_retry(max_attempts=3, delay_ms=1000)
+@with_retry(max_attempts=3, delay_ms=1000, idempotent=True)
 def get_head_revision(file_id: str) -> dict[str, str]:
     """
     Read the file's current head revision — the pre-edit restore anchor.
@@ -1024,7 +1018,7 @@ _REPLY_FIELDS = (
 )
 
 
-@with_retry(max_attempts=3, delay_ms=1000)
+@with_retry(max_attempts=3, delay_ms=1000, idempotent=False)
 def create_comment(file_id: str, content: str) -> CommentData:
     """
     Create a new comment on a Drive file (Drive API comments.create).
@@ -1102,7 +1096,7 @@ def create_comment(file_id: str, content: str) -> CommentData:
     )
 
 
-@with_retry(max_attempts=3, delay_ms=1000)
+@with_retry(max_attempts=3, delay_ms=1000, idempotent=False)
 def reply_to_comment(
     file_id: str,
     comment_id: str,

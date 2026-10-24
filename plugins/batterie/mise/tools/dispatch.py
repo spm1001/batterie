@@ -59,7 +59,7 @@ REQUIRED_PARAMS: dict[str, set[str]] = {
     "overwrite": {"file_id"},  # content OR source — handler validates
     "prepend": {"file_id", "content"},
     "append": {"file_id", "content"},
-    "replace_text": {"file_id", "find", "content"},
+    "replace_text": {"file_id", "find"},  # content OR remove=True — handler validates
     "draft": {"content"},  # create needs to+subject too; update (file_id) doesn't — handler validates
     "reply_draft": {"file_id", "content"},
     "archive": {"file_id"},
@@ -130,7 +130,7 @@ OP_PARAMS: dict[str, frozenset[str]] = {
                             "file_path", "restore_comment", "range"}),
     "prepend": frozenset({"file_id", "content", "suggest"}),
     "append": frozenset({"file_id", "content", "tab", "suggest"}),
-    "replace_text": frozenset({"file_id", "find", "content", "suggest"}),
+    "replace_text": frozenset({"file_id", "find", "content", "suggest", "remove"}),
     "draft": frozenset({"to", "subject", "content", "cc", "include", "file_id", "quote"}),
     "reply_draft": frozenset({"file_id", "content", "cc", "include",
                               "reply_all", "supersede", "to", "quote"}),
@@ -254,6 +254,7 @@ DISPATCH: dict[str, Any] = {
     "replace_text": lambda p: do_replace_text(
         file_id=p["file_id"], find=p["find"], content=p["content"],
         metadata=p.get("_metadata"), suggest=p.get("suggest", False),
+        remove=p.get("remove", False),
     ),
     "draft": lambda p: do_draft(
         to=p["to"], subject=p["subject"], content=p["content"],

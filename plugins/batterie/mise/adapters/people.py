@@ -55,6 +55,11 @@ _DOMAIN_PUBLIC = {"viewType": "domain_public"}
 # Admin SDK caps users.list at 500 per page; we never page here because a
 # directory search that needs paging is the wrong shape of question.
 _MAX_PAGE = 500
+# Per-attempt timeout for directory reads, in seconds. get_person retries a
+# timeout 3 times (mise-nivode), so a hanging directory now costs about 45 s,
+# under the single 60 s API_TIMEOUT it cost before the 30 s failure pause
+# (directory_refusal.py) took over. A normal lookup takes well under a second.
+_DIRECTORY_TIMEOUT = 15.0
 
 
 
@@ -147,7 +152,7 @@ def _convert_error(e: httpx.HTTPStatusError, subject: str) -> MiseError:
     )
 
 
-@with_retry(max_attempts=3)
+@with_retry(max_attempts=3, idempotent=True)
 def get_person(email: str) -> DirectoryPerson:
     """Fetch one colleague's public domain profile by email address.
 
@@ -162,13 +167,14 @@ def get_person(email: str) -> DirectoryPerson:
         data = client.get_json(
             f"{_ADMIN_USERS_API}/{quote(email, safe='@')}",
             params={**_DOMAIN_PUBLIC, "projection": "full"},
+            timeout=_DIRECTORY_TIMEOUT,
         )
     except httpx.HTTPStatusError as e:
         raise _convert_error(e, email)
     return _parse_person(data)
 
 
-@with_retry(max_attempts=3)
+@with_retry(max_attempts=3, idempotent=True)
 def search_people(query: str, max_results: int = 10) -> PeopleSearchResults:
     """Search the domain directory.
 
@@ -199,6 +205,7 @@ def search_people(query: str, max_results: int = 10) -> PeopleSearchResults:
                 "projection": "full",
                 "orderBy": "email",
             },
+            timeout=_DIRECTORY_TIMEOUT,
         )
     except httpx.HTTPStatusError as e:
         raise _convert_error(e, query)
@@ -230,6 +237,7 @@ def get_direct_reports(email: str, max_results: int = 25) -> list[DirectoryPerso
                 "projection": "full",
                 "orderBy": "email",
             },
+            timeout=_DIRECTORY_TIMEOUT,
         )
     except Exception:
         return []

@@ -18,9 +18,9 @@ from adapters.people import (
     SENDER_KEYS, attach_profiles, expand_profile, placement_gap, search_people,
 )
 from models import (
+    ActivitySearchResult,
     CalendarEvent,
     CalendarSearchResult,
-    CommentActivity,
     DriveSearchResults,
     GmailSearchResults,
     MiseError,
@@ -52,6 +52,7 @@ from tools.search_calendar import (
     calendar_truncated_cue,
     calendar_window_cue,
     format_calendar_result,
+    window_timezone,
 )
 from workspace.manager import write_search_results
 
@@ -157,6 +158,7 @@ def do_search(
     # Checked against the REQUESTED sources, before any narrowing strips
     # calendar out from under it.
     window_min = window_max = None
+    tz_cue: str | None = None
     if time_min or time_max:
         window_min, window_max = parse_time_window(time_min, time_max)
         if "calendar" not in sources:
@@ -170,6 +172,11 @@ def do_search(
                 "those scope the search to Drive only, which would silently "
                 "drop the calendar window"
             )
+        # Validated above in UTC with no API call; now re-read in the user's
+        # diary zone so a bare date is their day, as in freebusy (mise-cujihu).
+        if not ambient_mode():
+            tz, tz_cue = window_timezone()
+            window_min, window_max = parse_time_window(time_min, time_max, tz)
 
     # Resolve type filter → Drive query clause (validated by caller, guard for direct use)
     type_clause: str | None = None
@@ -203,6 +210,8 @@ def do_search(
     # The raw query is what was actually asked, so it labels the result and the
     # deposit filename; otherwise an empty slug lands on disk.
     result = SearchResult(query=raw_query or query, sources=sources)
+    if tz_cue:  # set here so it survives a failed calendar source
+        result.cues["calendar_timezone"] = tz_cue
 
     # Scope notes — emitted unconditionally when folder_id is set
     if folder_id is not None:
@@ -251,11 +260,10 @@ def do_search(
         sanitized_query = sanitize_gmail_query(query)
         return search_threads(sanitized_query, max_results=max_results)
 
-    def _run_activity() -> list[CommentActivity]:
+    def _run_activity() -> ActivitySearchResult:
         # Activity API doesn't support keyword search — returns recent comment events.
-        # page_size maps to max_results for consistency.
-        activity_result = search_comment_activities(page_size=max_results)
-        return activity_result.activities
+        # page_size maps to max_results; the adapter holds Google to it.
+        return search_comment_activities(page_size=max_results)
 
     def _run_people() -> PeopleSearchResults:
         # Query goes straight to the Admin SDK's own syntax — bare words match
@@ -367,7 +375,10 @@ def do_search(
 
     if "activity" in futures:
         try:
-            result.activity_results = [format_activity_result(a) for a in futures["activity"].result()]
+            activity_search = futures["activity"].result()
+            result.activity_results = [format_activity_result(a) for a in activity_search.activities]
+            if activity_search.warnings:  # a trimmed page, a target-less row (mise-sofore)
+                result.cues["activity_warnings"] = activity_search.warnings
         except MiseError as e:
             result.errors.append(f"Activity search failed: {e.message}")
         except Exception as e:

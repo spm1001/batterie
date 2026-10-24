@@ -25,7 +25,7 @@ _CALENDAR_LIST_API = "https://www.googleapis.com/calendar/v3/users/me/calendarLi
 _FAN_OUT_WORKERS = 8
 
 
-@with_retry(max_attempts=3, delay_ms=1000)
+@with_retry(max_attempts=3, delay_ms=1000, idempotent=True)
 def list_calendars() -> list[dict[str, Any]]:
     """The calendars this account can read events from — its calendarList
     (mise-cegeva). 'primary' is one entry among several: a partner's or a

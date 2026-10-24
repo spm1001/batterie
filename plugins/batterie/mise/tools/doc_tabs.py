@@ -43,7 +43,7 @@ _TAB_PROPS_FIELDS = (
 )
 
 
-@with_retry(max_attempts=3, delay_ms=1000)
+@with_retry(max_attempts=3, delay_ms=1000, idempotent=True)
 def get_doc_tabs_meta(file_id: str) -> dict[str, Any]:
     """Doc title plus flat tab properties, depth-first — content never fetched.
 
@@ -77,7 +77,7 @@ def get_doc_tabs_meta(file_id: str) -> dict[str, Any]:
     return {"title": doc.get("title", "Untitled"), "tabs": tabs}
 
 
-@with_retry(max_attempts=3, delay_ms=1000)
+@with_retry(max_attempts=3, delay_ms=1000, idempotent=False)
 def _add_tab(file_id: str, tab_title: str) -> dict[str, Any]:
     """Batch 1 — add ONLY. The server mints the tabId; supplying one is a 400.
 
@@ -98,7 +98,7 @@ def _add_tab(file_id: str, tab_title: str) -> dict[str, Any]:
     return minted
 
 
-@with_retry(max_attempts=3, delay_ms=1000)
+@with_retry(max_attempts=3, delay_ms=1000, idempotent=False)
 def _fill_tab(file_id: str, tab_id: str, text: str) -> None:
     """Batch 2 — fill by the minted tabId. A fresh tab's body is a single
     newline; index 1 is the start of its text. A retry can only ever

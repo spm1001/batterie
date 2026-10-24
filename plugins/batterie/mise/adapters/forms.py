@@ -13,7 +13,7 @@ from adapters.http_client import get_sync_client
 _FORMS_API = "https://forms.googleapis.com/v1/forms"
 
 
-@with_retry(max_attempts=3, delay_ms=1000)
+@with_retry(max_attempts=3, delay_ms=1000, idempotent=True)
 def fetch_form(form_id: str) -> dict[str, Any]:
     """Fetch form structure from the Forms API."""
     client = get_sync_client()

@@ -159,7 +159,7 @@ def _get_inline_or_degrade(client: Any, document_id: str) -> tuple[dict[str, Any
     return client.get_json(f"{_DOCS_API}/{document_id}", params=params), True
 
 
-@with_retry(max_attempts=3, delay_ms=1000)
+@with_retry(max_attempts=3, delay_ms=1000, idempotent=True)
 def fetch_document(document_id: str, suggestions: str = "accepted") -> DocData:
     """
     Fetch complete document data.

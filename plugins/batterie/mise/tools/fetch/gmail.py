@@ -27,7 +27,10 @@ from .gmail_attachments import (
     _resolve_attachment_mime,
     classify_attachment,
     assign_attachment_refs,
+    attachment_info,
     hidden_attachment_cues,
+    skipped_office_entry,
+    skipped_office_hint,
 )
 from .gmail_exfil import _match_exfil_for_message
 from .gmail_participants import participants_with_placement
@@ -140,7 +143,7 @@ def fetch_gmail(thread_id: str, base_path: Path | None = None) -> FetchResult:
         # Collect attachments and drive_links from all messages
         all_attachments: list[dict[str, Any]] = []
         all_drive_links: list[dict[str, str]] = []
-        skipped_office: list[str] = []
+        skipped_office: list[dict[str, Any]] = []
         skipped_images: list[dict[str, Any]] = []
         extracted_attachments: list[dict[str, Any]] = []
         extraction_warnings: list[str] = []
@@ -168,20 +171,13 @@ def fetch_gmail(thread_id: str, base_path: Path | None = None) -> FetchResult:
             exfil_matches = _match_exfil_for_message(msg.attachments, exfil_files)
 
             for att in msg.attachments:
-                if att.duplicate:  # the same part an earlier message already carried
-                    continue
-                att_info = {
-                    "filename": att.filename,
-                    "mime_type": att.mime_type,
-                    "size": att.size,
-                }
-                all_attachments.append(att_info)
+                all_attachments.append(attachment_info(att))
 
                 # Resolve Outlook-style octet-stream mis-tagging by filename
                 # extension; dispatch on the resolved MIME, keep att.mime_type
                 # as declared (see mise-dazode — fetch_attachment already does this).
                 resolved_mime = _resolve_attachment_mime(att.mime_type, att.filename)
-                if resolved_mime != att.mime_type:
+                if resolved_mime != att.mime_type and not att.duplicate_of:
                     extraction_warnings.append(
                         f"Attachment '{att.filename}' declared "
                         f"application/octet-stream; treating as '{resolved_mime}' "
@@ -192,14 +188,16 @@ def fetch_gmail(thread_id: str, base_path: Path | None = None) -> FetchResult:
 
                 # Skip Office files (note for manifest)
                 if category == "office":
-                    skipped_office.append(att.filename)
+                    skipped_office.append(skipped_office_entry(msg, att))
+                    continue
+                if att.duplicate_of:  # probably a part an earlier message carried: listed above, not re-extracted
                     continue
 
                 # Pre-download image format check (size is no longer a skip criterion —
                 # oversized images are resized post-download rather than skipped).
                 if category == "image_unsupported":
                     skipped_images.append({
-                        "filename": att.filename,
+                        "filename": att.filename, "fetch_as": att.ref or att.filename,
                         "mime_type": resolved_mime,
                         "reason": "unsupported format (API supports: jpeg, png, gif, webp)",
                     })
@@ -315,15 +313,11 @@ def fetch_gmail(thread_id: str, base_path: Path | None = None) -> FetchResult:
             metadata["extracted"] = extracted_attachments
         if skipped_office:
             metadata["skipped_office"] = skipped_office
-            examples = [f"fetch('{thread_id}', attachment='{f}')" for f in skipped_office]
-            metadata["skipped_office_hint"] = (
-                f"Office files take 5-10s each. "
-                f"To extract: {'; '.join(examples)}"
-            )
+            metadata["skipped_office_hint"] = skipped_office_hint(thread_id, skipped_office)
         if skipped_images:
             metadata["skipped_images"] = skipped_images
             img_examples = [
-                "fetch('{}', attachment='{}')".format(thread_id, img["filename"])
+                "fetch('{}', attachment='{}')".format(thread_id, img.get("fetch_as", img["filename"]))
                 for img in skipped_images
             ]
             metadata["skipped_images_hint"] = (

@@ -260,7 +260,7 @@ def _build_message(msg: dict[str, Any]) -> EmailMessage:
     )
 
 
-@with_retry(max_attempts=3, delay_ms=1000)
+@with_retry(max_attempts=3, delay_ms=1000, idempotent=True)
 def fetch_thread(thread_id: str) -> GmailThreadData:
     """
     Fetch complete thread data.
@@ -297,7 +297,7 @@ def fetch_thread(thread_id: str) -> GmailThreadData:
     )
 
 
-@with_retry(max_attempts=3, delay_ms=1000)
+@with_retry(max_attempts=3, delay_ms=1000, idempotent=True)
 def fetch_message(message_id: str) -> EmailMessage:
     """
     Fetch a single message.
@@ -321,7 +321,7 @@ def fetch_message(message_id: str) -> EmailMessage:
     return _build_message(msg)
 
 
-@with_retry(max_attempts=3, delay_ms=1000)
+@with_retry(max_attempts=3, delay_ms=1000, idempotent=True)
 def search_threads(
     query: str,
     max_results: int = 20,
@@ -498,7 +498,7 @@ class AttachmentDownload:
 ATTACHMENT_STREAMING_THRESHOLD = 50 * 1024 * 1024
 
 
-@with_retry(max_attempts=3, delay_ms=1000)
+@with_retry(max_attempts=3, delay_ms=1000, idempotent=True)
 def download_attachment(
     message_id: str,
     attachment_id: str,
@@ -617,7 +617,7 @@ def _draft_web_link(draft_id: str) -> str:
     return f"https://mail.google.com/mail/#drafts/{draft_id}"
 
 
-@with_retry(max_attempts=3, delay_ms=1000)
+@with_retry(max_attempts=3, delay_ms=1000, idempotent=False)
 def create_draft(
     to: str,
     subject: str,
@@ -668,7 +668,7 @@ def create_draft(
     )
 
 
-@with_retry(max_attempts=3, delay_ms=1000)
+@with_retry(max_attempts=3, delay_ms=1000, idempotent=True)
 def get_draft_headers(draft_id: str) -> dict[str, Any]:
     """
     Fetch an existing draft's headers and threading info (no body).
@@ -694,7 +694,7 @@ def get_draft_headers(draft_id: str) -> dict[str, Any]:
     return {"headers": headers, "thread_id": message.get("threadId")}
 
 
-@with_retry(max_attempts=3, delay_ms=1000)
+@with_retry(max_attempts=3, delay_ms=1000, idempotent=True)
 def update_draft(
     draft_id: str,
     to: str,
@@ -743,7 +743,7 @@ def update_draft(
     )
 
 
-@with_retry(max_attempts=3, delay_ms=1000)
+@with_retry(max_attempts=3, delay_ms=1000, idempotent=True)
 def delete_draft(draft_id: str) -> None:
     """
     Discard a Gmail draft (drafts.delete). PERMANENT — drafts have no trash.
@@ -755,7 +755,7 @@ def delete_draft(draft_id: str) -> None:
     client.delete(f"{_GMAIL_API}/drafts/{draft_id}")
 
 
-@with_retry(max_attempts=3, delay_ms=1000)
+@with_retry(max_attempts=3, delay_ms=1000, idempotent=True)
 def list_thread_drafts(thread_id: str) -> list[dict[str, str]]:
     """
     List existing drafts on a thread — the superseded-draft guard's eyes.
@@ -848,7 +848,7 @@ def _ensure_re_prefix(subject: str) -> str:
     return f"Re: {subject}"
 
 
-@with_retry(max_attempts=3, delay_ms=1000)
+@with_retry(max_attempts=3, delay_ms=1000, idempotent=False)
 def create_reply_draft(
     thread_id: str,
     to: str,
@@ -942,7 +942,7 @@ class ModifyThreadResult:
     removed_labels: list[str]
 
 
-@with_retry(max_attempts=3, delay_ms=1000)
+@with_retry(max_attempts=3, delay_ms=1000, idempotent=True)
 def list_labels() -> list[dict[str, str]]:
     """
     List all Gmail labels (system + user).
@@ -958,7 +958,7 @@ def list_labels() -> list[dict[str, str]]:
     ]
 
 
-@with_retry(max_attempts=3, delay_ms=1000)
+@with_retry(max_attempts=3, delay_ms=1000, idempotent=True)
 def get_primary_signature() -> str | None:
     """
     Fetch the authenticated user's Gmail signature (HTML) from sendAs settings.
@@ -1021,7 +1021,7 @@ def resolve_label_name(name: str) -> str:
     )
 
 
-@with_retry(max_attempts=3, delay_ms=1000)
+@with_retry(max_attempts=3, delay_ms=1000, idempotent=True)
 def modify_thread(
     thread_id: str,
     add_label_ids: list[str] | None = None,

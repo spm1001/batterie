@@ -38,7 +38,7 @@ def _is_draft_id(file_id: str) -> bool:
     return bool(_DRAFT_ID_RE.match(file_id))
 
 
-@with_retry(max_attempts=3, delay_ms=1000)
+@with_retry(max_attempts=3, delay_ms=1000, idempotent=True)
 def _trash_drive_file(file_id: str) -> dict[str, Any]:
     """Move a Drive file to trash via files.update(trashed=true)."""
     client = get_sync_client()

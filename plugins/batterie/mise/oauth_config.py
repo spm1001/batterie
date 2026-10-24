@@ -43,10 +43,12 @@ _PACKAGE_ROOT = Path(__file__).parent
 # the error page URL decodes to the blocking Workspace's own denial text
 # (ITV's says "Tech Central"). Fix is in the blocked account's Workspace
 # admin console, not in GCP.
-SCOPES = [
+# Each scope maps to what it unlocks — setup_oauth names these when a token lacks
+# one (mise-tageda), so a new scope cannot be added without saying what it is for.
+SCOPE_PURPOSE: dict[str, str] = {
     # --- Core: Search + Fetch + Edit + Gmail Write ---
-    'https://www.googleapis.com/auth/drive',  # Full access: read, write, create (superset of drive.readonly + drive.file)
-    'https://www.googleapis.com/auth/gmail.modify',  # Superset of readonly: drafts, send, labels, archive
+    'https://www.googleapis.com/auth/drive': 'Drive search, fetch, create, move, share — and Docs/Sheets/Slides/Forms edits',  # Full access: read, write, create (superset of drive.readonly + drive.file)
+    'https://www.googleapis.com/auth/gmail.modify': 'Gmail search, fetch, drafts, archive, star, label',  # Superset of readonly: drafts, send, labels, archive
     # NB contacts.readonly was requested here from 2026-01-23 to 2026-08-10 and
     # NEVER used by a line of code. Removed with mise-mahiho, and worth recording
     # why it mattered: it reads like directory access and is not — it covers the
@@ -55,23 +57,27 @@ SCOPES = [
     # months, which is a large part of why nobody probed the real gap. An unused
     # scope is not merely dead weight; it is a false claim about capability.
 
-    # --- Create (need write access) ---
-    'https://www.googleapis.com/auth/documents',
-    'https://www.googleapis.com/auth/spreadsheets',
-    'https://www.googleapis.com/auth/presentations',
+    # NOT REQUESTED, because `drive` already covers them (2026-10-24): documents,
+    # spreadsheets, presentations, forms.body — every Docs/Sheets/Slides/Forms
+    # method mise calls lists `drive` among its accepted scopes in Google's
+    # discovery documents. The live integration suite ran on a token holding
+    # only the 8 scopes below (tokeninfo-verified, include_granted_scopes off)
+    # and failed exactly the 4 tests that fail on the full 13-scope token. They
+    # cost five consent-screen lines and bought nothing. Older tokens still
+    # carry them (a grant only grows), which is harmless.
 
     # --- Activity + Context (UI parity+) ---
     # Drive Activity: See who did what, when. Enables action item discovery
     # via comment events (workaround for followup:actionitems).
-    'https://www.googleapis.com/auth/drive.activity.readonly',
+    'https://www.googleapis.com/auth/drive.activity.readonly': "search(sources=['activity'])",
 
     # Tasks: Google Tasks — action items from Docs/Chat sync here.
     # Needed for action item surfacing (mise-NiKuki, mise-kecigu).
-    'https://www.googleapis.com/auth/tasks.readonly',
+    'https://www.googleapis.com/auth/tasks.readonly': 'Google Tasks reads',
 
     # Drive Labels: Organizational metadata (priority, status, etc.)
     # Enterprise feature but useful when available.
-    'https://www.googleapis.com/auth/drive.labels.readonly',
+    'https://www.googleapis.com/auth/drive.labels.readonly': 'Drive labels on fetched files',
 
     # Calendar: Meeting context (who was in the meeting, when, what docs linked)
     # Helps correlate docs with discussions.
@@ -81,7 +87,7 @@ SCOPES = [
     # Sameer chose the scope route over a CDP-browser workaround (mise-forunu
     # closed the zero-scope route as a measured negative). Existing tokens keep
     # working for reads; the respond op teaches re-auth on 403.
-    'https://www.googleapis.com/auth/calendar.events',
+    'https://www.googleapis.com/auth/calendar.events': 'respond, create_event, update_event',
 
     # Calendar list: WHICH calendars this account can see (mise-cegeva,
     # 2026-09-14). calendar.events reads events on any calendar you can NAME
@@ -95,19 +101,13 @@ SCOPES = [
     # the scope, calendarList 403s, and search falls back to 'primary' with a
     # cues.calendar_scope line teaching setup_oauth(force=True) until the
     # token carries it. Every other calendar call keeps working meanwhile.
-    'https://www.googleapis.com/auth/calendar.readonly',
+    'https://www.googleapis.com/auth/calendar.readonly': 'calendar search across every calendar in your list (else primary only), and do(freebusy)',
 
-    # Free/busy: colleagues' availability for scheduling (mise-rijeco).
-    # freebusy.query does NOT accept calendar.events (probed live 2026-08-19:
-    # 403 insufficient scopes on the working events token) — its accepted set
-    # is calendar / calendar.readonly / calendar.freebusy / calendar.events.freebusy,
-    # and this is the narrowest of them: free/busy blocks only, nothing else.
-    # Tokens minted before 2026-08-19 keep working for everything except
-    # do(freebusy), which teaches setup_oauth(force=True) on 403.
-    'https://www.googleapis.com/auth/calendar.freebusy',
-
-    # Forms: Read and create form structure (questions, sections, options)
-    'https://www.googleapis.com/auth/forms.body',
+    # Free/busy (mise-rijeco) needs no scope of its own: freebusy.query accepts
+    # calendar / calendar.readonly / calendar.freebusy / calendar.events.freebusy
+    # but NOT calendar.events (probed live 2026-08-19). calendar.freebusy was
+    # requested 2026-08-19 → 2026-10-24 and is redundant now calendar.readonly
+    # is (above); tokens minted in that window carry it and still work.
 
     # Directory: colleagues' public profiles — title, department, location and
     # the reporting line — so Claude can tell who someone is (mise-mahiho).
@@ -123,8 +123,9 @@ SCOPES = [
     # The lighter-sounding alternative, People API directory.readonly, was
     # measured and rejected: its prefix query matches names and emails only
     # (a job title returns zero) and it has no reverse lookup.
-    'https://www.googleapis.com/auth/admin.directory.user.readonly',
-]
+    'https://www.googleapis.com/auth/admin.directory.user.readonly': "search(sources=['people']) and sender placement on Gmail results",
+}
+SCOPES = list(SCOPE_PURPOSE)
 
 # OAuth server port (localhost callback receiver)
 OAUTH_PORT = 3000

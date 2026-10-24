@@ -503,6 +503,7 @@ class MiseSyncClient:
         content: bytes | None = None,
         content_type: str | None = None,
         headers: dict[str, str] | None = None,
+        timeout: float | None = None,
     ) -> httpx.Response:
         """Make an authenticated request. Raises httpx.HTTPStatusError on 4xx/5xx."""
         req_headers = self._auth_headers()
@@ -519,6 +520,8 @@ class MiseSyncClient:
             kwargs["headers"]["Content-Type"] = "application/json"
         elif content is not None:
             kwargs["content"] = content
+        if timeout is not None:  # per-request override, e.g. directory reads (people.py)
+            kwargs["timeout"] = timeout
 
         response = self._client.request(method, url, **kwargs)
 
@@ -538,9 +541,10 @@ class MiseSyncClient:
         url: str,
         *,
         params: QueryParamsType = None,
+        timeout: float | None = None,
     ) -> dict[str, Any]:
         """GET and parse response as JSON via orjson."""
-        response = self.request("GET", url, params=params)
+        response = self.request("GET", url, params=params, timeout=timeout)
         return orjson.loads(response.content)
 
     def post_json(

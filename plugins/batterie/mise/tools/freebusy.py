@@ -39,10 +39,10 @@ _DAY_END = time(17, 30)
 _MAX_SLOTS = 20
 
 _FREEBUSY_REAUTH_ADVICE = (
-    " free/busy needs the calendar.freebusy scope, added 2026-08-19 — tokens "
-    "minted before that date lack it even though every other calendar call "
-    "works. Run do(operation='setup_oauth', force=True) to re-authenticate, "
-    "then retry."
+    " free/busy needs calendar.readonly (or calendar.freebusy, which tokens "
+    "minted 2026-08-19 to 2026-10-24 carry) — a token holding neither works "
+    "for every other calendar call but not this one. Run "
+    "do(operation='setup_oauth', force=True) to re-authenticate, then retry."
 )
 
 

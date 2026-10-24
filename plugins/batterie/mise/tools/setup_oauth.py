@@ -35,6 +35,7 @@ from jeton import get_auth_url
 from cues_util import with_identity
 from oauth_config import (
     OAUTH_PORT,
+    SCOPE_PURPOSE,
     SCOPES,
     TOKEN_FILE,
     ClientNotConfigured,
@@ -86,7 +87,7 @@ def do_setup_oauth(force: bool = False, **_kwargs: Any) -> dict[str, Any]:
     if has_token(TOKEN_FILE) and not force:
         try:
             from adapters.http_client import get_sync_client
-            get_sync_client()
+            client = get_sync_client()
         except Exception as e:
             from retry import is_network_fault
             if is_network_fault(e):
@@ -104,6 +105,9 @@ def do_setup_oauth(force: bool = False, **_kwargs: Any) -> dict[str, Any]:
                 }
             stale_creds_diagnostic = str(e)
         else:
+            gap = _scope_gap(client)
+            if gap["missing"]:
+                return _missing_scopes_result(gap["missing"])
             return {
                 "operation": "setup_oauth",
                 "status": "already_authenticated",
@@ -117,6 +121,7 @@ def do_setup_oauth(force: bool = False, **_kwargs: Any) -> dict[str, Any]:
                 "cues": with_identity({
                     "token_location": str(override_path() or TOKEN_FILE),
                     **describe_store(TOKEN_FILE),
+                    **({"scopes_unchecked": gap["unchecked"]} if "unchecked" in gap else {}),
                 }),
             }
 
@@ -248,4 +253,42 @@ def do_setup_oauth(force: bool = False, **_kwargs: Any) -> dict[str, Any]:
         "url": auth_url,
         "message": message,
         "cues": cues,
+    }
+
+
+def _scope_gap(client: Any) -> dict[str, Any]:
+    """Compare the live grant with what this mise asks for (mise-tageda).
+
+    A token that loads is not a token that can do everything: one minted before
+    a scope was added keeps working for the rest, and each capability used to
+    teach the re-consent only on its own 403, one at a time. Fails open with
+    the reason — a scope check must never stop a working token being reported.
+    """
+    import httpx
+
+    from adapters.token_scopes import granted_scopes
+    try:
+        granted = granted_scopes(client)
+    except httpx.HTTPError as e:
+        return {"missing": [], "unchecked": f"couldn't ask Google which scopes the token holds ({e})"}
+    return {"missing": [s for s in SCOPES if s not in granted]}
+
+
+def _missing_scopes_result(missing: list[str]) -> dict[str, Any]:
+    lines = [f"{s.rsplit('/', 1)[-1]} (needed for {SCOPE_PURPOSE[s]})" for s in missing]
+    return {
+        "operation": "setup_oauth",
+        "status": "authenticated_missing_scopes",
+        "missing_scopes": missing,
+        "message": (
+            f"The token works, but Google has not granted {len(missing)} of the "
+            f"scopes this mise asks for: {'; '.join(lines)}. Everything else keeps "
+            "working. To add them, call setup_oauth with force=true and approve "
+            "the consent screen — then start a NEW session, because a server "
+            "that is already running keeps its old grant (mise-tehulu)."
+        ),
+        "cues": with_identity({
+            "token_location": str(override_path() or TOKEN_FILE),
+            **describe_store(TOKEN_FILE),
+        }),
     }

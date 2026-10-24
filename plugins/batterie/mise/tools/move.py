@@ -143,49 +143,67 @@ def _do_batch_move(
     }
 
 
-@with_retry(max_attempts=3, delay_ms=1000)
 def _move_file(
     file_id: str,
     destination_folder_id: str,
     dest_meta: dict[str, Any] | None = None,
 ) -> DoResult:
-    """Move via addParents/removeParents on files().update()."""
-    client = get_sync_client()
+    """Move via addParents/removeParents on files().update().
 
-    if dest_meta is None:
-        dest_meta = _get_dest_meta(destination_folder_id)
+    The parents are read ONCE, outside the PATCH's retries: previous_parents
+    is the only undo record, and a re-read after a PATCH that landed before
+    its 503 would report the destination itself as the origin (essayeur,
+    2026-10-24). With the original parents fixed, a retried PATCH sends the
+    same add/remove and lands in the same state.
+    """
+    dest_meta, current_parents = _read_move_state(file_id, destination_folder_id, dest_meta)
+    origin = [p for p in current_parents if p != destination_folder_id]
+    updated = _patch_parents(file_id, destination_folder_id, origin)
 
-    # Get current parents so we can remove them
-    current = client.get_json(
-        f"{_DRIVE_API}/{file_id}",
-        params={"fields": "id,name,parents,webViewLink", "supportsAllDrives": "true"},
-    )
-
-    current_parents = current.get("parents", [])
-    remove_parents = ",".join(current_parents) if current_parents else None
-
-    # Move: remove old parents, add new one
-    params: dict[str, Any] = {
-        "addParents": destination_folder_id,
-        "fields": "id,name,parents,webViewLink",
-        "supportsAllDrives": "true",
+    cues: dict[str, Any] = {
+        "destination_folder": dest_meta.get("name", destination_folder_id),
+        "destination_folder_id": destination_folder_id,
+        "previous_parents": origin,
     }
-    if remove_parents:
-        params["removeParents"] = remove_parents
-
-    updated = client.patch_json(
-        f"{_DRIVE_API}/{file_id}",
-        params=params,
-    )
-
+    if current_parents and not origin:
+        cues["already_in_destination"] = (
+            "The file was already in the destination before this call — an "
+            "earlier attempt likely landed — so its original parents are unknown."
+        )
     return DoResult(
         file_id=updated["id"],
         title=updated.get("name", ""),
         web_link=updated.get("webViewLink", ""),
         operation="move",
-        cues={
-            "destination_folder": dest_meta.get("name", destination_folder_id),
-            "destination_folder_id": destination_folder_id,
-            "previous_parents": current_parents,
-        },
+        cues=cues,
     )
+
+
+@with_retry(max_attempts=3, delay_ms=1000, idempotent=True)
+def _read_move_state(
+    file_id: str, destination_folder_id: str, dest_meta: dict[str, Any] | None,
+) -> tuple[dict[str, Any], list[str]]:
+    """Destination check (when not done by the caller) and the file's current parents."""
+    if dest_meta is None:
+        dest_meta = _get_dest_meta(destination_folder_id)
+    current = get_sync_client().get_json(
+        f"{_DRIVE_API}/{file_id}",
+        params={"fields": "id,name,parents,webViewLink", "supportsAllDrives": "true"},
+    )
+    parents: list[str] = current.get("parents", [])
+    return dest_meta, parents
+
+
+# Idempotent: the parents to remove are fixed before the first attempt, so a
+# repeat sends the same add/remove and lands in the same state
+@with_retry(max_attempts=3, delay_ms=1000, idempotent=True)
+def _patch_parents(file_id: str, destination_folder_id: str, remove: list[str]) -> dict[str, Any]:
+    params: dict[str, Any] = {
+        "addParents": destination_folder_id,
+        "fields": "id,name,parents,webViewLink",
+        "supportsAllDrives": "true",
+    }
+    if remove:
+        params["removeParents"] = ",".join(remove)
+    updated: dict[str, Any] = get_sync_client().patch_json(f"{_DRIVE_API}/{file_id}", params=params)
+    return updated

@@ -54,7 +54,7 @@ def do_rename(
         return {"error": True, "kind": e.kind.value, "message": e.message}
 
 
-@with_retry(max_attempts=3, delay_ms=1000)
+@with_retry(max_attempts=3, delay_ms=1000, idempotent=True)
 def _rename_file(file_id: str, title: str) -> DoResult:
     """Rename via files update with name body field."""
     client = get_sync_client()

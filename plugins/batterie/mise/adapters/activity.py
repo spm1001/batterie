@@ -168,7 +168,39 @@ def _activity_id(activity: dict[str, Any], timestamp: str, target: Any) -> str:
     return activity.get("name") or f"{timestamp}|{target.file_id}"
 
 
-@with_retry(max_attempts=3, delay_ms=1000)
+def _cap_page(
+    activities: list[CommentActivity],
+    page_size: int,
+    has_next_page: bool,
+    warnings: list[str],
+) -> list[CommentActivity]:
+    """Hold Google to the page size the caller asked for.
+
+    Drive Activity's `pageSize` is "the minimum number of activities desired in
+    the response" (discovery doc), and live it over-delivers about fourfold —
+    pageSize 3 returned 12, pageSize 1 returned 4 (2026-10-24, mise-sofore). So
+    the cap is ours to enforce. Trimming is disclosed, and because the page token
+    Google hands back continues AFTER the trimmed rows, the warning names that
+    skip: there is no offset to resume from inside a page.
+    """
+    if len(activities) <= page_size:
+        return activities
+    dropped = len(activities) - page_size
+    note = (
+        f"Drive Activity returned {len(activities)} activities for page_size "
+        f"{page_size} (Google treats pageSize as a minimum); kept the first "
+        f"{page_size} as returned."
+    )
+    where = (
+        "next_page_token skips the" if has_next_page
+        else "This was the last page, so nothing pages on to the"
+    )
+    note += f" {where} {dropped} trimmed; ask for a larger page_size to see them."
+    warnings.append(note)
+    return activities[:page_size]
+
+
+@with_retry(max_attempts=3, delay_ms=1000, idempotent=True)
 def search_comment_activities(
     page_size: int = 50,
     page_token: str | None = None,
@@ -182,7 +214,8 @@ def search_comment_activities(
     - Comment threads you've participated in
 
     Args:
-        page_size: Number of activities per page (max 100)
+        page_size: Most activities per page (max 100), enforced here because
+            Google treats it as a minimum (see _cap_page)
         page_token: Pagination token for next page
 
     Returns:
@@ -234,14 +267,15 @@ def search_comment_activities(
             )
         )
 
+    next_token = response.get("nextPageToken")
     return ActivitySearchResult(
-        activities=activities,
-        next_page_token=response.get("nextPageToken"),
+        activities=_cap_page(activities, body["pageSize"], bool(next_token), warnings),
+        next_page_token=next_token,
         warnings=warnings,
     )
 
 
-@with_retry(max_attempts=3, delay_ms=1000)
+@with_retry(max_attempts=3, delay_ms=1000, idempotent=True)
 def get_file_activities(
     file_id: str,
     page_size: int = 50,
@@ -252,7 +286,8 @@ def get_file_activities(
 
     Args:
         file_id: Drive file ID
-        page_size: Number of activities per page (max 100)
+        page_size: Most activities per page (max 100), enforced here because
+            Google treats it as a minimum (see _cap_page)
         filter_type: Activity type filter:
             - "comments": Comment-related activities only
             - "edits": Edit-related activities only
@@ -347,8 +382,9 @@ def get_file_activities(
             )
         )
 
+    next_token = response.get("nextPageToken")
     return ActivitySearchResult(
-        activities=activities,
-        next_page_token=response.get("nextPageToken"),
+        activities=_cap_page(activities, body["pageSize"], bool(next_token), warnings),
+        next_page_token=next_token,
         warnings=warnings,
     )

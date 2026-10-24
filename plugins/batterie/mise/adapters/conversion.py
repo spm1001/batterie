@@ -50,7 +50,9 @@ EXPORT_MIMES = {
 }
 
 
-@with_retry(max_attempts=3, delay_ms=1000)
+# Idempotent: the only write is a scratch temp copy, deleted below; a repeat
+# can orphan one _mise_temp_ file, never a second copy of anything the user made
+@with_retry(max_attempts=3, delay_ms=1000, idempotent=True)
 def convert_via_drive(
     file_bytes: bytes | None = None,
     source_mime: str = "",
@@ -147,7 +149,9 @@ def convert_via_drive(
     )
 
 
-@with_retry(max_attempts=3, delay_ms=1000)
+# Idempotent: the only write is a scratch temp copy; a repeat can orphan one
+# _mise_temp_ file, never a second copy of anything the user made
+@with_retry(max_attempts=3, delay_ms=1000, idempotent=True)
 def upload_and_convert(
     file_bytes: bytes | None = None,
     source_mime: str = "",

@@ -77,7 +77,7 @@ def _quotes(part: dict[str, Any]) -> bool | None:
     return None if None in answers else False
 
 
-@with_retry(max_attempts=3, delay_ms=1000)
+@with_retry(max_attempts=3, delay_ms=1000, idempotent=True)
 def get_draft_attachments(draft_id: str) -> tuple[str, list[dict[str, Any]], bool | None]:
     """(message_id, attachment parts, body already quotes?) of a stored draft; bodies not downloaded.
 

@@ -20,6 +20,61 @@ from html.parser import HTMLParser
 import markdown
 
 
+# A top-level ordered-list marker as python-markdown reads one: up to three
+# spaces of indent, digits, a dot, a space.
+_OL_ITEM = re.compile(r"^( {0,3})(\d+)\.(?=[ \t])")
+# A code fence line. This renderer has no fenced_code extension, so a fenced
+# block becomes a code span, where a backslash escape shows literally.
+_FENCE = re.compile(r"^ {0,3}(`{3,}|~{3,})")
+
+
+def _keep_author_numbering(content: str) -> str:
+    """Escape the markers of any ordered list not numbered 1, 2, 3, …
+
+    Markdown keeps only a list's first number, so paragraphs an author numbered
+    3, 5 and 8 — answers keyed to someone else's points — became one <ol> a
+    mail client renders as consecutive numbers, and the reader matched each
+    answer to the wrong point (mise-retuvu). `start=` / `value=` would carry
+    the numbers only as far as a client honours them; escaping the dot
+    (`3\\.`) keeps them as literal text in every client, and the text/plain
+    part already carries them as written. A list that counts from 1 stays a
+    real list.
+
+    A run is the item lines plus what python-markdown would fold into them:
+    blank lines, indented continuation, and lazy continuation right after a
+    non-blank line. A non-indented, non-item line after a blank line ends it.
+    Lines inside a ``` or ~~~ fence are never markers (an escape there would
+    show as a literal backslash); indented code never matches _OL_ITEM.
+    """
+    lines = content.split("\n")
+    runs: list[list[tuple[int, int]]] = []  # each run: (line index, number) per item
+    current: list[tuple[int, int]] = []
+    prev_blank = True
+    fence: str | None = None  # the open fence's marker characters, if inside one
+    for i, line in enumerate(lines):
+        blank = not line.strip()
+        marker = _FENCE.match(line)
+        in_code = fence is not None or marker is not None
+        if marker and fence is None:
+            fence = marker.group(1)
+        elif marker and fence and marker.group(1)[0] == fence[0] and len(marker.group(1)) >= len(fence):
+            fence = None  # a closing fence: same character, at least as long
+        item = None if in_code else _OL_ITEM.match(line)
+        if item:
+            current.append((i, int(item.group(2))))
+        elif current and not blank and prev_blank and not line.startswith(("    ", "\t")):
+            runs.append(current)
+            current = []
+        prev_blank = blank
+    if current:
+        runs.append(current)
+    for run in runs:
+        if [n for _, n in run] != list(range(1, len(run) + 1)):
+            for i, _ in run:
+                lines[i] = _OL_ITEM.sub(r"\1\2\\.", lines[i], count=1)
+    return "\n".join(lines)
+
+
 def markdown_to_html(content: str) -> str:
     """
     Render markdown to HTML for an email body. Pure, no I/O.
@@ -39,9 +94,12 @@ def markdown_to_html(content: str) -> str:
     an untrusted-input boundary. Do NOT add output escaping/sanitising to
     "harden" it: that re-breaks table and bold rendering (the bug this fixes).
     Bare ampersands are still entity-escaped (& → &amp;).
+
+    An ordered list not numbered from 1 keeps the author's numbers as literal
+    text rather than becoming an auto-numbered list (_keep_author_numbering).
     """
     return markdown.markdown(
-        content,
+        _keep_author_numbering(content),
         extensions=["tables", "nl2br", "sane_lists"],
         output_format="html",
     )

@@ -83,12 +83,22 @@ def _preview_get(url: str, fields: str, surface: str, container: str) -> AnchorR
         )
     except httpx.HTTPStatusError as e:
         status = e.response.status_code
-        detail = (
-            " — the anchored-comments Developer Preview is granted per registered "
+        enrollment = (
+            "the anchored-comments Developer Preview is granted per registered "
             "account and Cloud project, so an unenrolled caller sees this"
-            if status in (400, 403, 404)
-            else ""
         )
+        if status == 404:
+            # An enrolled caller gets a bare 404 for a missing file, the same
+            # body as the plain read (measured 2026-10-24, mise-sofore), so the
+            # file is the likelier cause and leads.
+            detail = (
+                " — the file was not found or is not visible to this account; "
+                f"if it is, {enrollment}"
+            )
+        elif status in (400, 403):
+            detail = f" — {enrollment}"
+        else:
+            detail = ""
         return AnchorRead(
             reason=f"the {surface} anchored-comments preview read returned "
                    f"HTTP {status}{detail}"

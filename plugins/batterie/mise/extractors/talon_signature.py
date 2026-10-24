@@ -16,7 +16,10 @@ from dataclasses import dataclass
 # which re (stdlib) doesn't support. The regex module does. If this becomes a perf
 # concern (backtracking), we'd need to rewrite the pattern without named groups.
 import regex as re
-from extractors.signature_guards import has_anchored_link, is_texty, link_loss_warnings
+from extractors.signature_guards import (
+    REPLY_PREAMBLE, drop_orphaned_preamble, has_anchored_link, is_texty,
+    link_loss_warnings, revert_if_catastrophic,
+)
 
 log = logging.getLogger(__name__)
 
@@ -40,11 +43,13 @@ def get_delimiter(msg_body: str) -> str:
 
 # --- Regex patterns (from talon/signature/bruteforce.py) ---
 
-# Regex to fetch signature based on common signature words
+# Regex to fetch signature based on common signature words. Departs from
+# talon: '-' then words is a bullet, not a delimiter; '--' then a name still
+# is. Under CRLF the original never matched, so real mail never saw it (mise-pugina).
 RE_SIGNATURE = re.compile(r'''
     (
         (?:
-            ^[\s]*--*[\s]*[a-z \.]*$
+            ^[\s]*(?:--+[\s]*[a-z \.]*|-[\s]*)$
             |
             ^thanks[\s,!]*$
             |
@@ -343,10 +348,6 @@ def strip_signature(msg_body: str) -> str:
     return body
 
 
-_RE_REPLY_PREAMBLE = re.compile(
-    r'^On .{10,80} wrote:\s*$', re.MULTILINE
-)
-
 _RE_URL = re.compile(r'https?://|<http')
 _RE_PHONE = re.compile(
     r'(?:phone|tel|mob(?:ile)?|cell|direct|office)\s*[:.]?\s*\+?[\d\s\(\)\-]{7,}',
@@ -359,21 +360,6 @@ _RE_PHONE = re.compile(
 # the heuristic likely truncated through real content (the Outlook-reply
 # bug fixed in 2026-05).
 _AGGRESSIVE_STRIP_RATIO = 0.20
-
-# Catastrophic-strip REVERT thresholds (mise-rejula, 2026-07). Warning alone
-# wasn't enough: a single-message briefing was cut to 6% at an early section
-# header and the eaten body was unrecoverable through mise. When signature/
-# contact stripping BOTH keeps less than _REVERT_RATIO of the pre-signature
-# body AND removes more than _REVERT_MIN_CHARS in absolute terms, revert to
-# the un-stripped body — the heuristic almost certainly ate real content.
-# The absolute floor is load-bearing: it distinguishes a genuine compact
-# signature (a few hundred chars, correctly stripped) from an eaten payload,
-# so short-reply-plus-signature cases are NOT reverted. Do NOT drop the floor
-# to a pure ratio guard — that re-adds signatures to short replies. Under-
-# stripping a signature is far safer than eating the body (see the walk-
-# backwards rationale in _strip_trailing_contact_block).
-_REVERT_RATIO = 0.35
-_REVERT_MIN_CHARS = 1000
 
 
 def _strip_trailing_contact_block(body: str) -> tuple[str, list[str]]:
@@ -401,16 +387,12 @@ def _strip_trailing_contact_block(body: str) -> tuple[str, list[str]]:
     keep the first-name line as a content boundary (acceptable —
     under-stripping is safer than over-stripping content).
 
-    Also strips orphaned reply preambles ("On ... wrote:").
-
     Returns (stripped_body, warnings). A warning is emitted when the
     strip removes >80% of the body — silent body-eating must be visible.
     """
     warnings: list[str] = []
     original_len = len(body)
-
-    # First: strip orphaned reply preamble left after quote removal
-    body = _RE_REPLY_PREAMBLE.sub('', body).rstrip()
+    body = REPLY_PREAMBLE.sub('', body).rstrip()  # any preamble talon had to keep
 
     lines = body.split('\n')
     if len(lines) < 5:
@@ -463,7 +445,7 @@ def strip_signature_and_quotes(msg_body: str) -> tuple[str, list[str]]:
 
     Pipeline:
     0. Split off forwarded sections (unique content from outside the thread)
-    1. Strip quoted lines (>) from own content only
+    1. Strip quoted lines (>) and an orphaned "On ... wrote:" from own content
     2. Detect and strip signature (talon) from own content
     3. Strip trailing URL-dense contact blocks from own content
     4. Reassemble with forwarded sections using delimiter
@@ -480,32 +462,23 @@ def strip_signature_and_quotes(msg_body: str) -> tuple[str, list[str]]:
     Returns (cleaned_body, warnings). Warnings surface aggressive strips
     (>80% reduction) so silent body-eating is detectable upstream.
     """
+    # Real Gmail plain parts are CRLF, and talon's `$` (MULTILINE) never matches
+    # before '\r' — so a '-- Name' line went unseen in production while every
+    # LF test passed (mise-pugina). One normalisation; every step below is LF.
+    msg_body = msg_body.replace('\r\n', '\n')
+
     # Step 0: split off forwarded sections before any stripping
     own_content, forwarded = split_forward_sections(msg_body)
 
     # Steps 1-3: strip own content only
-    without_quotes = strip_quoted_lines(own_content)
+    # An orphaned preamble goes before talon; one heading inline answers stays.
+    without_quotes = drop_orphaned_preamble(strip_quoted_lines(own_content))
     body, _ = extract_signature(without_quotes)
     body, warnings = _strip_trailing_contact_block(body)
 
-    # Safety net (mise-rejula): if signature/contact stripping ate the body,
-    # revert to the un-stripped (post-quote) content. Baseline is without_quotes
-    # — quote removal is legitimate, so we measure only what the signature/
-    # contact steps removed. Fires only when BOTH the kept ratio is extreme AND
-    # the absolute removal is large (see the threshold constants above).
-    baseline_len = len(without_quotes)
-    removed = baseline_len - len(body)
-    if (
-        baseline_len > 0
-        and removed > _REVERT_MIN_CHARS
-        and len(body) / baseline_len < _REVERT_RATIO
-    ):
-        warnings.append(
-            f"Signature stripping removed {removed} chars "
-            f"({100 * len(body) / baseline_len:.0f}% kept) — reverted to full "
-            f"body to avoid eating content"
-        )
-        body = without_quotes
+    # Safety net (mise-rejula): measured against the post-quote body, because
+    # quote removal is legitimate. Thresholds and rationale: signature_guards.
+    body, warnings = revert_if_catastrophic(without_quotes, body, warnings)
 
     # Step 4: reassemble with forwarded sections
     if forwarded:

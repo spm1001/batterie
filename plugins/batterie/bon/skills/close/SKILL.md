@@ -58,7 +58,7 @@ BON_SCRIPTS=$(ls -1d ~/.claude/plugins/cache/*/batterie/*/bon/scripts 2>/dev/nul
 
 If the script isn't found either way, diagnose with `find ~/.claude/plugins/cache -name "close-context.sh"`. If unfixable, gather context manually — but closure should always result in a handoff, even without the script.
 
-The script outputs TIME, GIT, BON, LOCATION context, plus the values you'll need in Act: **HANDOFF_DIR**, **SESSION_ID** and **HANDOFF_FILE**. Six companion keys appear only when they apply, and each one changes what you do:
+The script outputs TIME, GIT, BON, LOCATION context, plus the values you'll need in Act: **HANDOFF_DIR**, **SESSION_ID** and **HANDOFF_FILE**. Companion keys appear only when they apply, and each one changes what you do:
 
 | Key | Meaning | What to do |
 |---|---|---|
@@ -67,7 +67,10 @@ The script outputs TIME, GIT, BON, LOCATION context, plus the values you'll need
 | `HANDOFF_MIGRATED=<n>` (with `HANDOFF_MIGRATED_DEST`) | This repo still had handoffs in the retired `.bon/handoffs/`; the script moved them to the visible `handoffs/` (bon-sedoze) | **Stage the move in your commit** — `git mv` staged it for tracked files, but an untracked pile is now sitting as new files. Mention it in one line: their history just changed location |
 | `HANDOFF_MIGRATE_INCOMPLETE=true` | At least one legacy handoff could not be moved | Those files are no longer read by anything. Say so plainly and move them by hand — don't let it pass as a detail |
 | `BRIDGE_UNCLOSED=<file>` (with `BRIDGE_CUE`) | This repo holds an id-migration bridge doc with no dated close-out (bon-kefoba) | If the migration has landed, append one dated `Closed out YYYY-MM-DD` section saying what landed and leave the text above it alone — it is the record of what was true then. If it hasn't landed, say so in one line and move on. A bridge doc is the first thing a future reader consults about a retired id, so one still reading as in-flight sends them to do work already done |
-| `HANDOFF_DIR_SOURCE=global-fallback` | No board was found, so the handoff goes to `~/.bon/handoffs` | It won't sync anywhere. Say so, and consider whether it belongs on a real board instead |
+| `HANDOFF_DIR_SOURCE=oriented:<path>` | The launch dir has no board of its own (`~`, an owner bucket, scratch), and this session declared a site at /open (the breadcrumb in `~/.claude/state/oriented/<session id>`), so the handoff goes to that site's `handoffs/` (bon-babano). A launch inside a board ignores the breadcrumb and keeps the cwd walk, which already knows the room | Normally just use it: it is the site the first reply named. If the work moved on after the last declaration, place by the work, as below |
+| `HANDOFF_DIR_SOURCE=cwd-handoffs` | No board, but the launch dir keeps its own visible `handoffs/` — the same dir the next `/open` there reads | Normally just use it |
+| `ORIENTED_CUE=…` (with `oriented:`) | The GIT, BON and BOARD MOTION sections describe the launch dir, not the declared site the handoff is going to | Run the site's board and git steps with `cd <site>`; don't read an empty BON section as board-less mode |
+| `HANDOFF_DIR_SOURCE=global-fallback` | No board was found, or the launch was `~` with no declared site, so the handoff goes to the office diary, `~/.bon/handoffs` | It won't sync anywhere. Say so, and if the session was really about one repo or room, write it there instead |
 | `HANDOFF_DIR_SOURCE=ambiguous` (with `HANDOFF_CANDIDATE` lines, **no `HANDOFF_DIR`**) | Cwd is outside any board repo and several sibling repos sit below it — the script refuses to guess among them (bon-gojeni: recency picks whichever repo the last publish touched, not where you worked) | Placement is **work-based**: pick the candidate this session actually worked in (you know; the script can't), and write `HANDOFF_FILE` into that repo's visible `handoffs/` — the room you worked in if it has one, else the repo root. If the session's work matches none of the candidates, `~/.bon/handoffs` is the honest fallback — say so |
 
 ### Which mode are you in?

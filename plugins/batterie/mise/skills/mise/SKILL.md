@@ -473,7 +473,7 @@ search("orgTitle='Head of Strategy'", sources=["people"], base_path="...")
 | `overwrite` | Replace full file content (Google Doc or plain file; Sheets: CSV content, `range=` aims a tab or cells; Forms: YAML/JSON spec replaces all questions) | `file_id`, `content` OR `source` OR `file_path` (bytes as-is for plain files: PDF, PNG…, id kept) |
 | `prepend` | Insert at start of file | `file_id`, `content` |
 | `append` | Insert at end of file — or, with `tab='Title'`, place content in a NEW Google Doc tab | `file_id`, `content`, optional `tab` |
-| `replace_text` | Find-and-replace in file — applies across ALL tabs, Docs and Sheets alike (probed 2026-08-24) | `file_id`, `find`, `content` |
+| `replace_text` | Find-and-replace in file — applies across ALL tabs, Docs and Sheets alike (probed 2026-08-24) | `file_id`, `find`, `content`; `remove=True` instead of `content` deletes |
 | `draft` | Compose a new Gmail draft — or update an existing one in place | `to`, `subject`, `content`, optional `include` (Drive file IDs); update: `file_id` (draft ID) + `content` |
 | `reply_draft` | Reply draft in an existing thread, quoting the message it answers | `file_id` (thread ID), `content`, optional `include`, `to=` to override the inferred recipient, `quote='none'` to leave it bare |
 | `respond` | Accept/decline/tentative a calendar invite — the RSVP lands live, organiser sees it | `file_id` (invite thread ID or Calendar event ID), `action` (`accept`/`decline`/`tentative`) |
@@ -713,8 +713,9 @@ do(operation="prepend", file_id="1abc...", content="DRAFT — Do not circulate\n
 # Find and replace (case-sensitive, all occurrences)
 do(operation="replace_text", file_id="1abc...", find="Q3", content="Q4", base_path="...")
 
-# Delete matched text (replace with empty string)
-do(operation="replace_text", file_id="1abc...", find="DRAFT — ", content="", base_path="...")
+# Delete matched text. Use remove=True, not content="": Claude Code drops an
+# empty-string argument, and replace_text with no content refuses rather than deletes.
+do(operation="replace_text", file_id="1abc...", find="DRAFT — ", remove=True, base_path="...")
 ```
 
 `replace_text` response includes `cues.occurrences_changed`. A zero-match call now also
@@ -795,6 +796,8 @@ PDFs and images are extracted eagerly. **Office files (DOCX/XLSX/PPTX) are skipp
 ```python
 fetch("thread_id", attachment="budget.xlsx", base_path="...")
 ```
+
+Pass the `fetch_as` value from `skipped_office` (the hint prints it), not the filename: two versions of `proposal.docx` on different messages are `proposal.docx` and `proposal-2.docx`, and each entry's `date` (the carrying message's, UTC) says which is newer. `probable_duplicate_of` marks a same-name, same-size repeat: usually the same file re-sent, but fetch it if the version matters.
 
 See `references/deposit-structure.md` for the full attachment layout.
 
@@ -943,6 +946,8 @@ Draft-only — Claude composes, the user reviews and sends from Gmail. This is a
 
 Both draft ops auto-append the user's Gmail signature (from their sendAs settings, links intact) to the body. **Don't write a sign-off in `content`** — no "Best regards, ..." — end at the last sentence; the real signature lands below it. The `signature` cue in the response confirms it was appended.
 
+**`content` is markdown, and a numbered list only stays a list when it counts from 1.** Paragraphs you number `3.`, `5.`, `8.` (answers keyed to someone's points) keep those numbers as plain text in the HTML part, rather than becoming a list Gmail renumbers 1, 2, 3. The text/plain part always carries `content` as written.
+
 **Reply drafts quote the message they answer**, beneath the signature, as Gmail's own Reply does (`cues.quoted` says so). That message already nests the ones before it, so the recipients — including anyone newly cc'd, or reading on a client that doesn't stitch conversations — see the chain. The quote is built from the original message, not from what `fetch` showed you, so the history fetch strips for your reading is still there for theirs. Two warnings can ride along: inline images in the quoted message become their alt text, and the answered message may quote none of the thread's earlier ones (a bare reply, often one of mise's own before Oct 2026), in which case the chain stops there — mention what a newcomer needs in your reply. An update keeps a reply draft as it was, quoted or bare (so a quote the user deleted in Gmail stays deleted); `quote='last'` adds one, `quote='none'` removes one. Pass `quote='none'` only when the user wants a bare reply.
 
 **Check who a reply draft is addressed to before you report it.** It answers the last LIVE message in the thread (trashed ones are skipped) and its result states `to`, `cc` and `reply_anchor`. If that last message was an internal aside, the inferred To is your colleague, not the correspondent: a warning names the thread's originator when they are missing, and `to=` (plus `cc=`) sets the addressing explicitly.
@@ -973,18 +978,19 @@ Both draft ops auto-append the user's Gmail signature (from their sendAs setting
 
 ### A failed write may already have happened
 
-The server retries by itself: up to 3 attempts, with backoff, on a 429, any 5xx, a timeout or a dropped connection (`retry.py`, read 2026-10-22). That is right for reads. For a write it means an error can arrive **after** Google did the work, once or more than once: a 503 or a timeout doesn't say whether the request landed.
+The server retries reads by itself: up to 3 attempts, with backoff, on a 429, any 5xx, a timeout or a dropped connection. Writes that would duplicate if repeated (the "No" rows below, plus `share`, `update_event` and `replace_text`) are retried **only on a 429**, where Google refused and nothing landed (`retry.py`, `idempotent=False`, since 2026-10-24, mise-rujopa; every retried function now declares which kind it is, mise-covubi). So an error from one of those means the write landed **once or not at all**: a 503 or a timeout doesn't say which. When that is the case the error message says "This write may have landed" (mise-nivode); a `comment` or `comment_reply` that hits a 5xx says it too.
 
 | Operation | Safe to repeat? | After an error or unclear result |
 |---|---|---|
 | `overwrite`, `rename`, `move`, `archive`, `star`, `label`, `trash`, `respond` | Yes: the same call lands in the same state | Retry |
 | `replace_text` | Yes, unless the replacement contains the find text | Retry, or fetch and check |
-| `share` | Yes for the permission; Google may email the person again | Check the sharing panel before repeating with `confirm=True` |
+| `share` | Partly: the permission ends the same, but a non-Google address gets Google's required notification email again (Google accounts are shared with no email) | Check the sharing panel before repeating with `confirm=True` |
 | `create`, `copy` | No: a repeat makes a second file | `search` for the title in the folder first |
 | `prepend`, `append` | No: a repeat doubles the text | Fetch the doc and look |
 | `draft`, `reply_draft` | No: a repeat makes a second draft (`reply_draft` refuses if the thread already has one, which is your check) | Search drafts, or retry `reply_draft` and let it refuse |
 | `comment`, `comment_reply` | No: a repeat posts twice | Fetch and read `comments.md` |
-| `create_event` with `confirm=True` | **No: a repeat books a second event and sends every invite again** | List the calendar for that window before anything else |
+| `create_event` with `confirm=True` | **No: a repeat from you books a second event and sends every invite again.** The server's own retries are safe (each insert carries its own event id, so a landed one comes back as a duplicate and is fetched; `cues.insert_recovered` says so), but your repeat mints a new id | List the calendar for that window before anything else; the error's `event_id` is the id to look for |
+| `update_event` | Yes for the event; a structural change emails attendees again | Fetch the event and compare before repeating |
 
 So for the "No" rows, one attempt from you. If the answer is unclear, look before you act again, and tell the user which state you found.
 

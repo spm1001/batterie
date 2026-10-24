@@ -10,6 +10,7 @@ import time
 from functools import wraps
 from typing import TypeVar, Callable, Any, ParamSpec, Awaitable, cast
 
+import httpx
 from google.auth.exceptions import RefreshError as GoogleRefreshError
 from google.auth.exceptions import TransportError as GoogleTransportError
 
@@ -28,6 +29,18 @@ RETRYABLE_EXCEPTIONS: tuple[type[Exception], ...] = (
     # google-auth's "couldn't reach the token endpoint" — raised by our own
     # refreshes and, since jeton 1.5, by load_credentials (jeton-vajiro)
     GoogleTransportError,
+    # httpx's timeouts, connect and protocol errors. They do NOT subclass the
+    # builtins above (ReadTimeout is not a TimeoutError), so until mise-nivode
+    # a timeout on a read was neither retried nor called a network error.
+    httpx.TransportError,
+)
+
+# Failures after which a write's request may have reached Google: no answer
+# came back (a timeout, a dropped connection) or the answer was a 5xx. The
+# google-auth faults are absent on purpose — they fire before the request
+# is sent.
+_AMBIGUOUS_EXCEPTIONS: tuple[type[Exception], ...] = (
+    ConnectionError, TimeoutError, httpx.TransportError,
 )
 
 # HTTP status codes that should trigger retry
@@ -108,14 +121,23 @@ def is_network_fault(exception: BaseException) -> bool:
     )
 
 
-def _should_retry(exception: Exception) -> bool:
-    """Determine if an exception is retryable."""
+def _should_retry(exception: Exception, idempotent: bool = True) -> bool:
+    """Determine if an exception is retryable.
+
+    A non-idempotent write retries only a 429: Google refused, so nothing
+    landed. A 5xx or a dropped connection can arrive after Google committed
+    the write, and a retry would book a second event or append text twice
+    (mise-rujopa).
+    """
+    status = _get_http_status(exception)
+    if not idempotent:
+        return status == 429
+
     # Check if it's a known retryable exception type
     if is_network_fault(exception):
         return True
 
     # Check for HTTP status code
-    status = _get_http_status(exception)
     if status is not None and status in RETRYABLE_STATUS_CODES:
         return True
 
@@ -153,6 +175,54 @@ def _convert_to_mise_error(exception: Exception) -> MiseError:
     return MiseError(ErrorKind.UNKNOWN, str(exception))
 
 
+def _may_have_landed(exception: BaseException) -> bool:
+    """Could the failed request have reached Google and committed?
+
+    True for a 5xx or no answer at all. A MiseError a site built for itself
+    counts by the http_status it recorded, else by the exception it was
+    raised from: drive's comment writes convert a 5xx to a MiseError inside
+    the decorated function (wave cold review, 2026-10-24).
+    """
+    if isinstance(exception, MiseError):
+        status = exception.details.get("http_status")
+        if isinstance(status, int):
+            return status >= 500
+        cause = exception.__cause__
+        return cause is not None and _may_have_landed(cause)
+    status = _get_http_status(exception) if isinstance(exception, Exception) else None
+    if status is not None:
+        return status >= 500
+    return isinstance(exception, _AMBIGUOUS_EXCEPTIONS)
+
+
+def as_may_have_landed(error: MiseError) -> MiseError:
+    """The same error, saying the write may have landed and not retryable.
+
+    A caller who obeys a retryable hint would repeat a write that may have
+    landed, which is the duplicate (mise-nivode). Public for write sites
+    outside with_retry (adapters/anchored_comments.py).
+    """
+    if error.details.get("may_have_landed"):
+        return error
+    return MiseError(
+        error.kind,
+        f"{error.message} | This write may have landed: the request could have "
+        f"reached Google before the failure. Check whether it took effect "
+        f"before repeating it.",
+        details={**error.details, "may_have_landed": True},
+        retryable=False,
+    )
+
+
+def _final_error(exception: Exception, idempotent: bool) -> MiseError:
+    """The MiseError raised when retries end; a non-idempotent write that may
+    have landed says so (as_may_have_landed)."""
+    error = _convert_to_mise_error(exception)
+    if idempotent or not _may_have_landed(exception):
+        return error
+    return as_may_have_landed(error)
+
+
 def _calculate_wait_with_jitter(
     base_delay_ms: int,
     attempt: int,
@@ -177,6 +247,8 @@ def with_retry(
     backoff_multiplier: float = 2.0,
     jitter_factor: float = 0.25,
     convert_errors: bool = True,
+    *,
+    idempotent: bool,
 ) -> Callable[[Callable[P, T]], Callable[P, T]]:
     """
     Retry decorator with exponential backoff and jitter.
@@ -187,12 +259,18 @@ def with_retry(
         backoff_multiplier: Multiplier for exponential backoff
         jitter_factor: Random jitter as fraction of wait (0.25 = ±25%)
         convert_errors: Convert exceptions to MiseError on final failure
+        idempotent: REQUIRED, no default (mise-covubi). True for reads and
+            for writes a repeat leaves in the same state; False for writes
+            that duplicate when repeated (inserts, appends, creates, shares,
+            comments) — then only a 429 is retried. Required so a new write
+            cannot inherit blind retries by forgetting the keyword;
+            tests/unit/test_retry_idempotent_declared.py finds every site
 
     Returns:
         Decorated function with retry logic
 
     Example:
-        @with_retry(max_attempts=3, delay_ms=1000)
+        @with_retry(max_attempts=3, delay_ms=1000, idempotent=True)
         def fetch_file(file_id: str):
             return service.files().get(fileId=file_id).execute()
     """
@@ -211,12 +289,12 @@ def with_retry(
                     last_exception = e
 
                     # Check if we should retry
-                    if not _should_retry(e) or attempt == max_attempts - 1:
+                    if not _should_retry(e, idempotent) or attempt == max_attempts - 1:
                         logger.error(
                             f"{func.__name__} failed after {attempt + 1} attempts: {e}"
                         )
                         if convert_errors:
-                            raise _convert_to_mise_error(e) from e
+                            raise _final_error(e, idempotent) from e
                         raise
 
                     # Calculate wait time with exponential backoff + jitter
@@ -229,7 +307,7 @@ def with_retry(
             # Should never reach here, but satisfy type checker
             assert last_exception is not None
             if convert_errors:
-                raise _convert_to_mise_error(last_exception) from last_exception
+                raise _final_error(last_exception, idempotent) from last_exception
             raise last_exception
 
         @wraps(func)
@@ -242,12 +320,12 @@ def with_retry(
                 except Exception as e:
                     last_exception = e
 
-                    if not _should_retry(e) or attempt == max_attempts - 1:
+                    if not _should_retry(e, idempotent) or attempt == max_attempts - 1:
                         logger.error(
                             f"{func.__name__} failed after {attempt + 1} attempts: {e}"
                         )
                         if convert_errors:
-                            raise _convert_to_mise_error(e) from e
+                            raise _final_error(e, idempotent) from e
                         raise
 
                     wait_ms = _calculate_wait_with_jitter(
@@ -259,8 +337,12 @@ def with_retry(
             # Should never reach here, but satisfy type checker
             assert last_exception is not None
             if convert_errors:
-                raise _convert_to_mise_error(last_exception) from last_exception
+                raise _final_error(last_exception, idempotent) from last_exception
             raise last_exception
+
+        # Marks the wiring so tests can check every write opted out of blind retries
+        async_wrapper.__mise_idempotent__ = idempotent  # type: ignore[attr-defined]
+        sync_wrapper.__mise_idempotent__ = idempotent  # type: ignore[attr-defined]
 
         # Return appropriate wrapper based on whether function is async
         if asyncio.iscoroutinefunction(func):

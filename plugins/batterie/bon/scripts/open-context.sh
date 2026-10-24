@@ -211,8 +211,10 @@ LATEST_STR=""
 # same flattening is why a filename HHMM outranks the mtime-derived one on
 # same-day ties (notes-sovike).
 # Emits "sortkey|path"; header-less files rank by mtime alone at the bottom.
-find_latest_in() {
-    local dir="$1" best_key="" best_file="" f d mt hm key
+# rank_handoffs_in emits one such line per handoff (unsorted); find_latest_in
+# keeps only the best. The office-diary menu (section 2) wants the top few.
+rank_handoffs_in() {
+    local dir="$1" f d mt hm
     [ -d "$dir" ] || return 0
     for f in "$dir"/*.md; do
         [ -e "$f" ] || continue
@@ -225,20 +227,68 @@ find_latest_in() {
         mt=$(file_mtime "$f")
         hm=$(basename "$f" | sed -n 's/^[0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}-\([0-9]\{4\}\)\(-.*\)\{0,1\}\.md$/\1/p')
         [ -z "$hm" ] && hm=$(epoch_hhmm "$mt")
-        key=$(printf '%s.%s.%012d' "$d" "$hm" "$mt")
-        if [ -z "$best_key" ] || [ "$key" \> "$best_key" ]; then
-            best_key="$key"
-            best_file="$f"
-        fi
+        printf '%s.%s.%012d|%s\n' "$d" "$hm" "$mt" "$f"
     done
-    # An if-block, NOT `[ -n "$best_file" ] && echo` — as the function's last
-    # command that idiom returns 1 on an empty dir, and `CANDIDATE=$(...)`
-    # under `set -euo pipefail` then kills this script before ANY briefing
-    # reaches stdout. session-start.sh wraps the call in `|| true`, so the
-    # symptom is a session that silently gets no briefing at all, every time.
-    # (lib-handoff.sh's header bans the same idiom for the same reason.)
-    if [ -n "$best_file" ]; then echo "${best_key}|${best_file}"; fi
     return 0
+}
+
+find_latest_in() {
+    # Stable reverse sort on the key alone: equal keys keep glob order, so the
+    # first file in the dir wins a tie, exactly as the old strict-> loop did.
+    # sed, not head: it drains the pipe, so no SIGPIPE under pipefail. Always
+    # returns 0 — `CANDIDATE=$(...)` under `set -euo pipefail` must never see a
+    # failure here, or the script dies before ANY briefing reaches stdout
+    # (session-start.sh's `|| true` hides that as a session with no briefing).
+    rank_handoffs_in "$1" | LC_ALL=C sort -t'|' -k1,1 -r -s | sed -n 1p
+    return 0
+}
+
+# --- The office diary is not this session's baton (bon-babano) ---
+# ~/.bon/handoffs is the catch-all for sessions about nothing in particular.
+# It used to compete on date with a board's own handoffs/, so whatever session
+# last closed at ~ became "Last session" everywhere: on 2026-10-24 a session
+# launched inside the bon repo was briefed on an unrelated mise close, Opportunities
+# and all. Two rules, both hook-mode only (--read-only keeps its own scopes):
+#   - a launch with any handoffs/ of its own (a board's, a room's, or a
+#     boardless repo's — four estate repos keep handoffs/ with no board) never
+#     reads the diary; the read-only collector's --scope board already
+#     excluded it for boards;
+#   - a launch with none (~, an owner bucket, scratch) whose newest handoff is
+#     a diary entry gets a short menu of recent threads in section 2 instead
+#     of HANDOFF=, and no Opportunities. HANDOFF= is the baton the /open sweep synthesises into
+#     understanding.md (skill step 1), so emitting a stranger's close there is
+#     the bug, not a label problem.
+GLOBAL_HANDOFFS="$HOME/.bon/handoffs"
+OWN_DIRS=$(printf '%s\n' "$READ_DIRS" | awk -v global="$GLOBAL_HANDOFFS" 'NF && $0 != global')
+if [ "$READ_ONLY" -eq 0 ] && [ -n "$OWN_DIRS" ]; then
+    READ_DIRS="$OWN_DIRS"
+fi
+DIARY_MAX=3
+
+# handoff_age KEY FILE -> "2h ago", "yesterday", "5d ago".
+# Age comes from the HEADER date, not mtime: a clone flattens every mtime to
+# checkout time, so mtime-age reads as days-since-clone — a 2026-03-30 handoff
+# was shown as "26d ago" (bon-wakaju). mtime keeps the finer granularity when
+# its calendar day agrees with the header.
+handoff_age() {
+    local key="$1" file="$2" t hdr_day hdr_epoch
+    t=$(file_mtime "$file")
+    hdr_day="${key%%.*}"
+    if [ "$hdr_day" != "0000-00-00" ] && [ "$(epoch_day "$t")" != "$hdr_day" ]; then
+        hdr_epoch=$(date_to_epoch "$hdr_day" 2>/dev/null || true)
+        if [ -n "$hdr_epoch" ]; then t="$hdr_epoch"; fi
+    fi
+    time_ago $((NOW - t))
+}
+
+# handoff_purpose FILE -> the frontmatter purpose line, else the first Done bullet.
+handoff_purpose() {
+    local p
+    p=$(grep "^purpose:" "$1" 2>/dev/null | head -1 | cut -d: -f2- | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' || true)
+    if [ -z "$p" ]; then
+        p=$(grep -A1 "^## Done" "$1" 2>/dev/null | tail -1 | sed 's/^- //' | cut -c1-60 || true)
+    fi
+    printf '%s\n' "$p"
 }
 
 # Rank the latest handoff across every candidate dir (de-duplicated, order
@@ -258,24 +308,21 @@ while IFS= read -r HDIR; do
     fi
 done <<< "$READ_DIRS"
 
+DIARY_LINES=""
+if [ "$READ_ONLY" -eq 0 ] && [ -z "$OWN_DIRS" ] && [ -n "$LATEST_FILE" ] \
+    && [ "$(dirname "$LATEST_FILE")" = "$GLOBAL_HANDOFFS" ]; then
+    while IFS= read -r ROW; do
+        [ -n "$ROW" ] || continue
+        DPATH="${ROW#*|}"
+        DPURPOSE=$(handoff_purpose "$DPATH" | awk '{ if (length($0) > 140) print substr($0, 1, 139) "…"; else print }')
+        DIARY_LINES="${DIARY_LINES}  $(handoff_age "${ROW%%|*}" "$DPATH"): ${DPURPOSE:-(no purpose line)}"$'\n'"    THREAD=$DPATH"$'\n'
+    done < <(rank_handoffs_in "$GLOBAL_HANDOFFS" | LC_ALL=C sort -t'|' -k1,1 -r -s | sed -n "1,${DIARY_MAX}p")
+    LATEST_FILE=""
+fi
+
 if [ -n "$LATEST_FILE" ]; then
-    LATEST_TIME=$(file_mtime "$LATEST_FILE")
-    # Display age from the HEADER date, not mtime: a clone flattens every
-    # mtime to checkout time, so mtime-age reads as days-since-clone — a
-    # 2026-03-30 handoff was shown as "26d ago" (bon-wakaju). The 2026-06
-    # ranking fix covered selection only; this covers display. mtime keeps
-    # the finer granularity when its calendar day agrees with the header.
-    HDR_DAY="${BEST_KEY%%.*}"
-    if [ "$HDR_DAY" != "0000-00-00" ] && [ "$(epoch_day "$LATEST_TIME")" != "$HDR_DAY" ]; then
-        HDR_EPOCH=$(date_to_epoch "$HDR_DAY" 2>/dev/null || true)
-        [ -n "$HDR_EPOCH" ] && LATEST_TIME="$HDR_EPOCH"
-    fi
-    LATEST_AGO=$((NOW - LATEST_TIME))
-    LATEST_STR=$(time_ago $LATEST_AGO)
-    LATEST_PURPOSE=$(grep "^purpose:" "$LATEST_FILE" 2>/dev/null | head -1 | cut -d: -f2- | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' || true)
-    if [ -z "$LATEST_PURPOSE" ]; then
-        LATEST_PURPOSE=$(grep -A1 "^## Done" "$LATEST_FILE" 2>/dev/null | tail -1 | sed 's/^- //' | cut -c1-60 || true)
-    fi
+    LATEST_STR=$(handoff_age "$BEST_KEY" "$LATEST_FILE")
+    LATEST_PURPOSE=$(handoff_purpose "$LATEST_FILE")
 fi
 
 # --- Unprocessed handoffs (bon-supuko) ---
@@ -499,6 +546,14 @@ if [ -n "$LATEST_FILE" ]; then
 fi
 if [ "$READ_ONLY" -eq 1 ] && [ -z "$LATEST_FILE" ]; then
     echo "HANDOFF=none found in selected scope"
+fi
+if [ -n "$DIARY_LINES" ]; then
+    # No board here, so no baton: these are other sessions' closes, offered as
+    # suggestions the user can ignore (bon-babano; Sameer 2026-10-20: "a
+    # proactive set of suggestions - I can always ignore them").
+    echo "Recent threads from the office diary ($GLOBAL_HANDOFFS), newest first — other sessions' work, not necessarily this one's:"
+    printf '%s' "$DIARY_LINES"
+    echo ""
 fi
 
 # --- 2b. Unprocessed handoffs (bon-supuko: the sweep replaces latest-wins) ---

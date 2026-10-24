@@ -297,9 +297,66 @@ handoff_migrate_legacy "$CWD"
 # read from exactly where it was written.
 HANDOFF_DIR=""
 HANDOFF_DIR_SOURCE=""
-if board_root "$CWD" >/dev/null 2>&1; then
+
+# The session's own declaration outranks where it launched (bon-babano). /open
+# writes ~/.claude/state/oriented/<session id> as "<pid> <path>" for the board
+# it oriented on, and rewrites it on every roam and draw-down — but nothing here
+# read it, so a session launched at ~ that spent itself on one subject filed
+# into the office diary anyway. Three home handoffs in the week to 24 Oct
+# (GCP separation, the Lantern email check, mise) belonged to a subject's room.
+# Keyed on the harness's session id, never inferred from the newest file (the
+# bon-casovo lesson). The PID is not checked: a resumed session keeps its id but
+# not its PID, and its declaration is still its own. A missing, unreadable or
+# boardless declaration falls through to the cwd walk below, unchanged.
+#
+# Only for a launch with NO real board of its own (~, an owner bucket,
+# scratch). Inside a board the cwd walk already knows the room: step 3 has the
+# session declare its repo ROOT, so letting the breadcrumb win there moved a
+# room-launched session's handoff out of its room (~/notes/practices/... ->
+# ~/notes/handoffs), and a repo launch that drew down a card elsewhere would
+# file there while BOARD MOTION still tallied the launch board against the
+# other dir's last handoff (essayeur, 2026-10-24). Roaming from a repo stays
+# the closer's judgement, per the skill's placement table.
+ORIENTED_PATH=""
+ORIENTED_FILE="$HOME/.claude/state/oriented/${CLAUDE_CODE_SESSION_ID:-}"
+CWD_BOARD=$(board_root "$CWD" || true)
+if [ -n "$CWD_BOARD" ] && [ ! -f "$CWD_BOARD/.bon/prefix" ]; then CWD_BOARD=""; fi
+if [ -z "$CWD_BOARD" ] && [ -n "${CLAUDE_CODE_SESSION_ID:-}" ] && [ -f "$ORIENTED_FILE" ]; then
+    read -r _ ORIENTED_PATH < "$ORIENTED_FILE" || true
+fi
+if [ -n "$ORIENTED_PATH" ] && [ -d "$ORIENTED_PATH" ]; then
+    ORIENTED_PATH=$(cd "$ORIENTED_PATH" && pwd -P)
+    if [ "$ORIENTED_PATH" != "$CWD" ]; then
+        # Converge a legacy .bon/handoffs pile at the declared site before
+        # resolving into it, as the scan-down branch does for its child; the
+        # cwd call above found no board, so its report keys are still empty.
+        handoff_migrate_legacy "$ORIENTED_PATH"
+        ORIENTED_DIR=$(handoff_write_dir "$ORIENTED_PATH")
+        if [ "$ORIENTED_DIR" != "$HOME/.bon/handoffs" ]; then
+            HANDOFF_DIR="$ORIENTED_DIR"
+            HANDOFF_DIR_SOURCE="oriented:$ORIENTED_PATH"
+        fi
+    fi
+fi
+
+if [ -z "$HANDOFF_DIR" ] && board_root "$CWD" >/dev/null 2>&1; then
     HANDOFF_DIR=$(handoff_write_dir "$CWD")
     HANDOFF_DIR_SOURCE="board-walkup"
+    # At ~ the walk adopts the bare ~/.bon stash and handoff_write_dir sends the
+    # write to the office diary (bon-desasi). Name that for what it is, so the
+    # skill's global-fallback row ("it won't sync — say so") fires at home too.
+    if [ "$HANDOFF_DIR" = "$HOME/.bon/handoffs" ]; then HANDOFF_DIR_SOURCE="global-fallback"; fi
+fi
+
+# No board, but the launch dir has visible handoffs/ of its own (four estate
+# repos keep handoffs/ with no board). /open reads only those there and shuts
+# the office diary out, so the writer must agree or the session's own close is
+# never read back (essayeur, 2026-10-24: the reader changed first and split
+# them). handoff_write_dir walks to the nearest handoffs/, same as the reader.
+CWD_OWN_HANDOFFS=$(handoff_read_dirs "$CWD" | awk -v global="$HOME/.bon/handoffs" 'NF && $0 != global')
+if [ -z "$HANDOFF_DIR" ] && [ -n "$CWD_OWN_HANDOFFS" ]; then
+    HANDOFF_DIR=$(handoff_write_dir "$CWD")
+    HANDOFF_DIR_SOURCE="cwd-handoffs"
 fi
 
 # Walk-up missed — cwd is not in a board repo (an owner bucket like
@@ -361,6 +418,9 @@ if [ "$HANDOFF_DIR_SOURCE" = "ambiguous" ]; then
 else
     echo "HANDOFF_DIR=$HANDOFF_DIR"
     echo "HANDOFF_DIR_SOURCE=$HANDOFF_DIR_SOURCE"
+    case "$HANDOFF_DIR_SOURCE" in
+        oriented:*) echo "ORIENTED_CUE=the GIT, BON and BOARD MOTION sections describe the launch dir ($CWD), not the declared site; run the site's board and git steps with cd ${HANDOFF_DIR_SOURCE#oriented:}" ;;
+    esac
 fi
 
 # === SESSION IDENTITY ===

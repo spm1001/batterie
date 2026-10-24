@@ -117,6 +117,8 @@ Extract skipped attachments on demand:
 fetch("thread_id", attachment="budget.xlsx", base_path="...")
 ```
 
+`metadata.skipped_office` lists each one as `{fetch_as, filename, date, size}`. Use `fetch_as` as the `attachment=` value: it is unique within the thread, so same-named versions on different messages come out as `proposal.docx`, `proposal-2.docx`. `date` is the carrying message's timestamp in UTC. `metadata.attachments` and content.md's attachment lines carry the same ref. A part with the same name and size as an earlier one also gets `probable_duplicate_of`: it is usually the same file re-sent, so it isn't extracted twice, but it keeps its own ref because two versions can share a size.
+
 This creates a separate deposit: `.mise/xlsx--budget--thread_id/`
 
 ## Large Deposits

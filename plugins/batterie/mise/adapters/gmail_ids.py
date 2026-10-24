@@ -45,7 +45,7 @@ def thread_web_link_or_warn(
     return None
 
 
-@with_retry(max_attempts=3, delay_ms=1000)
+@with_retry(max_attempts=3, delay_ms=1000, idempotent=True)
 def get_thread_id_for_message(message_id: str) -> str:
     """
     Resolve a Gmail MESSAGE id to the id of the thread that holds it.
@@ -92,7 +92,7 @@ def get_thread_id_for_message(message_id: str) -> str:
     return str(thread_id)
 
 
-@with_retry(max_attempts=3, delay_ms=1000)
+@with_retry(max_attempts=3, delay_ms=1000, idempotent=True)
 def get_thread_id_for_draft(draft_id: str) -> str:
     """
     Resolve a Gmail DRAFT id to the id of the thread holding the draft.
@@ -137,7 +137,7 @@ def get_thread_id_for_draft(draft_id: str) -> str:
     return str(thread_id)
 
 
-@with_retry(max_attempts=3, delay_ms=1000)
+@with_retry(max_attempts=3, delay_ms=1000, idempotent=True)
 def get_thread_id_for_rfc822_message_id(message_id: str) -> str:
     """
     Resolve an RFC 822 Message-ID header to the id of the thread holding it.

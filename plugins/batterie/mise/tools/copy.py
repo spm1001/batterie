@@ -152,7 +152,7 @@ def _do_batch_copy(file_ids: list[str], folder_id: str | None) -> dict[str, Any]
     return summary
 
 
-@with_retry(max_attempts=3, delay_ms=1000)
+@with_retry(max_attempts=3, delay_ms=1000, idempotent=False)
 def _copy_file(
     file_id: str,
     folder_id: str | None,

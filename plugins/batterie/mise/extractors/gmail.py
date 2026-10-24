@@ -309,7 +309,7 @@ def _format_artifacts_summary(message: EmailMessage) -> str:
                 size_str = f"{size_kb/1024:.1f} MB"
             else:
                 size_str = f"{size_kb:.0f} KB"
-            att_lines.append(f"- {att.filename} ({att.mime_type}, {size_str})")
+            att_lines.append(f"- {att.filename}{att.ref_note()} ({att.mime_type}, {size_str})")
         parts.append("\n".join(att_lines))
 
     # Drive links (extracted from body)

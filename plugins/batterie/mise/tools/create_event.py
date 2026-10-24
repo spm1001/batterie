@@ -16,7 +16,7 @@ organiser-visible mutation.
 import logging
 from typing import Any
 
-from adapters.calendar import insert_event
+from adapters.calendar_insert import INSERT_RECOVERED_KEY, insert_event
 from cues_util import current_user_email, with_identity
 from models import DoResult, ErrorKind, MiseError
 from tools.events_util import (
@@ -155,10 +155,24 @@ def do_create_event(
         created = insert_event(body, send_updates=effective_updates)
     except MiseError as e:
         if e.kind is ErrorKind.PERMISSION_DENIED:
-            return error(e.kind.value, e.message + REAUTH_ADVICE)
-        return error(e.kind.value, e.message)
+            failed = error(e.kind.value, e.message + REAUTH_ADVICE)
+        elif e.details.get("may_have_landed"):
+            failed = error(e.kind.value, (
+                f"{e.message} Search the calendar over this event's window and "
+                f"look for event id {e.details['event_id']} before trying again: "
+                f"each create_event call mints a new id, so a repeat could book "
+                f"a second event and send every invite again."
+            ))
+        else:
+            failed = error(e.kind.value, e.message)
+        if "event_id" in e.details:
+            failed["event_id"] = e.details["event_id"]
+        return failed
 
     cues: dict[str, Any] = {"warnings": warnings}
+    recovered = created.pop(INSERT_RECOVERED_KEY, None)
+    if recovered:
+        cues["insert_recovered"] = recovered
     if emails:
         cues["attendees_invited"] = emails
         cues["attendees_notified"] = (

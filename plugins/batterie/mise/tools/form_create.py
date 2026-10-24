@@ -209,7 +209,7 @@ def _spec_to_batch_requests(spec: dict[str, Any]) -> list[dict[str, Any]]:
     return requests
 
 
-@with_retry(max_attempts=3, delay_ms=1000)
+@with_retry(max_attempts=3, delay_ms=1000, idempotent=False)
 def _api_create_form(title: str) -> dict[str, Any]:
     """Create an empty form via Forms API."""
     client = get_sync_client()
@@ -219,7 +219,7 @@ def _api_create_form(title: str) -> dict[str, Any]:
     )
 
 
-@with_retry(max_attempts=3, delay_ms=1000)
+@with_retry(max_attempts=3, delay_ms=1000, idempotent=False)
 def _api_batch_update(form_id: str, requests: list[dict[str, Any]]) -> dict[str, Any]:
     """Add questions and settings to a form via batchUpdate."""
     client = get_sync_client()

@@ -385,6 +385,14 @@ TEXT_MIME_TYPES = {
     "text/x-python",
     "text/javascript",
     "application/javascript",
+    # Text-like application/* types (mise-rosifa). application/sql was a real
+    # "Unsupported file type" refusal in the call log; the rest are the same
+    # shape — source or config that Drive labels application/ rather than text/.
+    "application/sql",
+    "application/toml",
+    "application/yaml",
+    "application/x-sh",
+    "application/x-shellscript",
 }
 
 
@@ -395,7 +403,10 @@ def is_text_file(mime_type: str) -> bool:
     # Also handle any text/* type not explicitly listed
     if mime_type.startswith("text/"):
         return True
-    return False
+    # IANA structured-syntax suffixes: application/ld+json, geo+json, atom+xml,
+    # xhtml+xml are JSON/XML underneath. Scoped to application/ so image/svg+xml
+    # stays with the SVG renderer.
+    return mime_type.startswith("application/") and mime_type.endswith(("+json", "+xml"))
 
 
 def _build_email_context_metadata(email_context: EmailContext | None) -> dict[str, Any] | None:

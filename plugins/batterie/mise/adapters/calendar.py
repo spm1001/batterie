@@ -126,7 +126,7 @@ def _event_start_dt(event: CalendarEvent) -> datetime:
     return dt
 
 
-@with_retry(max_attempts=3, delay_ms=1000)
+@with_retry(max_attempts=3, delay_ms=1000, idempotent=True)
 def list_events(
     days_back: int = 7,
     days_forward: int = 7,
@@ -237,7 +237,7 @@ def _cap_events(
     return events, True
 
 
-@with_retry(max_attempts=3, delay_ms=1000)
+@with_retry(max_attempts=3, delay_ms=1000, idempotent=True)
 def find_event_by_ical_uid(uid: str) -> dict[str, Any] | None:
     """Resolve an iCalUID to the RAW primary-calendar event, or None.
 
@@ -258,7 +258,7 @@ def find_event_by_ical_uid(uid: str) -> dict[str, Any] | None:
     return items[0] if items else None
 
 
-@with_retry(max_attempts=3, delay_ms=1000)
+@with_retry(max_attempts=3, delay_ms=1000, idempotent=True)
 def get_event(event_id: str) -> dict[str, Any]:
     """Fetch one raw event from the primary calendar by event id."""
     client = get_sync_client()
@@ -296,42 +296,7 @@ def respond_to_event(event: dict[str, Any], response_status: str) -> dict[str, A
     )
 
 
-@with_retry(max_attempts=3, delay_ms=1000)
-def insert_event(body: dict[str, Any], send_updates: str = "all") -> dict[str, Any]:
-    """Create an event on the primary calendar, returning the raw event.
-
-    supportsAttachments rides every insert — harmless without attachments,
-    and per Google's reference the API ignores attachments[] without it.
-    conferenceDataVersion=1 likewise gates conferenceData.createRequest.
-    (Attachment write-through verified live 2026-08-19: read-back showed the
-    fileUrl enriched to a resolved fileId. The ignore paths are documented
-    behaviour, not probed — both params are simply always sent.)
-
-    Every insert is stamped with provenance in extendedProperties.private
-    (mise:minted_by, mise:minted_at) — UI-invisible, queryable via
-    list_events(private_property=…), the [agent]-comment pattern for events
-    (mise-gujiro). Caller keys are preserved; the stamps win a collision so
-    provenance stays trustworthy. Colon-in-key accepted, probed 2026-08-19.
-    """
-    private = dict(body.get("extendedProperties", {}).get("private", {}))
-    private.update({
-        "mise:minted_by": "mise",
-        "mise:minted_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-    })
-    body = {**body, "extendedProperties": {"private": private}}
-    client = get_sync_client()
-    return client.post_json(
-        f"{_CALENDAR_API}/primary/events",
-        params={
-            "sendUpdates": send_updates,
-            "supportsAttachments": "true",
-            "conferenceDataVersion": "1",
-        },
-        json_body=body,
-    )
-
-
-@with_retry(max_attempts=3, delay_ms=1000)
+@with_retry(max_attempts=3, delay_ms=1000, idempotent=False)
 def patch_event(
     event_id: str, body: dict[str, Any], send_updates: str = "none",
 ) -> dict[str, Any]:
@@ -356,7 +321,7 @@ def patch_event(
     )
 
 
-@with_retry(max_attempts=3, delay_ms=1000)
+@with_retry(max_attempts=3, delay_ms=1000, idempotent=True)
 def freebusy_query(
     emails: list[str], time_min: datetime, time_max: datetime,
 ) -> dict[str, Any]:
@@ -368,9 +333,9 @@ def freebusy_query(
     the difference, or a slot search silently treats an invisible diary as
     an empty one.
 
-    Needs the calendar.freebusy scope (2026-08-19) — calendar.events does not
-    cover this endpoint, so pre-existing tokens 403 here while every other
-    calendar call works. Callers teach setup_oauth(force=True) on that 403.
+    Needs calendar.readonly (or calendar.freebusy on 2026-08-19→10-24 tokens) —
+    calendar.events does not cover this endpoint, so a token holding neither
+    403s here while every other calendar call works. Callers teach setup_oauth(force=True) on that 403.
     """
     client = get_sync_client()
     response = client.post_json(
@@ -385,7 +350,7 @@ def freebusy_query(
     return calendars
 
 
-@with_retry(max_attempts=3, delay_ms=1000)
+@with_retry(max_attempts=3, delay_ms=1000, idempotent=True)
 def list_status_events(
     calendar_id: str,
     time_min: datetime,

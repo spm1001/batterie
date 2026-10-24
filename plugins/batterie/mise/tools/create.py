@@ -520,7 +520,7 @@ def _infer_mime_type(*names: str | None) -> str:
     return "text/plain"
 
 
-@with_retry(max_attempts=3, delay_ms=1000)
+@with_retry(max_attempts=3, delay_ms=1000, idempotent=False)
 def _create_file(
     content: str | None,
     title: str,
@@ -567,7 +567,7 @@ def _create_file(
     )
 
 
-@with_retry(max_attempts=3, delay_ms=1000)
+@with_retry(max_attempts=3, delay_ms=1000, idempotent=False)
 def _create_doc(
     content: str,
     title: str,
@@ -604,7 +604,7 @@ def _create_doc(
     )
 
 
-@with_retry(max_attempts=3, delay_ms=1000)
+@with_retry(max_attempts=3, delay_ms=1000, idempotent=False)
 def _create_sheet(
     content: str,
     title: str,

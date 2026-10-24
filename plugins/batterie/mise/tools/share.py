@@ -196,7 +196,7 @@ def share_confirm(
 ShareAnswer = Annotated[ElicitationResult[ConfirmAnswer], Resolve(share_confirm)]
 
 
-@with_retry(max_attempts=3, delay_ms=1000)
+@with_retry(max_attempts=3, delay_ms=1000, idempotent=False)
 def _share_file(
     file_id: str, emails: list[str], role: str, confirm: bool,
 ) -> DoResult | dict[str, Any]:

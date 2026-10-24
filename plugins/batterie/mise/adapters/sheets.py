@@ -99,7 +99,7 @@ def _resolve_merges(
     return filled
 
 
-@with_retry(max_attempts=3, delay_ms=1000)
+@with_retry(max_attempts=3, delay_ms=1000, idempotent=True)
 def fetch_spreadsheet(
     spreadsheet_id: str,
     render_charts: bool = True,
@@ -276,7 +276,9 @@ def fetch_spreadsheet(
 # ---------------------------------------------------------------------------
 
 
-@with_retry(max_attempts=3, delay_ms=1000)
+# Idempotent: Sheets refuses a second tab of the same title, so a repeat cannot
+# duplicate (probed 2026-10-24: a repeat title gives 400, no copy)
+@with_retry(max_attempts=3, delay_ms=1000, idempotent=True)
 def add_sheet(spreadsheet_id: str, title: str) -> int:
     """
     Add a new sheet tab to an existing spreadsheet.
@@ -308,7 +310,7 @@ def _path_range(range_: str) -> str:
     return quote(range_, safe="")
 
 
-@with_retry(max_attempts=3, delay_ms=1000)
+@with_retry(max_attempts=3, delay_ms=1000, idempotent=True)
 def update_sheet_values(
     spreadsheet_id: str,
     range_: str,
@@ -340,7 +342,10 @@ def update_sheet_values(
     return int(orjson.loads(response.content).get("updatedCells", 0))
 
 
-@with_retry(max_attempts=3, delay_ms=1000)
+# Idempotent only while its one caller, tools/sheet_edit.py _overlay_requests,
+# sends updateCells alone (named fields replaced wholesale); an add/insert
+# request here would duplicate on retry and need idempotent=False
+@with_retry(max_attempts=3, delay_ms=1000, idempotent=True)
 def batch_update(spreadsheet_id: str, requests: list[dict[str, Any]]) -> dict[str, Any]:
     """
     Run a raw spreadsheets.batchUpdate — the only write surface for rich
@@ -360,7 +365,7 @@ def batch_update(spreadsheet_id: str, requests: list[dict[str, Any]]) -> dict[st
     ))
 
 
-@with_retry(max_attempts=3, delay_ms=1000)
+@with_retry(max_attempts=3, delay_ms=1000, idempotent=True)
 def rename_sheet(spreadsheet_id: str, sheet_id: int, new_title: str) -> None:
     """
     Rename the first sheet (created by CSV upload, defaults to the CSV filename).
@@ -387,7 +392,7 @@ def rename_sheet(spreadsheet_id: str, sheet_id: int, new_title: str) -> None:
     )
 
 
-@with_retry(max_attempts=3, delay_ms=1000)
+@with_retry(max_attempts=3, delay_ms=1000, idempotent=True)
 def get_sheet_properties(spreadsheet_id: str) -> list[dict[str, Any]]:
     """
     Fetch tab properties only (sheetId, title, index) — no values.
@@ -405,7 +410,7 @@ def get_sheet_properties(spreadsheet_id: str) -> list[dict[str, Any]]:
     return [p for p in props if p.get("sheetType", "GRID") == "GRID"]
 
 
-@with_retry(max_attempts=3, delay_ms=1000)
+@with_retry(max_attempts=3, delay_ms=1000, idempotent=True)
 def clear_sheet_values(spreadsheet_id: str, range_: str) -> None:
     """
     Clear all values in a range (A1 notation; a bare quoted tab title
@@ -419,7 +424,8 @@ def clear_sheet_values(spreadsheet_id: str, range_: str) -> None:
     )
 
 
-@with_retry(max_attempts=3, delay_ms=1000)
+# Not idempotent: a replacement containing its find text grows on every repeat
+@with_retry(max_attempts=3, delay_ms=1000, idempotent=False)
 def find_replace_cells(spreadsheet_id: str, find: str, replacement: str) -> int:
     """
     Find/replace a literal string across all sheets' cell values.

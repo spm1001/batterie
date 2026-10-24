@@ -220,12 +220,23 @@ class EmailAttachment:
     # the deposit filename AND what attachment= accepts, so same-named parts
     # (every pasted image is 'image.png') stay reachable one by one.
     ref: str | None = None
-    # The same part (name + size) already seen earlier in the thread, carried
-    # again by a reply or forward: not deposited or listed twice.
-    duplicate: bool = False
+    # Ref of an earlier part in the thread with the same name and size: probably
+    # the same file carried again by a reply or forward, so it is not extracted
+    # twice. Only probably: a one-word edit can keep a .docx's length, so the
+    # part keeps its own ref and stays listed and fetchable (mise-malodi).
+    duplicate_of: str | None = None
 
     # If already fetched
     content: bytes | None = None
+
+    def ref_note(self) -> str:
+        """What content.md prints after the filename: the ref when it differs,
+        so a same-named later version doesn't read as the earlier one's name
+        and fetch it (mise-malodi), and any probable-duplicate mark."""
+        note = f" (fetch as `{self.ref}`)" if self.ref and self.ref != self.filename else ""
+        if self.duplicate_of:
+            note += f" (same name and size as `{self.duplicate_of}`, probably the same file)"
+        return note
 
 
 @dataclass

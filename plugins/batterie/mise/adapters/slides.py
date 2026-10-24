@@ -38,7 +38,7 @@ PRESENTATION_FIELDS = (
 )
 
 
-@with_retry(max_attempts=3, delay_ms=1000)
+@with_retry(max_attempts=3, delay_ms=1000, idempotent=True)
 def fetch_presentation(
     presentation_id: str,
     include_thumbnails: bool = False,

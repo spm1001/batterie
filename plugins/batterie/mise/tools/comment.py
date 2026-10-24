@@ -23,6 +23,7 @@ loud refusal naming the unanchored fallback, which is the opposite of the READ
 side's degrade-with-a-cue (mise-dukacu) and deliberately so.
 """
 
+import html
 import re
 from typing import Any
 
@@ -278,7 +279,10 @@ def _anchored(
     # after the write, so it can only disclose, never prevent; that is still the
     # difference between a wrong comment nobody notices and one the caller is
     # told to delete.
-    quote = thread.get("plainTextQuote")
+    # plainTextQuote arrives HTML-entity-encoded (`&#39;`, `&amp;`), so decode
+    # it before it is shown, compared or measured — an apostrophe in the anchor
+    # otherwise reads as a mislanding (mise-huzozi).
+    quote = html.unescape(thread.get("plainTextQuote") or "")
     if quote:
         cues["anchor_text"] = quote
     if mime == _DOC_MIME:

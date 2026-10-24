@@ -10,11 +10,15 @@ sibling owns this logic?" move, .bon/understanding.md).
 
 import re
 from collections import defaultdict
-from datetime import datetime
+from datetime import datetime, timezone, tzinfo
 from typing import Any
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+from google.auth.exceptions import RefreshError, TransportError
+
+from adapters.calendar import resolve_calendar_timezone
 from html_convert import html_to_text_with_links
-from models import CalendarEvent
+from models import CalendarEvent, MiseError
 
 # httpx's own message quotes the status: "Client error '404 Not Found' for url '…'"
 _HTTPX_STATUS = re.compile(r"'(\d{3} [^']*)' for url")
@@ -214,12 +218,50 @@ def calendar_list_refused_cue(reason: str) -> str:
     )
 
 
+_UTC_FALLBACK = (
+    " — bare dates and naive times in time_min/time_max were read as UTC "
+    "days, which can be an hour or more off your own; pass explicit offsets "
+    "('2026-08-03T00:00:00+01:00') to pin the window."
+)
+
+
+def window_timezone() -> tuple[tzinfo, str | None]:
+    """The zone an explicit window's bare dates and naive times are read in.
+
+    The user's own diary zone, resolved the way freebusy and create_event
+    resolve it, so "3 Aug" means the same day on every calendar surface
+    (mise-cujihu). On failure: UTC, today's behaviour, plus the reason as a
+    cue — a timezone lookup must never fail the search it serves.
+    """
+    # The lookup builds the HTTP client outside its own try, so a credential
+    # failure escapes it: the client constructor raises FileNotFoundError for
+    # every token state (missing, corrupt, expired, revoked) and google-auth's
+    # TransportError/RefreshError when a refresh cannot reach Google. Caught by
+    # name; the calendar source then reports the same failure per-source.
+    try:
+        name = resolve_calendar_timezone()
+    except MiseError as e:
+        return timezone.utc, f"could not read your calendar timezone ({e.message})" + _UTC_FALLBACK
+    except (FileNotFoundError, TransportError, RefreshError) as e:
+        return timezone.utc, f"could not read your calendar timezone ({e})" + _UTC_FALLBACK
+    if not name:
+        return timezone.utc, (
+            "could not resolve your calendar timezone (the lookup failed, or "
+            "no recent event in your diary carries one)" + _UTC_FALLBACK
+        )
+    try:
+        return ZoneInfo(name), None
+    except (ZoneInfoNotFoundError, ValueError):
+        return timezone.utc, f"your diary's timezone {name!r} is unknown to this server" + _UTC_FALLBACK
+
+
 def calendar_window_cue(
     window_min: datetime | None, window_max: datetime | None
 ) -> str:
     """Disclose the resolved explicit window — date-only bounds are widened
-    to whole days in UTC (parse_time_window), so the caller sees what was
-    actually asked of the API rather than what they typed."""
+    to whole days in the user's diary zone (UTC if it could not be resolved;
+    see window_timezone), so the caller sees what was actually asked of the
+    API rather than what they typed."""
     lo = window_min.isoformat() if window_min else "7 days back (default)"
     hi = window_max.isoformat() if window_max else "7 days forward (default)"
     return f"calendar window: {lo} → {hi}"

@@ -7,7 +7,7 @@ from typing import Any
 
 import orjson
 
-from adapters.drive import get_file_metadata, parse_email_context, download_file, GOOGLE_DOC_MIME, GOOGLE_SHEET_MIME, GOOGLE_SLIDES_MIME, GOOGLE_FOLDER_MIME, GOOGLE_FORM_MIME
+from adapters.drive import get_file_metadata, parse_email_context, download_file, GOOGLE_DOC_MIME, GOOGLE_SHEET_MIME, GOOGLE_SLIDES_MIME, GOOGLE_FOLDER_MIME, GOOGLE_FORM_MIME, GOOGLE_SHORTCUT_MIME
 from adapters.drive import list_folder as adapter_list_folder, list_folder_recursive as adapter_list_folder_recursive
 from adapters.docs import fetch_document
 from adapters.forms import fetch_form as adapter_fetch_form
@@ -34,6 +34,7 @@ from .common import (
     deposit_pdf_crops, is_text_file, pdf_page_fidelity,
 )
 from .decorations import build_doc_structure, build_slides_index
+from .drive_shortcut import follow_shortcut
 
 
 # Manifest provenance (dates + last-modifier) lives in common.py beside the
@@ -42,15 +43,20 @@ from .decorations import build_doc_structure, build_slides_index
 
 def fetch_drive(file_id: str, base_path: Path | None = None, recursive: bool = False, tabs: list[str] | None = None, suggestions: str = "accepted", thumbnails: bool = True, crops: bool = True) -> FetchResult | FetchError:
     """Fetch Drive file, route by type, extract content, deposit to workspace."""
-    # Get metadata to determine type
+    opts: dict[str, Any] = dict(base_path=base_path, recursive=recursive, tabs=tabs, suggestions=suggestions, thumbnails=thumbnails, crops=crops)
     metadata = get_file_metadata(file_id)
+    if metadata.get("mimeType") == GOOGLE_SHORTCUT_MIME:  # one hop to the target, disclosed (mise-rosifa)
+        return follow_shortcut(file_id, metadata, lambda tid, tmeta: _route_drive(tid, tmeta, **opts))
+    return _route_drive(file_id, metadata, **opts)
+
+
+def _route_drive(file_id: str, metadata: dict[str, Any], *, base_path: Path | None, recursive: bool, tabs: list[str] | None, suggestions: str, thumbnails: bool, crops: bool) -> FetchResult | FetchError:
+    """Route by MIME type with metadata in hand. Never follows shortcuts, so a shortcut's target cannot loop."""
     mime_type = metadata.get("mimeType", "")
     title = metadata.get("name", "untitled")
-
     # Parse email context for cross-source linkage (exfil'd files)
     email_context = parse_email_context(metadata.get("description"))
 
-    # Route by MIME type
     if mime_type == GOOGLE_FOLDER_MIME:
         return fetch_folder(file_id, title, metadata, base_path=base_path, recursive=recursive)
     elif mime_type == GOOGLE_DOC_MIME:
@@ -72,7 +78,6 @@ def fetch_drive(file_id: str, base_path: Path | None = None, recursive: bool = F
     elif is_image_file(mime_type):
         return fetch_image_file(file_id, title, metadata, email_context, base_path=base_path)
     else:
-        # Return error for unsupported types
         return FetchError(
             kind="unsupported_type",
             message=f"Unsupported file type: {mime_type}",

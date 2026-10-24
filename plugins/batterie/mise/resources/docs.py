@@ -177,14 +177,14 @@ proof a person does not exist.
 
 ## sources=['calendar'] — the diary window
 
-"What is in the diary between 3 and 5 Aug?" needs no topic term:
-`sources=['calendar']` alone lists the default ±7-day window, and
-`time_min`/`time_max` set any explicit window — historical included
-(backfilling event ids for old notes works). A bare date as `time_max`
-covers its whole day, so `time_min='2026-08-03', time_max='2026-08-05'`
-spans the 3rd, 4th AND 5th. Events OVERLAPPING the window are returned
-(Google's semantics — right for clash-checking; an all-day event at the
-edge can ride in on timezone skew). `query` still filters when given.
+"What is in the diary between 3 and 5 Aug?" needs no topic term: `sources=['calendar']`
+alone lists the default ±7-day window, and `time_min`/`time_max` set any explicit window —
+historical included (backfilling event ids for old notes works). A bare date as `time_max`
+covers its whole day, so `time_min='2026-08-03', time_max='2026-08-05'` spans the 3rd, 4th
+AND 5th. Bare dates and naive times are read in your diary's timezone, as freebusy reads
+them; if it cannot be resolved they fall back to UTC and `calendar_timezone` says so. Events
+OVERLAPPING the window are returned (Google's semantics — right for clash-checking; an
+all-day event at the edge can ride in on timezone skew). `query` still filters when given.
 
 On overflow the two window kinds keep different survivors, cued in
 `calendar_truncated`: the default now-centred window keeps events nearest
@@ -464,7 +464,7 @@ Act on Google Workspace — create, move, edit documents, and draft emails.
 | `overwrite` | Replace full document content (Sheets: CSV content, `range=` aims a tab or cells; Forms: YAML/JSON spec replaces all questions) | `file_id`, plus `content` OR `source` OR `file_path` |
 | `prepend` | Insert text at start of document | `file_id`, `content` |
 | `append` | Insert text at end of document — or, with `tab='Title'`, place it in a NEW Google Doc tab | `file_id`, `content` |
-| `replace_text` | Find and replace text — applies across ALL tabs, Docs and Sheets alike (Sheets: formulas untouched) | `file_id`, `find`, `content` |
+| `replace_text` | Find and replace text — applies across ALL tabs, Docs and Sheets alike (Sheets: formulas untouched) | `file_id`, `find`, `content` — or `remove=True` instead of `content` to delete every match (an omitted `content` refuses, never deletes) |
 | `draft` | Create Gmail draft (does NOT send) — or update an existing draft in place | create: `to`, `subject`, `content`; update: `file_id` (draft ID), `content` |
 | `reply_draft` | Create threaded reply draft | `file_id` (thread ID), `content` |
 | `archive` | Remove thread(s) from Inbox | `file_id` (thread ID or list) |
@@ -507,7 +507,7 @@ Act on Google Workspace — create, move, edit documents, and draft emails.
 
 **Update_event** edits an event — `file_id` is the Calendar event id or the invite's Gmail thread id (resolved like `respond`). Gate grain is blast radius: **structural** changes (both `time_min`+`time_max` to move it, `recurrence` — including converting a single event into a series, `attendees` which are always ADDED never removed, `meet=True` to add a Meet link or `meet=False` to remove one) preview first and email attendees on confirm (`send_updates` default `all`); **cosmetic** changes (`content` = replace description, `title`, `location`, `include` = add attachments, `properties` = add/overwrite queryable key-values — existing keys merge, never wiped, so it backfills stamps on pre-existing events, `color` = recolour by name or 1–11, `visibility`, `transparency` = busy/free) execute directly and quietly (`send_updates` default `none`). `cues.previous` carries the old values — events have no version history, so that cue is the undo reference. Guests can only add attendees (when the organiser allows it); everything else needs the organiser.
 
-**Freebusy** answers "when can these people meet" as data: per-person busy blocks over `time_min`..`time_max`, plus — when `duration` (minutes) is given — computed common free slots (weekdays 09:00–17:30 in the user's timezone), plus each person's office days from their workingLocation events where their sharing allows. Two honesty cues to respect: people in `not_visible` are EXCLUDED from the slot arithmetic (their sharing hides even free/busy — a slot may clash with them), and "location not visible" means their sharing is free/busy-only, never "not in the office". Needs the calendar.freebusy scope (2026-08-19): older tokens 403 here with re-auth advice while every other calendar call still works.
+**Freebusy** answers "when can these people meet" as data: per-person busy blocks over `time_min`..`time_max`, plus — when `duration` (minutes) is given — computed common free slots (weekdays 09:00–17:30 in the user's timezone), plus each person's office days from their workingLocation events where their sharing allows. Two honesty cues to respect: people in `not_visible` are EXCLUDED from the slot arithmetic (their sharing hides even free/busy — a slot may clash with them), and "location not visible" means their sharing is free/busy-only, never "not in the office". Needs calendar.readonly (or calendar.freebusy, held by tokens minted 2026-08-19 to 2026-10-24): a token with neither 403s here with re-auth advice while every other calendar call still works.
 
 **Setup_oauth** is the bootstrap path for users who haven't authenticated yet. It opens Google's consent screen in their default browser and runs a localhost callback listener; once they approve, the token is saved: on macOS to the Keychain (entry named in `cues.token_keychain_service`), which mise copies back to `token.json` whenever it loads credentials; elsewhere `token.json` in the data dir is the store. `cues.token_store` says which applies, including a Mac whose token was carried over from an older install and so lives only in the file. Returns immediately with the auth URL inline (so the user can paste it manually if browser auto-open fails). If a token already exists, returns `status: already_authenticated`. Use `force=true` to re-auth (e.g. after revoking access). Only available in stdio mode — not exposed in remote mode.
 
@@ -546,7 +546,7 @@ Act on Google Workspace — create, move, edit documents, and draft emails.
 | `include` | list[str] | None | draft, reply_draft (Drive file IDs — resolved to formatted links in body) |
 | `reply_all` | bool | False | reply_draft (if True, Cc all original recipients, plus any `cc`) |
 | `label` | str | None | label (label name — resolved to Gmail label ID automatically) |
-| `remove` | bool | False | label (if True, remove the label instead of adding it) |
+| `remove` | bool | False | label (if True, remove the label instead of adding it), replace_text (if True, delete every match of `find` — the reliable delete, since some clients drop `content=''`) |
 
 ### Calendar operations
 

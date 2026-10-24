@@ -34,6 +34,7 @@ import httpx
 
 from adapters.http_client import get_sync_client
 from models import ErrorKind, MiseError
+from retry import as_may_have_landed
 
 _DOCS_API = "https://docs.googleapis.com/v1/documents"
 _SLIDES_API = "https://slides.googleapis.com/v1/presentations"
@@ -122,7 +123,9 @@ def _insert(url: str, request: dict[str, Any], revision: str | None) -> dict[str
     try:
         return get_sync_client().post_json(url, json_body=body)
     except httpx.HTTPStatusError as e:
-        raise _wrap(e, "creating the anchored comment") from e
+        error = _wrap(e, "creating the anchored comment")
+        # A 5xx can arrive after Google committed: a repeat posts twice
+        raise (as_may_have_landed(error) if e.response.status_code >= 500 else error) from e
     except Exception as e:  # noqa: BLE001 — the AMBIGUOUS failure, named as such
         # A timeout or dropped connection says nothing about whether Google
         # committed the write. A caller who reads "failed" and retries posts the
@@ -133,7 +136,7 @@ def _insert(url: str, request: dict[str, Any], revision: str | None) -> dict[str
             f"the comment write did not complete cleanly ({type(e).__name__}: {e}) "
             "— it is NOT known whether the comment was created. Check the file "
             "before retrying; a blind retry would post it twice.",
-            details={"ambiguous_write": True},
+            details={"ambiguous_write": True, "may_have_landed": True},
         ) from e
 
 

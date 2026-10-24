@@ -287,17 +287,34 @@ def do_replace_text(
     content: str | None = None,
     metadata: dict[str, Any] | None = None,
     suggest: bool = False,
+    remove: bool = False,
 ) -> DoResult | dict[str, Any]:
-    """Find and replace all occurrences of text in a document or plain file."""
+    """Find and replace all occurrences of text in a document or plain file.
+
+    remove=True deletes every match: the explicit route, because some MCP
+    clients (Claude Code among them) drop a content='' argument, and an
+    omitted content must refuse rather than delete (mise-necizu).
+    """
     if not file_id:
         return {"error": True, "kind": "invalid_input",
                 "message": "replace_text requires 'file_id'"}
     if not find:
         return {"error": True, "kind": "invalid_input",
                 "message": "replace_text requires 'find'"}
+    if remove and content:
+        return {"error": True, "kind": "invalid_input",
+                "message": "replace_text got both remove=True and content — "
+                           "pass content to replace the matches, or remove=True "
+                           "alone to delete them."}
+    if remove:
+        content = ""
     if content is None:
         return {"error": True, "kind": "invalid_input",
-                "message": "replace_text requires 'content' (use empty string to delete matches)"}
+                "message": "replace_text requires 'content' (the replacement text). "
+                           "To delete every match, pass remove=True with find — "
+                           "content='' does the same but some MCP clients drop an "
+                           "empty argument, which arrives as no content and is "
+                           "refused rather than read as delete."}
     try:
         validate_drive_id(file_id, "file_id")
     except ValueError as e:
@@ -333,7 +350,7 @@ def do_replace_text(
     return merge_restore_cues(result, restore_cues)
 
 
-@with_retry(max_attempts=3, delay_ms=1000)
+@with_retry(max_attempts=3, delay_ms=1000, idempotent=False)
 def _prepend(file_id: str, text: str, suggest: bool = False) -> DoResult:
     """Insert at index 1 (start of body)."""
     client = get_sync_client()
@@ -359,7 +376,7 @@ def _prepend(file_id: str, text: str, suggest: bool = False) -> DoResult:
     )
 
 
-@with_retry(max_attempts=3, delay_ms=1000)
+@with_retry(max_attempts=3, delay_ms=1000, idempotent=False)
 def _append(file_id: str, text: str, suggest: bool = False) -> DoResult:
     """Insert at end of document body."""
     client = get_sync_client()
@@ -388,7 +405,8 @@ def _append(file_id: str, text: str, suggest: bool = False) -> DoResult:
     )
 
 
-@with_retry(max_attempts=3, delay_ms=1000)
+# Not idempotent: a replacement containing its find text grows on every repeat
+@with_retry(max_attempts=3, delay_ms=1000, idempotent=False)
 def _replace_text(file_id: str, find: str, replace: str, suggest: bool = False) -> DoResult:
     """Replace all occurrences via replaceAllText."""
     client = get_sync_client()

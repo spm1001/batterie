@@ -76,6 +76,14 @@ CASES = [
         ["msg-a", "Message-ID"],
     ),
     (
+        "Drive SHORTCUT (was 'Unsupported file type: "
+        "application/vnd.google-apps.shortcut') — followed one hop to its Doc "
+        "target and disclosed with both ids (mise-rosifa). Fixture shortcut to "
+        "integration_ids.json's test_doc_id, beside it in the test folder",
+        "12bn9Zo5nyelKEuL4tjplLv_llKLt08xq",
+        ["is a Drive shortcut", "mise followed it to", "target_id"],
+    ),
+    (
         "DEAD draft URL (mise's own #drafts/<id> shape) — the resolution branch "
         "fires, drafts.get 404s, and the error teaches the lifecycle rather than "
         "implying a bad id (mise-jujoti step 7). A LIVE draft would resolve to "

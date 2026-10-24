@@ -13,6 +13,7 @@ from typing import Any, Literal
 from adapters.drive import download_file
 from adapters.gmail import download_attachment
 from adapters.pdf import convert_pdf_content
+from extractors.gmail import format_message_date
 from extractors.image import resize_image_bytes, SUPPORTED_IMAGE_MIME_TYPES
 from models import EmailAttachment
 from workspace import write_content, write_image
@@ -130,20 +131,21 @@ def assign_attachment_refs(messages: list[Any]) -> None:
 
     Visible and hidden parts share one numbering (image.png, image-2.png, ...)
     so the name a deposit uses, the name the hidden list shows and the name
-    attachment= accepts are one vocabulary. A part identical by name and size
-    to an earlier one (the same slide carried by each reply) is marked
-    duplicate and keeps the first one's ref (essayeur on mise-sajeso: the
-    'two slides' deposited were one slide twice, and the second slide could
-    not be named).
+    attachment= accepts are one vocabulary. Every part gets its OWN ref.
+    A part matching an earlier one by name and size (the same slide carried
+    by each reply) also gets duplicate_of = that earlier ref, so it is not
+    extracted twice (essayeur on mise-sajeso: the 'two slides' deposited were
+    one slide twice). It is never folded out of reach: name and size is a
+    guess at sameness, and two versions of one .docx can share a length
+    (essayeur on mise-malodi). Gmail's part metadata carries no content hash,
+    and bytes are not downloaded to decide this.
     """
     seen: dict[tuple[str, int], str] = {}
     used: set[str] = set()
     for msg in messages:
         for att in [*getattr(msg, "attachments", []), *getattr(msg, "hidden_attachments", [])]:
             key = (att.filename.lower(), att.size)
-            if key in seen:
-                att.ref, att.duplicate = seen[key], True
-                continue
+            att.duplicate_of = seen.get(key)
             stem, dot, ext = att.filename.rpartition(".")
             if not dot:
                 stem, ext = att.filename, ""
@@ -152,7 +154,8 @@ def assign_attachment_refs(messages: list[Any]) -> None:
                 n += 1
                 ref = f"{stem}-{n}.{ext}" if dot else f"{stem}-{n}"
             used.add(ref.lower())
-            att.ref = seen[key] = ref
+            att.ref = ref
+            seen.setdefault(key, ref)  # a third copy points at the first, not the second
 
 
 def _unique_name(folder: Path, filename: str) -> str:
@@ -329,19 +332,34 @@ def _download_attachment_bytes(msg: Any, att: Any, mime_type: str) -> bytes:
     return dl.content
 
 
+def _with_duplicate(entry: dict[str, Any], att: Any) -> dict[str, Any]:
+    """Mark a part that matches an earlier one by name and size: probably, not surely."""
+    if getattr(att, "duplicate_of", None):
+        entry["probable_duplicate_of"] = att.duplicate_of
+    return entry
+
+
+def attachment_info(att: Any) -> dict[str, Any]:
+    """One entry of a thread fetch's metadata.attachments, with the ref to fetch it by."""
+    return _with_duplicate({"filename": att.filename, "fetch_as": att.ref or att.filename,
+                            "mime_type": att.mime_type, "size": att.size}, att)
+
+
 def hidden_attachment_cues(thread_data: Any) -> dict[str, Any]:
     """Name what the trivial filter hid, so hidden never means unreachable.
 
     Small images and generic filenames are kept out of the deposit (usually
     signature logos), but a thread whose payload was pasted slides fetched as
-    'no attachments' (mise-sajeso). Each hidden part is listed once (repeats
-    carried by later replies are dropped) with the ref attachment= accepts;
-    the list is capped so a long thread with a logo on every message stays small.
+    'no attachments' (mise-sajeso). Each hidden part is listed with the ref
+    attachment= accepts. Parts matching an earlier one by name and size (the
+    logo every reply carries) come after the distinct ones, marked
+    probable_duplicate_of, so the cap trims repeats first and nothing is
+    dropped unnamed (mise-malodi). The cap keeps a long thread's list small.
     """
+    parts = [a for msg in thread_data.messages for a in getattr(msg, "hidden_attachments", [])]
     hidden = [
-        {"fetch_as": a.ref or a.filename, "mime_type": a.mime_type, "size": a.size}
-        for msg in thread_data.messages for a in getattr(msg, "hidden_attachments", [])
-        if not getattr(a, "duplicate", False)
+        _with_duplicate({"fetch_as": a.ref or a.filename, "mime_type": a.mime_type, "size": a.size}, a)
+        for a in sorted(parts, key=lambda a: bool(getattr(a, "duplicate_of", None)))
     ]
     if not hidden:
         return {}
@@ -359,3 +377,33 @@ def hidden_attachment_cues(thread_data: Any) -> dict[str, Any]:
 
 
 _HIDDEN_LIST_CAP = 10
+
+
+def skipped_office_entry(msg: Any, att: Any) -> dict[str, Any]:
+    """One skipped Office attachment, named by the ref attachment= resolves.
+
+    Two versions of one .docx on two messages share a filename, so listing
+    the filename sent both suggested fetches to the first, older version
+    (mise-malodi). fetch_as is the thread-unique ref from
+    assign_attachment_refs, the same handle hidden_attachments prints; the
+    carrying message's date (UTC, as in content.md) says which is newer.
+    A same-name, same-size repeat is listed too, marked probable_duplicate_of.
+    """
+    entry: dict[str, Any] = {"fetch_as": att.ref or att.filename, "filename": att.filename}
+    if getattr(msg, "date", None):
+        entry["date"] = format_message_date(msg.date)
+    entry["size"] = att.size
+    return _with_duplicate(entry, att)
+
+
+def skipped_office_hint(thread_id: str, entries: list[dict[str, Any]]) -> str:
+    """The copy-paste fetch calls for skipped Office files, one per ref."""
+    def note(e: dict[str, Any]) -> str:
+        bits = [f"message of {e['date']}"] if e.get("date") else []
+        if e.get("probable_duplicate_of"):
+            bits.append(f"same name and size as '{e['probable_duplicate_of']}': "
+                        "probably the same file, possibly another version")
+        return f" [{'; '.join(bits)}]" if bits else ""
+
+    calls = [f"fetch('{thread_id}', attachment='{e['fetch_as']}')" + note(e) for e in entries]
+    return f"Office files take 5-10s each. To extract: {'; '.join(calls)}"

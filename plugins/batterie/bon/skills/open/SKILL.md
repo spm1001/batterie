@@ -1,6 +1,6 @@
 ---
 name: open
-description: "Activate at session start when .bon/ exists AND before any bon CLI command. Handles session orientation (process contributions, present hierarchy, pick direction), structures draw-down workflow (bon show → bon work → bon step), and covers roaming — orienting against a named repo from a session launched elsewhere. Triggers on: session start with .bon/, /open, '/open REPO' (a path or repo name), /bon, 'bon init', 'bon new', 'bon list', 'bon done', 'what can I work on', 'next action', 'desired outcome', 'file this for later', 'track this work', 'work on that repo from here', or when .bon/ directory exists."
+description: "Activate at session start when .bon/ exists AND before any bon CLI command. Handles session orientation (process contributions, present hierarchy, pick direction), structures draw-down workflow (bon show → bon work → bon step), and covers roaming (orienting against a named repo from a session launched elsewhere) and topic opens (finding where a subject lives, then orienting there). Triggers on: session start with .bon/, /open, '/open REPO' (a path or repo name), '/open on X', 'read up on X', 'pick up the thread on X', /bon, 'bon init', 'bon new', 'bon list', 'bon done', 'what can I work on', 'next action', 'desired outcome', 'file this for later', 'track this work', 'work on that repo from here', or when .bon/ directory exists."
 allowed-tools:
   - "Bash(bon:*)"
   - Read
@@ -77,9 +77,22 @@ The session-start hook provides orientation automatically (handoff, outcomes, su
 
 The hook output may be truncated in the system-reminder preview. When you see "Output too large ... Full output saved to: {path}", Read that file — the handoff (including "For Claudes to come") is likely past the truncation point.
 
+### 0. The First Reply
+
+Most sessions now launch at `~` or from a phone, with the user's first message already typed. So the first reply orients on that message, not on whatever the hook printed. A good one reads like this:
+
+- **Line one names the site and how you found it**: "Site: mit-kg lantern room (newest handoff mentioning Lantern, 22 Oct)", "Site: bon (launched here)". The site is the repo or room where the work lives. Write step 3's breadcrumb for it as soon as it is settled, because `/close` reads that breadcrumb to file the handoff (`HANDOFF_DIR_SOURCE=oriented:…`); without one, a session launched at `~` files into the office diary, `~/.bon/handoffs`, however much it worked on one subject.
+- **Then play the brief back in two or three lines**: the job, and what done looks like, for the user to correct before work starts.
+- **Ask only when the brief is thin or two homes tie.** Otherwise infer, state and proceed. A tie is the one case to ask about, because orienting on the wrong board fails silently.
+- **A topic ask** ("/open on the budget work", "pick up the Tube work", "somewhere we did X") is a topic open: find where the subject lives, then run the ritual on *that* board. Read `references/topic-mode.md` first.
+- **A bare first message at `~`** ("/open", "hi") gets the hook's recent-threads menu (its `THREAD=` lines), offered as suggestions the user can ignore. A boardless launch emits no `HANDOFF=`: those closes are other sessions' work, not this session's baton.
+- **The escape lane:** "quick one", "a random little thing", a one-off question. Skip the ritual, write no breadcrumb, just do it. If it ends in a close, the office diary is the right place for it.
+
+In a repo launch the site is the repo, line one is short, and steps 1–6 run as before.
+
 ### 1. Sweep and Synthesize Knowledge
 
-**The sweep replaces latest-wins** (bon-supuko). The hook emits every handoff whose LEDGER.md line is still unticked, one `UNPROCESSED=<path>` line each, oldest first — and, in a ledgered dir, every handoff file NO ledger line mentions at all, annotated `[no ledger line — process, then ADD a ticked line for it]`. That annotation means some close never registered the file (an older plugin's close, a forgotten append, a hand-dropped file): process it identically, then ADD a fresh ticked line for it rather than editing one — without this, one coexisting unticked line would make that file permanently unreachable. Process ALL of them, not just the newest — two interleaved closes in a shared repo used to silently drop the older one: its For-Claudes-to-come never synthesised, its Candidates never minted, nothing said so. When no `UNPROCESSED=` lines appear (no ledger yet, or all ticked), process just the `HANDOFF=` file — that is the latest-wins fallback, and it stays correct for repos that haven't adopted a ledger.
+**The sweep replaces latest-wins** (bon-supuko). The hook emits every handoff whose LEDGER.md line is still unticked, one `UNPROCESSED=<path>` line each, oldest first — and, in a ledgered dir, every handoff file NO ledger line mentions at all, annotated `[no ledger line — process, then ADD a ticked line for it]`. That annotation means some close never registered the file (an older plugin's close, a forgotten append, a hand-dropped file): process it identically, then ADD a fresh ticked line for it rather than editing one — without this, one coexisting unticked line would make that file permanently unreachable. Process ALL of them, not just the newest — two interleaved closes in a shared repo used to silently drop the older one: its For-Claudes-to-come never synthesised, its Candidates never minted, nothing said so. When no `UNPROCESSED=` lines appear (no ledger yet, or all ticked), process just the `HANDOFF=` file — that is the latest-wins fallback, and it stays correct for repos that haven't adopted a ledger. A boardless launch has no `HANDOFF=` and nothing to sweep (step 0).
 
 For EACH unprocessed handoff, oldest first:
 
@@ -354,18 +367,9 @@ EOF
 
 ---
 
-## Mid-Session Transitions
+## Between Actions, and at Close
 
-Between actions:
-1. Complete current action: `bon done <id>`
-2. Run `bon list --ready`, capture to file, Read and output
-3. Draw-down the next action before starting
-
----
-
-## Session Close
-
-Use `/close` at session end. It handles reflection, handoff, and capture.
+Between actions: complete the current one (`bon done <id>`), run `bon list --ready` (capture to a file, Read and output), and draw down the next action before starting. At session end, use `/close` — it handles reflection, handoff, and capture.
 
 ---
 

@@ -13,7 +13,7 @@ description: >
   'capture network requests', 'reverse-engineer API', 'check if this
   page has', 'verify deployment', 'dismiss cookie banner',
   'monitor network traffic', 'log into this site', 'the page needs a
-  sign-in'. (user)
+  sign-in', 'passe or the Chrome extension'. (user)
 ---
 
 # Passe Cookbook
@@ -29,6 +29,22 @@ Any task that needs a real browser: reading JavaScript-rendered pages, taking sc
 - **Google Workspace content** — use `mise fetch` for Drive, Gmail, Sheets
 - **Static pages with no JS** — `passe fetch` tries HTTP-first automatically, but plain `curl` may suffice
 - **Long-running browser sessions** — passe runs scripts, not interactive sessions
+
+## Passe or the Claude in Chrome extension
+
+The Claude in Chrome extension (the `mcp__claude-in-chrome__*` tools) is the other way a Claude drives a browser. The two can share one Chrome: when the extension is installed in the Chrome passe drives, both see the same profile and the same logins. Measured 2026-10-25 on a Linux backend: a tab the extension opened showed up in `passe tabs`, and `passe log` recorded its traffic.
+
+| Job | Reach for | Why |
+|-----|-----------|-----|
+| Runs from a script, cron job, robot or team skill | passe | The extension acts only through a Claude tool call, so nothing runs without a live session |
+| Request or response bodies, POST payloads, headers | passe (`capture --bodies`, `passe log`) | The extension's `read_network_requests` returns URL, method and status only, and only from its first call on that tab |
+| Headless runs, device emulation, a particular browser fingerprint | passe | The extension can resize a window, nothing deeper |
+| The person's everyday browser on their laptop, or a session on the phone or web with no route to a CDP port | extension | It connects through claude.ai, so it needs no tunnel or open port |
+| Exploring a UI by eye: screenshot, click, read, repeat | either; the extension is the lighter loop | It batches clicks, typing and screenshots in one call and finds elements by description |
+
+**Reverse-engineering with both.** Let the extension drive the UI while `passe log start` records underneath. The log sees every tab, the extension's included, with bodies. It also shows what the extension's own output filter hides: on 2026-10-25 that filter returned the path `/Search2/Home/Search` as `[BLOCKED: Base64 encoded data]`, and the log printed it plainly. Run `passe log stop` when you are done, because the log writes request headers verbatim, cookies included (passe-zinido); treat `~/.passe/logs/` like the capture files in recipe 6.
+
+**Leave the extension's tabs alone.** They sit in a tab group the extension owns, and `--reuse-tab --tab <url-substring>` can match one: on 2026-10-25 only the "matches multiple tabs" refusal stopped passe attaching to it (passe-zohoha). When both tools are on the same site, take the tab id from `passe tabs` and pass that.
 
 ## Quick reference
 
@@ -294,6 +310,12 @@ EOF
 ```
 
 `frame` matches by URL substring. Only works with cross-origin iframes (OOPiF). Same-origin iframes: use `eval` with `querySelector('iframe').contentDocument`. `screenshot` always captures the parent page (Chrome limitation).
+
+**A shell page reads empty.** Some intranets (Oak Engage, seen 2026-10-25) serve a near-empty top document and write the real page into a same-origin iframe with no `src`. `fetch` then returns 0 words with `fast_path_reason: empty_extraction`, and the extension's page readers are just as blind. List the frames after a short wait (the content frame is filled after load: 1 word at once, 356 words after `wait 4`, measured once on that site), then read or call APIs from the one that holds the content. passe-lawica tracks teaching `fetch` to do this itself:
+
+```bash
+passe run -c 'goto https://intranet.example.com; wait 4; eval JSON.stringify([...document.querySelectorAll("iframe")].map(f=>({id:f.id, src:f.src, words:(f.contentDocument?.body?.innerText||"").split(/\s+/).length})))'
+```
 
 ### 11. Connection troubleshooting
 

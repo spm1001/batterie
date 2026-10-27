@@ -127,7 +127,7 @@ Mint deliberately, not on autopilot: if a candidate is stale, already done, or w
 
 ### 3. Present Hierarchy
 
-**On a JSONL board, refresh its truth first — one fetch per session, here** (bon-wevodu). The board is a local file, so a behind-origin clone renders a stale hierarchy and lets you file duplicates against it (the passe-partout twin was filed exactly this way — the duplicate-check ran clean against a stale clone). Dolt boards skip this: one networked writer, always current.
+**On a JSONL board, refresh its truth first — one fetch per session, here** (bon-wevodu). The board is a local file, so a behind-origin clone renders a stale hierarchy and lets you file duplicates against it (the passe-partout twin was filed exactly this way — the duplicate-check ran clean against a stale clone).
 
 ```bash
 git fetch -q origin 2>/dev/null

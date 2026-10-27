@@ -503,7 +503,7 @@ Stage relevant files (including the handoff), commit in modular commits with des
 
 **Candidate mode has no commit step.** There's no writer and usually no git in the sandbox — the handoff you wrote to the mount *is* the deliverable, and a writer-bearing session sweeps and mints its candidates at the next open. Leave it uncommitted; say so, so the next full-fat session knows to look.
 
-**If the context script reported `WORKTREE_SESSION=true`:** this session's branch — commits and the handoff you just wrote — is deleted with the worktree. Push, merge, or open a PR before declaring the session closed; say what would be lost (`git log @{u}..HEAD` count) if the user wants to skip it. (JSONL-backed bons filed this session live in the worktree's copy too; Dolt-backed bons are safe — they write over the network.)
+**If the context script reported `WORKTREE_SESSION=true`:** this session's branch — commits and the handoff you just wrote — is deleted with the worktree. Push, merge, or open a PR before declaring the session closed; say what would be lost (`git log @{u}..HEAD` count) if the user wants to skip it. (Bons filed this session were committed on the worktree's branch too, so they go with it.)
 
 Then: "Type `/exit` to close."
 

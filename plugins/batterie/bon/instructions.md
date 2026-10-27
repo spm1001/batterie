@@ -33,7 +33,7 @@ Frame outcomes as achievements: "Taught Claude to generate charts" not "Create c
 
 Every board is `.bon/items.jsonl` in its own repo, and syncs itself on each write (fetch, rebase, merge by item, commit, push). Dolt was retired on 2026-10-24: the server is stopped, and its final state is in `spm1001/bon-dolt-backup`.
 
-A clone that still carries `.bon/backend` containing `dolt` hasn't pulled the migrate commit. bon says so and asks for `git pull`. If the pull refuses because `.bon/README.md` is modified, run `git checkout -- .bon/README.md` first; bon rewrote that file, so nothing is lost. Never restart Dolt or recreate `~/.config/bon/dolt.toml` to get a board back.
+A clone that still carries `.bon/backend` containing `dolt` hasn't pulled the migrate commit. bon refuses, says so and names the fix (`git pull`, after `git checkout -- .bon/README.md` if the pull objects to that file). Never restart Dolt or recreate its client config to get a board back.
 
 ## Commit Citation
 

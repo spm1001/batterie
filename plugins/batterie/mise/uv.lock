@@ -820,7 +820,7 @@ dependencies = [
     { name = "google-auth-oauthlib" },
 ]
 wheels = [
-    { filename = "jeton-1.6.0-py3-none-any.whl", hash = "sha256:74981bf892c71b84a323e838b600c550ceb43b57b67e69c80eb81198ee262050" },
+    { filename = "jeton-1.6.0-py3-none-any.whl", hash = "sha256:1dc113707908feecf3e6e941b403153aaa7949c493a7dc5e1e49bf5fe48b6e23" },
 ]
 
 [package.metadata]

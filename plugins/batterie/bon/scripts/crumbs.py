@@ -181,6 +181,38 @@ def read_head(path: Path) -> tuple[dict | None, str | None]:
     return None, cwd
 
 
+PATH_STOP = re.compile(rb'["\s\\]')
+
+
+def handoff_paths(chunk: bytes, id8: bytes) -> set[bytes]:
+    """Absolute …/handoffs/…-<id8>.md paths named in chunk, found in linear time.
+
+    Anchored on the rare "-<id8>.md" and walked back to the token's start. The
+    regex this replaces could begin a match at every "/", and a pasted image's
+    base64 is all slashes with no quote or space to stop it, so it backtracked
+    quadratically: one 2.4 MB transcript holding three images cost 156 s, and
+    with it every session start ran ~170 s. Paseo gives up on a session that has
+    not started within 60 s, so every chat it launched lost its first prompt
+    (29 Oct 2026, mit-kit mc-nokoze).
+
+    The token stops at a quote, whitespace or backslash: inside JSON a newline is
+    the two bytes \\n, and /close's preamble prints HANDOFF_DIR=…/handoffs and
+    HANDOFF_FILE=…-<id8>.md on separate lines, so a started-but-abandoned close
+    must not join them into one path.
+    """
+    needle = b"-" + id8 + b".md"
+    found = set()
+    i = chunk.find(needle)
+    while i != -1:
+        end = i + len(needle)
+        token = PATH_STOP.split(chunk[max(0, end - 4096):end])[-1]
+        slash = token.find(b"/")
+        if slash != -1 and b"/handoffs/" in token[slash:]:
+            found.add(token[slash:])
+        i = chunk.find(needle, end)
+    return found
+
+
 def read_tail(path: Path, size: int) -> tuple[dict | None, str | None, bool]:
     """(last human entry, last user/assistant timestamp, wrote a handoff)
     from the back.
@@ -193,10 +225,7 @@ def read_tail(path: Path, size: int) -> tuple[dict | None, str | None, bool]:
     ignored; the estate walk covers the usual homes either way.
     """
     last_ts = None
-    # no backslash in the run: inside JSON a newline is the two bytes \n, and
-    # /close's preamble prints HANDOFF_DIR=…/handoffs and HANDOFF_FILE=…-<id8>.md
-    # on separate lines — a started-but-abandoned close must not match
-    closed = re.compile(rb"(/[^\"\s\\]*/handoffs/[^\"\s\\]*-" + re.escape(path.stem[:8].encode()) + rb"\.md)")
+    id8 = path.stem[:8].encode()
     wrote = False
     with open(path, "rb") as f:
         for step in TAIL_STEPS:
@@ -204,7 +233,7 @@ def read_tail(path: Path, size: int) -> tuple[dict | None, str | None, bool]:
             f.seek(start)
             chunk = f.read(size - start)
             if not wrote:
-                wrote = any(os.path.isfile(m.decode("utf-8", "replace")) for m in set(closed.findall(chunk)))
+                wrote = any(os.path.isfile(m.decode("utf-8", "replace")) for m in handoff_paths(chunk, id8))
             lines = chunk.split(b"\n")
             if start > 0:
                 lines = lines[1:]  # first line is partial

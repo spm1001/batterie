@@ -33,6 +33,7 @@ from adapters.http_client import get_sync_client
 from cues_util import current_user_email
 from adapters.gmail_draft_attachments import with_attachments
 from extractors.gmail import parse_message_payload, parse_attachments_from_payload, parse_forwarded_messages
+from extractors.automated_sender import automated_reason
 from html_convert import select_body_text
 from filters import is_trivial_attachment, filter_attachments
 
@@ -59,8 +60,8 @@ THREAD_FIELDS = (
 # the Bcc list to recipients. Keeping it here ensures it's available
 # when present (own sent messages) for participant enumeration.
 WANTED_HEADERS = frozenset({
-    "From", "To", "Cc", "Bcc", "Subject", "Date",
-    "Message-ID", "In-Reply-To", "References",
+    "From", "To", "Cc", "Bcc", "Subject", "Date", "Message-ID", "In-Reply-To", "References",
+    "Reply-To", "Auto-Submitted", "Precedence", "X-Original-Sender",  # automated_reason reads these
 })
 
 
@@ -95,9 +96,8 @@ def payload_has_calendar_part(payload: dict[str, Any]) -> bool:
     return walk(payload)
 
 
-# RFC 5322 header names are case-insensitive and clients vary in practice
-# (Outlook emits "CC:", some emit "Message-Id"). Match case-insensitively
-# but key the result by canonical name so headers.get("Cc") works downstream.
+# RFC 5322 header names are case-insensitive and clients vary ("CC:", "Message-Id"):
+# match case-insensitively, key by canonical name so headers.get("Cc") works downstream.
 _CANONICAL_HEADERS = {h.lower(): h for h in WANTED_HEADERS}
 
 
@@ -176,8 +176,8 @@ def _parse_date(date_str: str | None, internal_date: str | None) -> datetime | N
 
 
 def _as_attachments(rows: list[dict[str, Any]]) -> list[EmailAttachment]:
-    return [EmailAttachment(filename=a["filename"], mime_type=a["mimeType"],
-                            size=a["size"], attachment_id=a["attachment_id"]) for a in rows]
+    return [EmailAttachment(filename=a["filename"], mime_type=a["mimeType"], size=a["size"],
+                            attachment_id=a["attachment_id"], display_size=a.get("display_size")) for a in rows]
 
 
 def _extract_drive_links(text: str | None) -> list[dict[str, str]]:
@@ -209,7 +209,7 @@ def _build_message(msg: dict[str, Any]) -> EmailMessage:
     body_text, body_warnings = select_body_text(body_text, body_html)
 
     # Parse attachments (filtered - hide trivials from Claude)
-    attachments_raw = parse_attachments_from_payload(payload)
+    attachments_raw = parse_attachments_from_payload(payload, body_html)
     filtered_raw = filter_attachments(attachments_raw)
     attachments = _as_attachments(filtered_raw)
     # Calendar parts are trivial-filtered out of `attachments` above, but the
@@ -229,10 +229,9 @@ def _build_message(msg: dict[str, Any]) -> EmailMessage:
     drive_links = _extract_drive_links(body_text) or _extract_drive_links(body_html)
 
     # Extract forwarded messages (MIME message/rfc822 parts)
-    # The extractor does pure MIME parsing; we handle any HTML conversion here.
-    # (_parse_rfc822_part only sets body_html when body_text is absent, so the
-    # table-swap branch of select_body_text can't fire here — this is the
-    # plain html-only conversion, warnings discarded as before.)
+    # The extractor does pure MIME parsing; HTML conversion happens here. (_parse_rfc822_part
+    # sets body_html only when body_text is absent, so select_body_text's table-swap branch
+    # can't fire: this is the plain html-only conversion, warnings discarded as before.)
     forwarded = parse_forwarded_messages(payload)
     for fwd in forwarded:
         fwd.body_text = select_body_text(fwd.body_text or None, fwd.body_html)[0] or ''
@@ -250,6 +249,7 @@ def _build_message(msg: dict[str, Any]) -> EmailMessage:
         message_id_header=headers.get("Message-ID"),
         in_reply_to=headers.get("In-Reply-To"),
         references=headers.get("References"),
+        automated=automated_reason(headers),
         attachments=attachments,
         calendar_attachments=calendar_attachments,
         hidden_attachments=hidden_attachments,

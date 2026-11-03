@@ -38,9 +38,10 @@ import sys
 from collections import defaultdict
 from pathlib import Path
 
-# Trailing-parens citation, modern IDs only: lowercase alnum prefix,
-# dash, six letters (mixed case allowed — legacy bon-huHida shape).
-CITATION_RE = re.compile(r"\(([a-z][a-z0-9]*-[A-Za-z]{6})\)")
+# Trailing-parens citation, modern IDs only: lowercase alnum prefix, which
+# may be hyphenated (a repo name, bon 2.13.0), dash, six letters (mixed case
+# allowed — legacy bon-huHida shape).
+CITATION_RE = re.compile(r"\(([a-z][a-z0-9]*(?:-[a-z0-9]+)*-[A-Za-z]{6})\)")
 FIELD_SEP = "\x1f"
 RECORD_SEP = "\x1e"
 
@@ -90,6 +91,19 @@ def load_archive_ids(repo: Path) -> set:
     return ids
 
 
+def load_aliases(repo: Path) -> dict:
+    """Old id -> current id for a re-prefixed board (bon-poboso). Commit
+    messages are records and keep the ids of their day; this maps them."""
+    path = repo / ".bon" / "aliases.jsonl"
+    out = {}
+    if path.is_file():
+        for line in path.read_text().splitlines():
+            if line.strip():
+                rec = json.loads(line)
+                out[rec["old"]] = rec["new"]
+    return out
+
+
 def scan_commits(repo: Path, since: str) -> list:
     cmd = ["git", "-C", str(repo), "log",
            f"--format=%H{FIELD_SEP}%ad{FIELD_SEP}%B{RECORD_SEP}",
@@ -132,7 +146,10 @@ def main() -> None:
         fail(f"board at {repo} returned no items — empty board or wrong cwd; not reporting a clean pass on nothing")
     prefixes = {i.rsplit("-", 1)[0] for i in items}
     archive_ids = load_archive_ids(repo)
+    aliases = load_aliases(repo)
     commits = scan_commits(repo, args.since)
+    for c in commits:
+        c["cited"] = sorted({aliases.get(cid, cid) for cid in c["cited"]})
 
     per_id = defaultdict(list)          # cited id -> commits, newest first (git log order)
     citing_commits = 0

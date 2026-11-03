@@ -27,10 +27,12 @@ _DEFAULT_FILTER_CONFIG: dict[str, Any] = {
     "version": 1,
     "description": (
         "Built-in fallback mirror of config/attachment_filters.json. "
-        "Calendar invites, vcards, small images, and generic filenames "
-        "are hidden from Claude."
+        "Calendar invites, vcards, GIFs, logo-sized images (short side shown under "
+        "image_min_short_edge_px, else under image_size_threshold_bytes) and generic "
+        "filenames are hidden from the deposit; each hidden entry says why."
     ),
     "image_size_threshold_bytes": 204800,
+    "image_min_short_edge_px": 200,
     "excluded_mime_types": [
         "text/calendar",
         "application/ics",
@@ -91,52 +93,53 @@ def _get_compiled_patterns() -> list[re.Pattern[str]]:
     return patterns
 
 
-def is_trivial_attachment(filename: str, mime_type: str, size: int) -> bool:
+def is_trivial_attachment(filename: str, mime_type: str, size: int,
+                          display_size: tuple[int, int] | None = None) -> bool:
+    """Whether an attachment is hidden from the deposit. trivial_reason says why."""
+    return trivial_reason(filename, mime_type, size, display_size) is not None
+
+
+def trivial_reason(filename: str, mime_type: str, size: int,
+                   display_size: tuple[int, int] | None = None) -> str | None:
     """
-    Check if an attachment should be filtered out.
+    Why an attachment is hidden from the deposit, or None when it is kept.
 
-    Trivial attachments are hidden completely from Claude:
-    - Calendar invites (.ics)
-    - VCards (.vcf)
-    - GIFs (typically animated logos/reactions)
-    - Small images (<200KB, typically signatures/logos)
-    - Generic filenames (image.png, attachment.pdf, etc.)
-
-    Args:
-        filename: Attachment filename
-        mime_type: MIME type of the attachment
-        size: Size in bytes
-
-    Returns:
-        True if attachment is trivial (should be filtered), False otherwise
+    Hidden: calendar invites, vcards, GIFs, non-image generic filenames
+    (attachment.pdf), and images that look like logos. An image the HTML part
+    shows at a stated size is judged by its short side, the side that tells a
+    signature banner (515x109) from a pasted slide (718x403); without one it
+    falls back to bytes (mise-tenega, measured in extractors/inline_images.py).
+    The reason is printed beside each hidden attachment, so a reader can tell
+    'shown at 542x190 px' from a logo and fetch it.
     """
     config = get_filter_config()
     name = (filename or "").lower().strip()
 
-    # Empty filename
     if not name:
-        return True
+        return "no filename"
 
-    # Excluded MIME types (calendar invites, vcards, gifs)
     if mime_type in config.get("excluded_mime_types", []):
-        return True
+        return f"{mime_type} is hidden by type"
 
-    # Excluded filename patterns (generic names like "image.png", "attachment.pdf")
-    # Uses pre-compiled patterns for 3x speedup. NOT for images: an image's
-    # triviality is its size (the rule below). Gmail names every pasted image
-    # 'image.png', so the name rule hid ~200KB budget slides that WERE the
-    # message's payload (mise-sajeso, 2026-08-20).
+    # Generic names ("attachment.pdf"). NOT for images: Gmail names every
+    # pasted image 'image.png', so the name rule hid ~200KB budget slides that
+    # WERE the message's payload (mise-sajeso, 2026-08-20).
     is_image = bool(mime_type) and mime_type.startswith("image/")
-    for compiled_pattern in _get_compiled_patterns():
-        if not is_image and compiled_pattern.match(name):
-            return True
+    if not is_image and any(p.match(name) for p in _get_compiled_patterns()):
+        return "generic filename"
+    if not is_image:
+        return None
 
-    # Small images (logos, signatures, inline graphics)
+    if display_size:
+        edge = config.get("image_min_short_edge_px", 200)
+        if min(display_size) < edge:
+            return f"image shown at {display_size[0]}x{display_size[1]} px, under {edge} px on its short side"
+        return None
+
     threshold = config.get("image_size_threshold_bytes", 204800)
-    if mime_type and mime_type.startswith("image/") and size < threshold:
-        return True
-
-    return False
+    if size < threshold:
+        return f"image under {threshold // 1024} KB with no shown size in the message"
+    return None
 
 
 def filter_attachments(attachments: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -156,7 +159,7 @@ def filter_attachments(attachments: list[dict[str, Any]]) -> list[dict[str, Any]
         mime_type = att.get("mime_type") or att.get("mimeType", "")
         size = att.get("size", 0)
 
-        if not is_trivial_attachment(filename, mime_type, size):
+        if not is_trivial_attachment(filename, mime_type, size, att.get("display_size")):
             filtered.append(att)
 
     return filtered

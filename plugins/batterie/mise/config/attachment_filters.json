@@ -1,7 +1,8 @@
 {
   "version": 1,
-  "description": "Filter config for trivial email attachments. Calendar invites, vcards, small images, and generic filenames are hidden from Claude.",
+  "description": "Filter config for trivial email attachments. Calendar invites, vcards, GIFs, logo-sized images (short side shown under image_min_short_edge_px, else under image_size_threshold_bytes) and generic filenames are hidden from the deposit; each hidden entry says why.",
   "image_size_threshold_bytes": 204800,
+  "image_min_short_edge_px": 200,
   "excluded_mime_types": [
     "text/calendar",
     "application/ics",

@@ -17,8 +17,8 @@ from dataclasses import dataclass
 # concern (backtracking), we'd need to rewrite the pattern without named groups.
 import regex as re
 from extractors.signature_guards import (
-    REPLY_PREAMBLE, drop_orphaned_preamble, has_anchored_link, is_texty,
-    link_loss_warnings, revert_if_catastrophic,
+    REPLY_PREAMBLE, beheads_payload, drop_orphaned_preamble, has_anchored_link, is_texty,
+    revert_if_catastrophic, strip_warnings,
 )
 
 log = logging.getLogger(__name__)
@@ -423,10 +423,10 @@ def _strip_trailing_contact_block(body: str) -> tuple[str, list[str]]:
         has_phone = bool(_RE_PHONE.search(trailing))
 
         if url_count >= 3 or (url_count >= 1 and has_phone):
-            if has_anchored_link(trailing):  # a call to action, not a contact block
+            if has_anchored_link(trailing) or beheads_payload(lines, i):  # a call to action or payload
                 return body, warnings
             stripped = '\n'.join(lines[:i]).rstrip()
-            warnings.extend(link_loss_warnings(trailing))
+            warnings.extend(strip_warnings(trailing))
             if original_len > 0 and len(stripped) / original_len < _AGGRESSIVE_STRIP_RATIO:
                 warnings.append(
                     f"Aggressive signature strip: kept "
@@ -439,7 +439,7 @@ def _strip_trailing_contact_block(body: str) -> tuple[str, list[str]]:
     return body, warnings
 
 
-def strip_signature_and_quotes(msg_body: str) -> tuple[str, list[str]]:
+def strip_signature_and_quotes(msg_body: str, automated: bool = False) -> tuple[str, list[str]]:
     """
     Strip signatures and quoted replies, preserving forwarded messages.
 
@@ -459,6 +459,8 @@ def strip_signature_and_quotes(msg_body: str) -> tuple[str, list[str]]:
     reply quotes won't match the regex (anchored to ^, quote-prefixed lines
     stripped first), so it's correctly removed as part of the reply chain.
 
+    automated=True (machine mail, extractors.automated_sender) skips steps 2-3.
+
     Returns (cleaned_body, warnings). Warnings surface aggressive strips
     (>80% reduction) so silent body-eating is detectable upstream.
     """
@@ -473,8 +475,10 @@ def strip_signature_and_quotes(msg_body: str) -> tuple[str, list[str]]:
     # Steps 1-3: strip own content only
     # An orphaned preamble goes before talon; one heading inline answers stays.
     without_quotes = drop_orphaned_preamble(strip_quoted_lines(own_content))
-    body, _ = extract_signature(without_quotes)
-    body, warnings = _strip_trailing_contact_block(body)
+    body, warnings = without_quotes, list[str]()
+    if not automated:  # machine mail has no personal signature: its tail is payload (mise-woluso)
+        body, _ = extract_signature(without_quotes)
+        body, warnings = _strip_trailing_contact_block(body)
 
     # Safety net (mise-rejula): measured against the post-quote body, because
     # quote removal is legitimate. Thresholds and rationale: signature_guards.

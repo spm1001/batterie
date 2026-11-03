@@ -343,6 +343,9 @@ Data models have `warnings: list[str]` fields. Extractors populate them during p
 - **A self-sent (thread-a / msg-a) refusal attaches `candidates`**
 - **Gmail body selection is plain-text-first with one exception**
 - **Inline answers inside a quote survive stripping**
+- **Signature stripping skips machine mail, and refuses to behead content**
+- **Quoted history the thread holds nowhere else is deposited**
+- **Hidden attachments say why they were hidden, and images are judged by their shown size**
 - **`fetch` of a decorated Drive URL points at the named location instead of throwing it away**
 - `fetch` accepts `raw=True` alongside `attachment=`
 - `fetch` accepts optional `tabs` param (list of tab names) to fetch only specific tabs from spreadsheets

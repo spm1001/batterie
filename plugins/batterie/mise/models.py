@@ -215,6 +215,8 @@ class EmailAttachment:
     mime_type: str
     size: int
     attachment_id: str  # For fetching content later
+    # (width, height) the HTML part showed it at, for inline images that state one (mise-tenega)
+    display_size: tuple[int, int] | None = None
 
     # Thread-unique handle (tools.fetch.gmail_attachments.assign_attachment_refs):
     # the deposit filename AND what attachment= accepts, so same-named parts
@@ -268,6 +270,9 @@ class EmailMessage:
     message_id_header: str | None = None  # Message-ID header (RFC 5322)
     in_reply_to: str | None = None  # In-Reply-To header
     references: str | None = None  # References header (space-separated message IDs)
+    # Header evidence that a machine sent it (Auto-Submitted, Precedence: bulk, a
+    # no-reply address) — signature stripping is skipped for it (mise-woluso).
+    automated: str | None = None
 
     # Drive links mentioned in body (people say "attached" when they mean "linked")
     drive_links: list[dict[str, str]] = field(default_factory=list)

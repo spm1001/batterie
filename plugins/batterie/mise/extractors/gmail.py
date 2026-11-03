@@ -13,8 +13,9 @@ from typing import Any
 from models import GmailThreadData, EmailMessage, ForwardedMessage
 from html_convert import clean_html_for_conversion as _clean_html_for_conversion, strip_html_tags
 
-from extractors.inline_replies import find_inline_replies, render_inline_replies, reply_points_into_quote
-from .talon_signature import split_forward_sections, strip_signature_and_quotes
+from extractors.inline_images import display_sizes
+from extractors.inline_replies import ThreadQuotes
+from .talon_signature import strip_signature_and_quotes
 
 
 def _convert_html_to_markdown(html: str) -> tuple[str, bool]:
@@ -81,7 +82,7 @@ def extract_message_content(
 
     # Strip signatures and quoted replies if requested
     if strip_signature and body:
-        body, strip_warnings = strip_signature_and_quotes(body)
+        body, strip_warnings = strip_signature_and_quotes(body, automated=bool(message.automated))
         warnings.extend(strip_warnings)
 
     # Append MIME-forwarded messages (message/rfc822 parts)
@@ -117,23 +118,6 @@ def _raw_body(message: EmailMessage) -> str:
     if message.body_html:
         return _convert_html_to_markdown(_clean_html_for_conversion(message.body_html))[0]
     return ""
-
-
-def _keep_inline_replies(data: GmailThreadData, i: int, body: str, raw: dict[int, str]) -> str:
-    """Append answers written inside message i's quote (1-based; mise-lopune)."""
-    if not reply_points_into_quote(body):
-        return body
-    for k in range(i):
-        raw.setdefault(k, _raw_body(data.messages[k]))
-    own, _ = split_forward_sections(raw[i - 1])
-    replies, _ = find_inline_replies(own, [raw[k] for k in range(i - 1)])
-    if not replies:
-        return body
-    data.warnings.append(
-        f"Message {i}: kept {len(replies)} inline reply passage(s) — text written "
-        "inside the quoted message, which quote stripping would have dropped"
-    )
-    return f"{body}\n\n{render_inline_replies(replies)}".strip()
 
 
 def format_message_date(dt: datetime) -> str:
@@ -238,7 +222,7 @@ def extract_thread_content(
 
     # Process each message
     truncated = False
-    raw_bodies: dict[int, str] = {}
+    quotes = ThreadQuotes(data, _raw_body)
     for i, message in enumerate(data.messages, start=1):
         # Message separator (except for first)
         if i > 1:
@@ -264,8 +248,8 @@ def extract_thread_content(
         body, msg_warnings = extract_message_content(message, strip_signature=strip_signatures)
         for w in msg_warnings:
             data.warnings.append(f"Message {i}: {w}")
-        if strip_signatures and i > 1:
-            body = _keep_inline_replies(data, i, body, raw_bodies)
+        if strip_signatures:
+            body = quotes.keep(i, body)
 
         if max_length:
             remaining = max_length - total_length
@@ -457,7 +441,7 @@ def parse_ics_uid(ics_text: str) -> str | None:
     return match.group(1).strip() if match else None
 
 
-def parse_attachments_from_payload(payload: dict[str, Any]) -> list[dict[str, Any]]:
+def parse_attachments_from_payload(payload: dict[str, Any], html: str | None = None) -> list[dict[str, Any]]:
     """
     Extract attachment metadata from Gmail API message payload.
 
@@ -465,36 +449,41 @@ def parse_attachments_from_payload(payload: dict[str, Any]) -> list[dict[str, An
 
     Args:
         payload: The 'payload' field from Gmail API message
+        html: The message's HTML part, if any: an inline image it shows with a
+            stated width and height gets 'display_size' (mise-tenega)
 
     Returns:
-        List of attachment dicts with: filename, mimeType, size, attachment_id
+        List of attachment dicts with: filename, mimeType, size, attachment_id,
+        and display_size when the HTML states one
     """
     attachments: list[dict[str, Any]] = []
+    shown = display_sizes(html)
+
+    def add(part: dict[str, Any]) -> None:
+        body = part.get('body', {})
+        if not (body.get('attachmentId') and part.get('filename')):
+            return
+        row: dict[str, Any] = {
+            'filename': part['filename'],
+            'mimeType': part.get('mimeType', 'application/octet-stream'),
+            'size': body.get('size', 0),
+            'attachment_id': body['attachmentId'],
+        }
+        cid = next((h.get('value', '') for h in part.get('headers', [])
+                    if h.get('name', '').lower() == 'content-id'), '').strip().strip('<>').strip()
+        if cid in shown:
+            row['display_size'] = shown[cid]
+        attachments.append(row)
 
     def scan_parts(parts: list[dict[str, Any]]) -> None:
         for part in parts:
-            # Check if this part is an attachment
-            body = part.get('body', {})
-            if body.get('attachmentId') and part.get('filename'):
-                attachments.append({
-                    'filename': part['filename'],
-                    'mimeType': part.get('mimeType', 'application/octet-stream'),
-                    'size': body.get('size', 0),
-                    'attachment_id': body['attachmentId'],
-                })
-            # Recurse into nested parts
+            add(part)
             if 'parts' in part:
                 scan_parts(part['parts'])
 
     if 'parts' in payload:
         scan_parts(payload['parts'])
-    elif payload.get('body', {}).get('attachmentId') and payload.get('filename'):
-        # Single-part message with attachment
-        attachments.append({
-            'filename': payload['filename'],
-            'mimeType': payload.get('mimeType', 'application/octet-stream'),
-            'size': payload['body'].get('size', 0),
-            'attachment_id': payload['body']['attachmentId'],
-        })
+    else:
+        add(payload)  # single-part message whose body is the attachment
 
     return attachments

@@ -16,6 +16,7 @@ from adapters.pdf import convert_pdf_content
 from extractors.gmail import format_message_date
 from extractors.image import resize_image_bytes, SUPPORTED_IMAGE_MIME_TYPES
 from models import EmailAttachment
+from filters import trivial_reason
 from workspace import write_content, write_image
 
 from .common import is_text_file
@@ -358,7 +359,8 @@ def hidden_attachment_cues(thread_data: Any) -> dict[str, Any]:
     """
     parts = [a for msg in thread_data.messages for a in getattr(msg, "hidden_attachments", [])]
     hidden = [
-        _with_duplicate({"fetch_as": a.ref or a.filename, "mime_type": a.mime_type, "size": a.size}, a)
+        _with_duplicate({"fetch_as": a.ref or a.filename, "mime_type": a.mime_type, "size": a.size,
+                         "why": trivial_reason(a.filename, a.mime_type, a.size, a.display_size)}, a)
         for a in sorted(parts, key=lambda a: bool(getattr(a, "duplicate_of", None)))
     ]
     if not hidden:
@@ -366,9 +368,9 @@ def hidden_attachment_cues(thread_data: Any) -> dict[str, Any]:
     cues: dict[str, Any] = {
         "hidden_attachments": hidden[:_HIDDEN_LIST_CAP],
         "hidden_attachments_note": (
-            f"{len(hidden)} attachment(s) not deposited because they look like "
-            "logos or signature images (small images, generic names). If one is "
-            "content, fetch it by its fetch_as name: fetch(<thread>, attachment='<fetch_as>')."
+            f"{len(hidden)} attachment(s) not deposited: each entry's 'why' names the rule "
+            "(usually a logo-sized image). If one is content, fetch it by its fetch_as "
+            "name: fetch(<thread>, attachment='<fetch_as>')."
         ),
     }
     if len(hidden) > _HIDDEN_LIST_CAP:

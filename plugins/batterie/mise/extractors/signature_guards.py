@@ -30,22 +30,43 @@ def is_texty(line: str) -> bool:
 
 
 _URL_HOST = re.compile(r'https?://(?:www\.)?([^/\s)>|\]]+)')
+# A list item: '- proj-alpha', '* x', '• x', '1. x', '2) x'.
+_LIST_ITEM = re.compile(r'^\s*(?:[-*\u2022]|\d{1,2}[.)])\s')
 
 
-def link_loss_warnings(discarded: str) -> list[str]:
-    """Name the links a signature strip threw away, whatever the character ratio.
+def beheads_payload(lines: list[str], i: int) -> bool:
+    """Whether a cut at line i would cut content off its introduction (mise-serewe, mise-monesi).
+
+    A signature's first line signs off: a name, 'Thanks'. A line ending in ':'
+    introduces what follows ('Your affected projects are listed below:',
+    'Jo Bloggs commented:'), and so does the kept line above the cut;
+    a list item is the middle of something. Any of the three and the strip
+    stops rather than walking on, because every earlier cut eats the same text.
+    """
+    above = next((line.strip() for line in reversed(lines[:i]) if line.strip()), '')
+    return lines[i].strip().endswith(':') or above.endswith(':') or bool(_LIST_ITEM.match(lines[i]))
+
+
+def strip_warnings(discarded: str) -> list[str]:
+    """Say what a signature strip that stands threw away: its size, first line and links.
 
     A ratio test cannot see this loss: the invitation kept 41% of its
-    characters and 1 of 6 links (mise-kubolo). Real contact blocks will warn
-    too; the hosts let the reader tell a LinkedIn footer from a call to action.
+    characters and 1 of 6 links (mise-kubolo). A link count alone read as a
+    harmless footer when it was a Google Cloud notice's project list
+    (mise-serewe), so the first removed line is quoted: 'Jo Bloggs' reads as
+    a signature, '- proj-alpha' does not.
     """
-    hosts = list(dict.fromkeys(_URL_HOST.findall(discarded)))
-    if not hosts:
+    lines = [line.strip() for line in discarded.split('\n') if line.strip()]
+    if not lines:
         return []
+    first = lines[0] if len(lines[0]) <= 60 else lines[0][:57] + '...'
+    links = _URL_HOST.findall(discarded)
+    hosts = list(dict.fromkeys(links))
+    held = (f", holding {len(links)} link(s) ({', '.join(hosts[:5])}{', ...' if len(hosts) > 5 else ''})"
+            if hosts else "")
     return [
-        f"Signature strip removed a trailing block holding {len(_URL_HOST.findall(discarded))} "
-        f"link(s) ({', '.join(hosts[:5])}{', ...' if len(hosts) > 5 else ''}). If those were "
-        "content, not a contact block, read the message in Gmail."
+        f"Signature strip removed the last {len(lines)} line(s), from \"{first}\"{held}. If that "
+        "was content rather than a signature, read the message in Gmail."
     ]
 
 

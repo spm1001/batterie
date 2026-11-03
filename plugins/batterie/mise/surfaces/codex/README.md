@@ -6,6 +6,6 @@ This reuses the installed service code and each kit's existing authentication th
 
 On Tube, the Codex server names are `mise_itv` and `mise_home`, with the normal `search`, `fetch` and `do` tools. The setup qualification used read-only account checks, bounded search, the existing ITV integration-test Doc, and the personal Drive root listing. It also fault-injected an absent credential path against the underlying server: the response contained an explicit missing-token error and no identity cue. A transport-level `isError: false` is not sufficient to infer operation success; inspect the returned payload and its cues.
 
-Run `uv run --script surfaces/codex/test_launch.py` from this repository for version-selection and identity-isolation checks. Account-routing evidence and current deployment state belong to the existing infra setup action `iw-rucega`, not this source document.
+Run `uv run --script surfaces/codex/test_launch.py` from this repository for version-selection and identity-isolation checks. Account-routing evidence and current deployment state belong to the existing infra setup action `infra-rucega`, not this source document.
 
 After a launcher repair, Codex 0.162.1's supported app-server `config/mcpServer/reload` request queues a connection refresh for loaded threads. Check `mcpServerStatus/list` with the actual thread ID and make a benign tool call through that thread before reporting the connection repaired. A successful launcher description alone does not verify authentication or refresh the session's tool catalogue.

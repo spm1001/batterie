@@ -19,14 +19,14 @@ def is_batterie_family(repo):
     # Suite marketplaces: spm1001/batterie (public) + spm1001/batterie-* (e.g. a
     # private flavour). Match by source repo so a cherry-picked single plugin and
     # plugin renames still resolve — not by "contains the batterie plugin". The
-    # family kit is named since batterie-home became spm1001/family-kit (bds-lecote).
+    # family kit is named since batterie-home became spm1001/family-kit (batterie-de-savoir-lecote).
     return repo in ("spm1001/batterie", "spm1001/family-kit") or repo.startswith("spm1001/batterie-")
 
 def source_repo(info):
     # Normalise a known_marketplaces.json entry to "owner/repo". Shapes seen in
     # the wild: {"source":"github","repo":"o/r"} (shorthand add); {"source":"git",
     # "url":"https://github.com/o/r.git"} (URL add — a normal, persistent shape;
-    # bds-mifubu); {"source":"directory","path":...} (local dev, no repo).
+    # batterie-de-savoir-mifubu); {"source":"directory","path":...} (local dev, no repo).
     src = info.get("source") if isinstance(info, dict) else None
     if not isinstance(src, dict):
         return ""
@@ -55,11 +55,11 @@ mkt = lambda key: key.rsplit("@", 1)[1] if "@" in key else ""
 installed = {k: v[0] for k, v in plugins.items() if mkt(k) in fam and v}
 
 # Family-named marketplaces that didn't resolve = a discovery gap, never a
-# silent drop (bds-mifubu).
+# silent drop (batterie-de-savoir-mifubu).
 suspicious = sorted({m for m in {mkt(k) for k in plugins}
                      if (m == "batterie" or m.startswith("batterie-")) and m not in fam})
 if suspicious:
-    print(f"⚠️ WARNING: marketplace(s) {', '.join(suspicious)} look batterie-family but did not resolve from known_marketplaces.json — unrecognised source shape? Their plugins are missing from this report (bds-mifubu).")
+    print(f"⚠️ WARNING: marketplace(s) {', '.join(suspicious)} look batterie-family but did not resolve from known_marketplaces.json — unrecognised source shape? Their plugins are missing from this report (batterie-de-savoir-mifubu).")
 
 multi = len({mkt(k) for k in installed}) > 1
 base_names = {k.rsplit("@", 1)[0] for k in installed}

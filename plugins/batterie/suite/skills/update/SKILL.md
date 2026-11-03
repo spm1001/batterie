@@ -26,7 +26,7 @@ def is_batterie_family(repo):
     # batterie-family marketplace WITHOUT installing the batterie plugin from it, so
     # plugin-membership is not a sufficient test. Source-repo matching also survives
     # plugin renames. The family kit left the pattern when batterie-home became
-    # spm1001/family-kit (27 Sep 2026), so it is named (bds-lecote).
+    # spm1001/family-kit (27 Sep 2026), so it is named (batterie-de-savoir-lecote).
     return repo in ("spm1001/batterie", "spm1001/family-kit") or repo.startswith("spm1001/batterie-")
 
 def source_repo(info):
@@ -34,7 +34,7 @@ def source_repo(info):
     # the wild: {"source":"github","repo":"o/r"} (shorthand add); {"source":"git",
     # "url":"https://github.com/o/r.git"} (URL add — a normal, PERSISTENT shape:
     # tube ran this way and every @batterie plugin silently vanished from this
-    # snapshot, bds-mifubu); {"source":"directory","path":...} (local dev, no repo).
+    # snapshot, batterie-de-savoir-mifubu); {"source":"directory","path":...} (local dev, no repo).
     src = info.get("source") if isinstance(info, dict) else None
     if not isinstance(src, dict):
         return ""
@@ -91,7 +91,7 @@ def committed_declarations():
         return None
 
 def check_marketplaces():
-    # bds-facofo. Claude Code keeps two records of a marketplace: the declaration
+    # batterie-de-savoir-facofo. Claude Code keeps two records of a marketplace: the declaration
     # in settings.json (extraKnownMarketplaces) and its registry
     # (known_marketplaces.json). When they name different sources — the same repo
     # by git URL instead of github shorthand, say — it refuses the record: the
@@ -207,14 +207,14 @@ if lost or drift:
     print()
 
 if read_error is not None:
-    # A failed read must never render like an empty install (bds-mifubu).
+    # A failed read must never render like an empty install (batterie-de-savoir-mifubu).
     print(f"⚠️ SNAPSHOT FAILED: could not read installed_plugins.json ({read_error}).")
     print("Do NOT treat this as 'nothing to update' — Read ~/.claude/plugins/installed_plugins.json directly and use it as the before-state.")
     raise SystemExit(0)
 
 fam = family_marketplaces()
 # One key can carry several install entries — a user-scope one plus a
-# project-scope one per projectPath (bds-getaka). Headline the user entry; list
+# project-scope one per projectPath (batterie-de-savoir-getaka). Headline the user entry; list
 # the rest beneath it so step 2 updates every scope, not just the one a bare
 # "claude plugin update" touches.
 user_entry = lambda v: next((e for e in v if e.get("scope") == "user"), v[0])
@@ -223,7 +223,7 @@ other_scopes = {k: [e for e in plugins[k] if e is not suite_plugins[k]] for k in
 
 # A family-NAMED marketplace that didn't resolve as family means the discovery
 # above has a gap (an unrecognised source shape): its plugins would vanish from
-# this snapshot while remaining installed — the bds-mifubu failure. Warn, never
+# this snapshot while remaining installed — the batterie-de-savoir-mifubu failure. Warn, never
 # silently drop.
 suspicious = sorted({m for m in {mkt(k) for k in plugins}
                      if (m == "batterie" or m.startswith("batterie-")) and m not in fam})
@@ -234,7 +234,7 @@ if not suite_plugins:
     if suspicious:
         print("Snapshot unusable — do NOT treat as 'nothing to update'. Read ~/.claude/plugins/installed_plugins.json for the true before-state.")
     elif os.path.isdir(os.path.join(PLUGINS, "cache", "batterie")):
-        print("⚠️ Registry lists no batterie plugins but a batterie plugin cache exists — possible silent registry drop (bds-wezubo). Verify before proceeding; 'claude plugin install <name>@batterie' restores entries.")
+        print("⚠️ Registry lists no batterie plugins but a batterie plugin cache exists — possible silent registry drop (batterie-de-savoir-wezubo). Verify before proceeding; 'claude plugin install <name>@batterie' restores entries.")
     else:
         print("No batterie plugins installed.")
 else:
@@ -275,7 +275,7 @@ else:
             else:
                 print(f"- {cli_name}: NOT IN PATH")
 
-# The kit fold (bds-jakemi): the public marketplace now lists ONE plugin,
+# The kit fold (batterie-de-savoir-jakemi): the public marketplace now lists ONE plugin,
 # batterie, carrying every tool. Claude Code does not uninstall a plugin its
 # marketplace stops listing, so name every old per-tool install, every scope.
 OLD = ("bon", "trousse", "mise", "accomplis", "sonner", "passe", "arete")
@@ -329,11 +329,11 @@ Not for the MIT kit: `mit@mit` updates with `/mit:mit-refresh`, which also refre
 
 Each command is run once. If one fails in a way this table doesn't name, read the state again (the two registry files) before running anything else, and report what you found.
 
-**Snapshot sanity gate:** if the snapshot above shows any ⚠️ line — or claims nothing is installed while batterie plugins are plainly active in this session — do not proceed from it. Read `~/.claude/plugins/installed_plugins.json` directly and use that as the before-state (and `known_marketplaces.json` to see what the marketplace list should have been). A false-empty snapshot otherwise turns the whole update into a silent no-op (bds-mifubu).
+**Snapshot sanity gate:** if the snapshot above shows any ⚠️ line — or claims nothing is installed while batterie plugins are plainly active in this session — do not proceed from it. Read `~/.claude/plugins/installed_plugins.json` directly and use that as the before-state (and `known_marketplaces.json` to see what the marketplace list should have been). A false-empty snapshot otherwise turns the whole update into a silent no-op (batterie-de-savoir-mifubu).
 
 ### 0. Repair a marketplace Claude Code has stopped loading, or its lost autoUpdate (only if the snapshot shows 🩹)
 
-Claude Code keeps two records of each marketplace: the declaration in `settings.json` (`extraKnownMarketplaces`) and its own registry, `plugins/known_marketplaces.json`. When they disagree — on 27 Sep 2026 a Mac's registry held batterie by git URL (`https://github.com/spm1001/batterie.git`) while settings declared `spm1001/batterie` — Claude Code won't load it. The marketplace drops out of `claude plugin marketplace list`, `marketplace update` says it isn't found, and every plugin from it shows "failed to load — Marketplace … not found". Nothing is uninstalled, but the tools are off from the next session, with no message (bds-facofo). Re-adding the marketplace from the declared source fixes it. For each marketplace the snapshot says has stopped loading, run the lines it printed, in order:
+Claude Code keeps two records of each marketplace: the declaration in `settings.json` (`extraKnownMarketplaces`) and its own registry, `plugins/known_marketplaces.json`. When they disagree — on 27 Sep 2026 a Mac's registry held batterie by git URL (`https://github.com/spm1001/batterie.git`) while settings declared `spm1001/batterie` — Claude Code won't load it. The marketplace drops out of `claude plugin marketplace list`, `marketplace update` says it isn't found, and every plugin from it shows "failed to load — Marketplace … not found". Nothing is uninstalled, but the tools are off from the next session, with no message (batterie-de-savoir-facofo). Re-adding the marketplace from the declared source fixes it. For each marketplace the snapshot says has stopped loading, run the lines it printed, in order:
 
 ```
 claude plugin marketplace add <source>        # the "Re-add:" line
@@ -403,7 +403,7 @@ claude plugin marketplace update <marketplace>
 
 In the common single-marketplace case there's just one — `batterie` — so this is a single `claude plugin marketplace update batterie`. Refreshing pulls the latest index so plugin updates can see new versions; without it, `claude plugin update` compares against a stale index.
 
-**If this fails with "corrupted installLocation (…) — expected a path inside <this config dir>":** nothing is corrupted. The session is running under a secondary `CLAUDE_CONFIG_DIR` that shares the primary's plugins tree (e.g. a symlinked `plugins/`), and CC's prefix check can't see through the alias. The error itself names the owner — the path above `/plugins/marketplaces/` — so rerun this step and step 2's commands with `CLAUDE_CONFIG_DIR=<that dir>`. Do **not** follow the error's remove-and-re-add advice: on a shared tree it forks the plugin state (bds-nawidu).
+**If this fails with "corrupted installLocation (…) — expected a path inside <this config dir>":** nothing is corrupted. The session is running under a secondary `CLAUDE_CONFIG_DIR` that shares the primary's plugins tree (e.g. a symlinked `plugins/`), and CC's prefix check can't see through the alias. The error itself names the owner — the path above `/plugins/marketplaces/` — so rerun this step and step 2's commands with `CLAUDE_CONFIG_DIR=<that dir>`. Do **not** follow the error's remove-and-re-add advice: on a shared tree it forks the plugin state (batterie-de-savoir-nawidu).
 
 ### 1b. Move from the per-tool plugins to the one plugin (only if the snapshot shows 🔀)
 
@@ -432,13 +432,13 @@ claude plugin update <name>@<marketplace>
 
 A plugin must be updated from the marketplace it was installed from, so keep the suffix. In the single-marketplace case every key ends `@batterie` (e.g. `claude plugin update bon@batterie`). Run them sequentially — each must complete before the next starts. Report the output of each.
 
-**Then update every `↳ project scope` line the snapshot showed** (bds-getaka). The bare command only ever touches the **user**-scope install, whatever directory it runs from — it says so ("at user scope") — so a project-scope copy stays silently behind. For each one, run from its `projectPath`:
+**Then update every `↳ project scope` line the snapshot showed** (batterie-de-savoir-getaka). The bare command only ever touches the **user**-scope install, whatever directory it runs from — it says so ("at user scope") — so a project-scope copy stays silently behind. For each one, run from its `projectPath`:
 
 ```
 cd <projectPath> && claude plugin update <name>@<marketplace> --scope project
 ```
 
-Don't remove these duplicates instead: on a machine with a second config dir (the commis seat), a session launched at `$HOME` re-mints a project-scope entry for every enabled plugin, so a removal is undone by the next such session (measured 2026-08-31, carte-tikije). Why it matters: on 2026-09-23 tube's `/home/modha` copies sat at 1.85.20 — before CLIs shipped as wheels — while user scope was on 1.86.5, and sessions launched at `~` are the estate's normal pattern.
+Don't remove these duplicates instead: on a machine with a second config dir (the commis seat), a session launched at `$HOME` re-mints a project-scope entry for every enabled plugin, so a removal is undone by the next such session (measured 2026-08-31, dot-claude-tikije). Why it matters: on 2026-09-23 tube's `/home/modha` copies sat at 1.85.20 — before CLIs shipped as wheels — while user scope was on 1.86.5, and sessions launched at `~` are the estate's normal pattern.
 
 **Guard when `<projectPath>` is the home directory:** a `$HOME` project's config dir is the user config dir, so scope-targeted commands there can edit **user** `settings.json` (a `--scope project` *uninstall* once deleted user `enabledPlugins` entries, 2026-08-17). Take `git -C ~/.claude status --short settings.json` before and after, or a copy of the file where `~/.claude` isn't git-tracked, and restore anything that changed.
 
@@ -451,7 +451,7 @@ After all updates, read `~/.claude/plugins/installed_plugins.json` again. For ea
 
 If step 0 ran, run its block once more with the same names. It changes nothing while autoUpdate is still on, and puts it back if a marketplace refresh in step 1 dropped it from the registry. On the Mac a refresh that replaced a clone did exactly that.
 
-**Registry-drop guard (bds-vegowo).** Also diff the *set of keys*: every batterie plugin present in the "before" snapshot must still be present in the after-state. A plugin registry entry can vanish silently — Claude Desktop has been caught bulk-rewriting `installed_plugins.json` and emptying `@batterie` entries while leaving the plugin cache intact — and the loss is invisible (the plugin's skills just stop loading, no error, no log) until you happen to look. This update run is exactly when a human is looking. So if any batterie plugin from the "before" list is **absent** from the after-state, **warn loudly** — it's a silent registry drop, not a normal update — and offer the known fix (it restores the entry cleanly from the intact cache):
+**Registry-drop guard (batterie-de-savoir-vegowo).** Also diff the *set of keys*: every batterie plugin present in the "before" snapshot must still be present in the after-state. A plugin registry entry can vanish silently — Claude Desktop has been caught bulk-rewriting `installed_plugins.json` and emptying `@batterie` entries while leaving the plugin cache intact — and the loss is invisible (the plugin's skills just stop loading, no error, no log) until you happen to look. This update run is exactly when a human is looking. So if any batterie plugin from the "before" list is **absent** from the after-state, **warn loudly** — it's a silent registry drop, not a normal update — and offer the known fix (it restores the entry cleanly from the intact cache):
 
 ```
 claude plugin install <name>@<marketplace>
@@ -475,7 +475,7 @@ Each plugin key maps to a **list** of installations — one `user`-scope entry p
 
 ### 4. Converge the CLIs onto the wheels the plugins ship
 
-Four batterie tools install a CLI with `uv tool install`, and since bds-timule (2026-09-23) the assembler builds each one into a wheel inside the plugin itself — since the kit fold, under its component: `<installPath>/<component>/wheels/<package>-*.whl` in the `batterie@batterie` install. The source repos are private, so the wheel is the install source for everyone; the git URL is a maintainer fallback that only works with GitHub credentials.
+Four batterie tools install a CLI with `uv tool install`, and since batterie-de-savoir-timule (2026-09-23) the assembler builds each one into a wheel inside the plugin itself — since the kit fold, under its component: `<installPath>/<component>/wheels/<package>-*.whl` in the `batterie@batterie` install. The source repos are private, so the wheel is the install source for everyone; the git URL is a maintainer fallback that only works with GitHub credentials.
 
 | Component | CLI binary / package | Extras |
 |--------|----------------------|--------|
@@ -486,7 +486,7 @@ Four batterie tools install a CLI with `uv tool install`, and since bds-timule (
 
 Plus **deglacer**, shipped in `trousse/wheels/`: converge it the same way *if it is already installed* (`command -v deglacer`), never install it unasked.
 
-**Do NOT compare the plugin version against the CLI version.** Every vendored plugin.json carries the stamped **suite** version while each CLI reports its own number — they differ by design (bds-zojide / bds-japoca). The truthful signal is whether the installed CLI came from the wheel this plugin now ships.
+**Do NOT compare the plugin version against the CLI version.** Every vendored plugin.json carries the stamped **suite** version while each CLI reports its own number — they differ by design (batterie-de-savoir-zojide / batterie-de-savoir-japoca). The truthful signal is whether the installed CLI came from the wheel this plugin now ships.
 
 For each CLI (all four ship in the kit):
 
@@ -496,9 +496,9 @@ For each CLI (all four ship in the kit):
    - `url` is `file://<the shipped wheel>` → current, skip ("up to date").
    - `url` is a `file://….whl` elsewhere (an older plugin version's copy) → current if that file still exists and `cmp -s` says it is byte-identical to the shipped wheel (hatchling builds are reproducible, so an unchanged CLI rebuilds to the same bytes); otherwise reinstall.
    - `url` carries `vcs_info` (an old git install) or the CLI is **not on PATH** → reinstall from the shipped wheel.
-   - `url` carries `dir_info` (a local working tree, e.g. a maintainer's `~/repos` clone) → reinstall from the shipped wheel too, and say so in the report ("was a working-tree install — now on the shipped wheel"). **Every machine runs what everyone else runs**, maintainers included, even when that is a faff (Sameer, 2026-09-23: a maintainer running something different from teammates has bitten us before). Testing a local build is a deliberate, temporary act; the next update puts the machine back. The old rule from bds-zojide still holds in its original direction: never switch an install *onto* a working tree just because a clone exists.
-   - The component ships **no** `wheels/` (a copy older than bds-timule) → say so and fall back to `uv tool install "<package>[<extras>] @ git+https://github.com/spm1001/<package>"`, which needs GitHub credentials.
-4. Reinstall: `uv tool install "<shipped wheel><extras>" --force --reinstall --no-cache` — e.g. `uv tool install "/…/batterie/2.9.2/bon/wheels/bon-2.9.2-py3-none-any.whl" …`. Extras, when a row has any, follow the path directly (`…whl[extra]`). `--no-cache` is load-bearing (bds-vanuta). Never install from a bare PyPI name: none of these CLIs is on PyPI.
+   - `url` carries `dir_info` (a local working tree, e.g. a maintainer's `~/repos` clone) → reinstall from the shipped wheel too, and say so in the report ("was a working-tree install — now on the shipped wheel"). **Every machine runs what everyone else runs**, maintainers included, even when that is a faff (Sameer, 2026-09-23: a maintainer running something different from teammates has bitten us before). Testing a local build is a deliberate, temporary act; the next update puts the machine back. The old rule from batterie-de-savoir-zojide still holds in its original direction: never switch an install *onto* a working tree just because a clone exists.
+   - The component ships **no** `wheels/` (a copy older than batterie-de-savoir-timule) → say so and fall back to `uv tool install "<package>[<extras>] @ git+https://github.com/spm1001/<package>"`, which needs GitHub credentials.
+4. Reinstall: `uv tool install "<shipped wheel><extras>" --force --reinstall --no-cache` — e.g. `uv tool install "/…/batterie/2.9.2/bon/wheels/bon-2.9.2-py3-none-any.whl" …`. Extras, when a row has any, follow the path directly (`…whl[extra]`). `--no-cache` is load-bearing (batterie-de-savoir-vanuta). Never install from a bare PyPI name: none of these CLIs is on PyPI.
 5. After any reinstall, **re-read `<cli> --version` and report the version that actually landed** (sonner has no `--version`; report "installed"). The CLI's number is its own, not the suite number.
 
 ### 5. Summarise

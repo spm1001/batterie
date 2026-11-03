@@ -5,7 +5,7 @@ Instructions for Claude when working in this repository.
 ## What This Is
 
 accomplis is a Python CLI for Todoist with GTD coaching. Two parts:
-- **CLI** (`accomplis/`) — MCP-free Todoist API access, installed via `uv tool install` from the wheel the plugin ships (`wheels/accomplis-*.whl`, built by the assembler — bds-timule), or from `~/repos/spm1001/accomplis` on a maintainer machine. The repo is private, so `git+https` needs GitHub credentials
+- **CLI** (`accomplis/`) — MCP-free Todoist API access, installed via `uv tool install` from the wheel the plugin ships (`wheels/accomplis-*.whl`, built by the assembler — batterie-de-savoir-timule), or from `~/repos/spm1001/accomplis` on a maintainer machine. The repo is private, so `git+https` needs GitHub credentials
 - **Skill** (`SKILL.md` + `references/`) — GTD semantics and coaching
 
 ## Versioning & releasing (suite-managed)
@@ -54,7 +54,7 @@ src/accomplis/
                     # ~/.local/share/accomplis[-flatten]/invocations.jsonl.
                     # Canonical copy + conformance test: spm1001/harness-ergonomics.
                     # Never edit here; re-vendor from canonical. auth --token is
-                    # REDACTED before logging — keep it that way (erg-tebapi).
+                    # REDACTED before logging — keep it that way (harness-ergonomics-tebapi).
 ```
 
 Entry points defined in `pyproject.toml`:

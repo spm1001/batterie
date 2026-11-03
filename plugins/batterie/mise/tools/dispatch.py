@@ -73,6 +73,7 @@ REQUIRED_PARAMS: dict[str, set[str]] = {
     "respond": {"file_id", "action"},
     "create_event": {"title", "time_min", "time_max"},
     "update_event": {"file_id"},
+    "delete_event": {"file_id"},
     "freebusy": {"attendees", "time_min", "time_max"},
     "suggest": {"file_id", "action", "find"},  # fold a tracked change in or out
 }
@@ -101,6 +102,7 @@ DO_PARAM_DEFAULTS: dict[str, Any] = {
     "attendees": None, "time_min": None, "time_max": None, "location": None,
     "meet": None, "recurrence": None, "send_updates": None, "duration": None,
     "properties": None, "color": None, "visibility": None, "transparency": None,
+    "optional_attendees": None,
 }
 
 # Which params each op actually CONSUMES — read straight off the DISPATCH
@@ -147,11 +149,14 @@ OP_PARAMS: dict[str, frozenset[str]] = {
     "create_event": frozenset({"title", "time_min", "time_max", "content",
                                "attendees", "location", "meet", "recurrence",
                                "include", "send_updates", "properties", "color",
-                               "visibility", "transparency", "confirm"}),
+                               "visibility", "transparency", "confirm",
+                               "optional_attendees"}),
     "update_event": frozenset({"file_id", "title", "content", "location",
                                "time_min", "time_max", "attendees", "recurrence",
                                "include", "meet", "send_updates", "properties",
-                               "color", "visibility", "transparency", "confirm"}),
+                               "color", "visibility", "transparency", "confirm",
+                               "optional_attendees"}),
+    "delete_event": frozenset({"file_id", "confirm"}),
     "freebusy": frozenset({"attendees", "time_min", "time_max", "duration"}),
     "suggest": frozenset({"file_id", "action", "find"}),
 }
@@ -190,8 +195,9 @@ HANDLER_TOLERANCES: dict[tuple[str, str], str] = {
     ("create_event", "send_updates"):
         "Same case as confirm: with no attendees nobody can be notified.",
     ("create_event", "meet"):
-        "meet=False on a new event means no link, which is what it gets. "
-        "Inferred from the same class, not measured.",
+        "meet=False opts a guest event out of its default Meet link; on a solo "
+        "event there is no link to skip, which is what it gets. Inferred from "
+        "the same class, not measured.",
     ("update_event", "confirm"):
         "Gates structural edits; a cosmetic-only edit has nothing to confirm "
         "and runs directly. Inferred from the same class, not measured.",
@@ -293,11 +299,12 @@ DISPATCH: dict[str, Any] = {
     "create_event": lambda p: do_create_event(
         title=p["title"], time_min=p.get("time_min"), time_max=p.get("time_max"),
         content=p["content"], attendees=p.get("attendees"),
-        location=p.get("location"), meet=bool(p.get("meet")),
+        location=p.get("location"), meet=p.get("meet"),
         recurrence=p.get("recurrence"), include=p["include"],
         send_updates=p.get("send_updates"), properties=p.get("properties"),
         color=p.get("color"), visibility=p.get("visibility"),
         transparency=p.get("transparency"), confirm=p.get("confirm", False),
+        optional_attendees=p.get("optional_attendees"),
         answer=gate_outcome(p.get("_elicit")), question=gate_asked(p.get("_elicit")),
     ),
     "update_event": lambda p: do_update_event(
@@ -308,8 +315,12 @@ DISPATCH: dict[str, Any] = {
         meet=p.get("meet"), send_updates=p.get("send_updates"),
         properties=p.get("properties"), color=p.get("color"),
         visibility=p.get("visibility"), transparency=p.get("transparency"),
+        optional_attendees=p.get("optional_attendees"),
         confirm=p.get("confirm", False), answer=gate_outcome(p.get("_elicit")),
         question=gate_asked(p.get("_elicit")),
+    ),
+    "delete_event": lambda p: do_delete_event(
+        file_id=p["file_id"], confirm=p.get("confirm", False),
     ),
     "freebusy": lambda p: do_freebusy(
         attendees=p.get("attendees"), time_min=p.get("time_min"),
@@ -322,10 +333,10 @@ DISPATCH: dict[str, Any] = {
 DO_DESCRIPTION_FULL = """\
 Act on Google Workspace: create, move, edit, draft/reply email, organise Gmail, book calendar.
 
-Operations: create, copy, move, rename, share, overwrite, prepend, append, replace_text, draft, reply_draft, archive, star, label, comment, comment_reply, suggest, trash, respond, create_event, update_event, freebusy, setup_oauth.
+Operations: create, copy, move, rename, share, overwrite, prepend, append, replace_text, draft, reply_draft, archive, star, label, comment, comment_reply, suggest, trash, respond, create_event, update_event, delete_event, freebusy, setup_oauth.
 Create: content + title + doc_type (doc/sheet/file/folder/form). page_setup='pageless'; file_path= reads disk; form: YAML/JSON.
 Edit: overwrite (full replace), prepend/append, replace_text (find + content); append tab='T' adds a new doc tab (plain text). Sheets: overwrite=CSV, range='Tab'/'Tab!F9:F15'; [label](url)→link, @url→chip. Docs: suggest=True on prepend/append/replace_text proposes a tracked change; do(suggest, action=accept|reject, find='s2') folds one ([sN] from a markup fetch; tags RENUMBER after each fold).
-Calendar: create_event (title + time_min/time_max + attendees/content/location/meet/recurrence/include; attendees ⇒ preview, confirm=True books). update_event (event or invite-thread id; time/attendees/recurrence gated). freebusy (attendees + window + duration → slots). respond (file_id + action). properties/color/visibility/transparency on both. See mise://docs/do.
+Calendar: create_event (title + time_min/time_max; attendees/optional_attendees ⇒ preview, confirm=True books; guests ⇒ Meet unless meet=False). update_event (event/invite-thread id; time/guests/Meet gated). delete_event (file_id(s): own guest-less events; confirm=True). freebusy (attendees+window). respond (RSVP). properties= tags. More: mise://docs/do.
 Email: draft (to + subject + content; file_id=draft_id updates it), reply_draft (file_id + content; refuses if thread has a draft, supersede=True discards), archive/star/label. Signature + quoted original auto-append (quote='none' skips) — no sign-off.
 Trash: file_id(s) — Drive→trash (recoverable); Gmail drafts (r+digits) go for good.
 Comments: comment (file_id + content = NEW thread; anchor='slide 3'/'Tab!B12'/quoted doc text anchors it, else panel-only; to= assigns), comment_reply (comment_id + content/action=resolve|reopen). '[agent] ' prefix.
@@ -365,7 +376,7 @@ Returns:
 # backend and its Drive half works (a Gmail-id trash errors per-call).
 AMBIENT_UNAVAILABLE_OPS = {
     "draft", "reply_draft", "archive", "star", "label", "respond", "setup_oauth",
-    "create_event", "update_event", "freebusy",
+    "create_event", "update_event", "delete_event", "freebusy",
 }
 
 

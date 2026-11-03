@@ -44,6 +44,7 @@ from tools.search_format import (
     format_gmail_result,
 )
 from tools.search_calendar import (
+    calendar_property_filter,
     calendar_acl_note,
     calendar_list_refused_cue,
     calendars_read_cue,
@@ -92,6 +93,7 @@ def do_search(
     time_min: str | None = None,
     time_max: str | None = None,
     calendar_id: str | None = None,
+    properties: dict[str, str] | None = None,  # {k: v} private-property filter — calendar_property_filter
 ) -> SearchResult:
     """
     Search across Drive, Gmail, Activity, and Calendar.
@@ -156,6 +158,9 @@ def do_search(
     if calendar_id:
         validate_calendar_id(calendar_id, folder_id, raw_query)
         sources = ["calendar"]
+    property_filter = calendar_property_filter(properties, calendar_id, folder_id, raw_query)
+    if property_filter:
+        sources, calendar_id = ["calendar"], "primary"
 
     # Explicit calendar window (mise-riduka). Parsed at the boundary so garbage
     # fails loudly, and REFUSED when it could only be dropped — a window that
@@ -284,8 +289,8 @@ def do_search(
         # named one, 'primary' included, reads that calendar only.
         if calendar_id:
             return list_events(max_results=max_results, query=query,
-                               time_min=window_min, time_max=window_max,
-                               calendar_id=calendar_id)
+                               time_min=window_min, time_max=window_max, calendar_id=calendar_id,
+                               private_property=property_filter or None)
         return list_all_events(max_results=max_results, query=query,
                                time_min=window_min, time_max=window_max)
 
@@ -397,7 +402,7 @@ def do_search(
         try:
             calendar_search = futures["calendar"].result()
             calendar_events = calendar_search.events
-            result.calendar_results = [format_calendar_result(e) for e in calendar_events]
+            result.calendar_results = [format_calendar_result(e, bool(property_filter)) for e in calendar_events]
             if calendar_id:
                 result.cues["calendar_id"] = (
                     f"reading {calendar_id}'s calendar — detail is gated by "

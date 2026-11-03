@@ -268,7 +268,7 @@ uv run python -m auth --code URL_OR_CODE  # Exchange code from headless flow
 | Aspect | stdio (default) | remote (`--remote`) |
 |--------|----------------|---------------------|
 | Transport | stdin/stdout | StreamableHTTP on `/mcp` |
-| `do()` operations | All 23 | 6 safe ops: create, draft, reply_draft, archive, star, label |
+| `do()` operations | All 24 | 6 safe ops: create, draft, reply_draft, archive, star, label |
 | Content delivery | Filesystem deposits | Inline in JSON-RPC response (`content` + `comments` fields) |
 | `base_path` | Required | Optional (temp dir) |
 | Tool description | Full | Restricted (only safe ops + relevant params) |
@@ -312,7 +312,7 @@ Data models have `warnings: list[str]` fields. Extractors populate them during p
 |------|---------|---------------|
 | `search` | Find files/emails/activity/calendar events/**people**/**Google Chat**, return metadata + inline preview | No |
 | `fetch` | Download content to `.mise/` in cwd, return path + cues | Yes |
-| `do` | Act on Workspace — 23 ops (create, copy, move, rename, share, overwrite, prepend, append, replace_text, draft, reply_draft, archive, star, label, comment, comment_reply, suggest, trash, respond, create_event, update_event, freebusy, setup_oauth) | Varies |
+| `do` | Act on Workspace — 24 ops (create, copy, move, rename, share, overwrite, prepend, append, replace_text, draft, reply_draft, archive, star, label, comment, comment_reply, suggest, trash, respond, create_event, update_event, delete_event, freebusy, setup_oauth) | Varies |
 
 **Key behaviors** — one line each, in order; the full text of every line (the reasoning, measurements and traps) is in `docs/tool-behaviours.md`. Read it before changing a behaviour listed here.
 - `search` returns metadata only — Claude triages before fetching

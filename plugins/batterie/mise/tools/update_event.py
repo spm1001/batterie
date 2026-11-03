@@ -36,13 +36,15 @@ from tools.events_util import (
     build_attachments,
     build_event_times,
     byday_mismatch_warning,
+    is_hold_becoming_meeting,
     error,
     extract_meet_link,
     meet_request,
     EVENT_COLORS,
-    normalise_attendees,
     normalise_recurrence,
+    optional_readback,
     readback_field,
+    split_attendees,
     validate_color,
     validate_properties,
     validate_send_updates,
@@ -50,6 +52,7 @@ from tools.events_util import (
     validate_visibility,
 )
 from tools.respond import _resolve_event_from_thread
+from tools.update_event_attendees import merged_attendees
 from tools.update_event_preview import COSMETIC, STRUCTURAL, Edit, edit_preview
 from validation import is_gmail_api_id
 
@@ -73,7 +76,7 @@ def _plan_edit(
     include: list[str] | None, meet: bool | None, send_updates: str | None,
     properties: dict[str, str] | None, color: str | None,
     visibility: str | None, transparency: str | None,
-    read: Any = None,
+    read: Any = None, optional_attendees: list[str] | str | None = None,
 ) -> Edit | dict[str, Any]:
     """Read the event, validate, classify each change; an error dict on refusal.
 
@@ -114,7 +117,7 @@ def _plan_edit(
 
     warnings: list[str] = []
     try:
-        emails = normalise_attendees(attendees) if attendees else []
+        required, optional = split_attendees(attendees, optional_attendees)
         recurrence_lines = normalise_recurrence(recurrence) if recurrence else []
         explicit_updates = validate_send_updates(send_updates)
         programme_keys = validate_properties(properties) if properties else {}
@@ -131,13 +134,29 @@ def _plan_edit(
         changes["recurrence"] = STRUCTURAL
     # Who is actually new, decided before any dialog, so nobody is asked to
     # approve adding people who are already there.
-    known = {a.get("email", "").lower() for a in event.get("attendees", [])}
-    added = [e for e in emails if e.lower() not in known]
-    if added:
+    # optional_attendees ADDS new people as optional and DEMOTES existing
+    # ones. attendees only ever adds: naming someone already there is a no-op,
+    # as it always was — callers re-list existing guests, and promoting an
+    # optional one silently would change their invite unasked. Nobody is
+    # ever removed.
+    known = {a.get("email", "").lower(): a for a in event.get("attendees", [])}
+    added = [e for e in required if e.lower() not in known]
+    added_optional = [e for e in optional if e.lower() not in known]
+    made_optional = [e for e in optional
+                     if e.lower() in known and not known[e.lower()].get("optional")]
+    if added or added_optional or made_optional:
         changes["attendees"] = STRUCTURAL
-    elif emails:
+    elif required or optional:
         warnings.append("All named attendees are already on the event.")
-    # meet: True adds a Meet link, False REMOVES one, None leaves it alone.
+    # meet: True adds a Meet link, False REMOVES one, None leaves it alone —
+    # unless guests are joining a guest-less event you organise (a hold being
+    # promoted), where None means Meet, as in the Calendar UI.
+    becoming_meeting = is_hold_becoming_meeting(event, bool(added or added_optional))
+    meet_defaulted = meet is None and becoming_meeting
+    if meet_defaulted:
+        meet = True
+    elif meet is False and becoming_meeting:
+        meet = None  # an opt-out of the default, not a removal: nothing to warn about
     # Judged here, against the event already read, so the preview never
     # promises a change the write would then skip (mise-tijeko: callers
     # passing meet=False expected removal 8/8; none echo False as a default).
@@ -170,7 +189,8 @@ def _plan_edit(
         return error(
             "invalid_input",
             "Nothing to change — pass content (description), title, location, "
-            "time_min+time_max, attendees (added, never removed), recurrence, "
+            "time_min+time_max, attendees (added, never removed), "
+            "optional_attendees (added or demoted), recurrence, "
             "include (Drive attachments), properties (queryable key-values), "
             "color, visibility, transparency, or meet=True/False (add/remove).",
         )
@@ -181,7 +201,7 @@ def _plan_edit(
     organiser = event.get("organizer", {}).get("self", False)
     can_modify = organiser or event.get("guestsCanModify", False)
     if not can_modify:
-        only_attendee_add = set(changes) == {"attendees"}
+        only_attendee_add = set(changes) == {"attendees"} and not made_optional
         invites_allowed = event.get("guestsCanInviteOthers", True)
         if not (only_attendee_add and invites_allowed):
             return error(
@@ -217,7 +237,9 @@ def _plan_edit(
     effective_updates = explicit_updates or ("all" if structural else "none")
     return Edit(event, disclosure, changes, added, recurrence_lines,
                  programme_keys, color_id, vis, transp, warnings, structural,
-                 effective_updates, start, end)
+                 effective_updates, start, end, added_optional=added_optional,
+                 made_optional=made_optional, meet=meet, meet_defaulted=meet_defaulted,
+                 adds_organiser=becoming_meeting)
 
 
 def update_event_confirm_message(
@@ -227,6 +249,7 @@ def update_event_confirm_message(
     include: list[str] | None, meet: bool | None, send_updates: str | None,
     properties: dict[str, str] | None, color: str | None,
     visibility: str | None, transparency: str | None,
+    optional_attendees: list[str] | str | None = None,
 ) -> str | None:
     """The dialog text for a structural edit: the preview's message.
 
@@ -239,10 +262,11 @@ def update_event_confirm_message(
     read = _read_event(file_id)  # a Google error raises: tools/confirm_gate.py says why
     edit = _plan_edit(file_id, title, content, location, time_min, time_max,
                       attendees, recurrence, include, meet, send_updates,
-                      properties, color, visibility, transparency, read=read)
+                      properties, color, visibility, transparency, read=read,
+                      optional_attendees=optional_attendees)
     if isinstance(edit, dict) or not edit.structural:
         return None
-    return str(edit_preview(edit, time_min, time_max, meet)["message"])
+    return str(edit_preview(edit, time_min, time_max, edit.meet)["message"])
 
 
 def do_update_event(
@@ -261,6 +285,7 @@ def do_update_event(
     color: str | None = None,
     visibility: str | None = None,
     transparency: str | None = None,
+    optional_attendees: list[str] | str | None = None,
     confirm: bool = False,
     answer: ElicitationResult[ConfirmAnswer] | None = None,
     question: GateQuestion | None = None,
@@ -274,9 +299,11 @@ def do_update_event(
 
     edit = _plan_edit(file_id, title, content, location, time_min, time_max,
                       attendees, recurrence, include, meet, send_updates,
-                      properties, color, visibility, transparency)
+                      properties, color, visibility, transparency,
+                      optional_attendees=optional_attendees)
     if isinstance(edit, dict):
         return edit
+    meet = edit.meet
     event, disclosure, changes = edit.event, edit.disclosure, edit.changes
     emails, recurrence_lines = edit.emails, edit.recurrence_lines
     programme_keys, color_id = edit.programme_keys, edit.color_id
@@ -304,9 +331,8 @@ def do_update_event(
     if recurrence_lines:
         body["recurrence"] = recurrence_lines
         previous["recurrence"] = event.get("recurrence")
-    if emails:  # only the people not already on the event (_plan_edit)
-        # Patch replaces arrays WHOLESALE — merge, never send the delta.
-        body["attendees"] = list(event.get("attendees", [])) + [{"email": e} for e in emails]
+    if "attendees" in changes:
+        body["attendees"] = merged_attendees(edit)
     if "meet" in changes:
         body["conferenceData"] = meet_request() if meet else None
         if not meet:
@@ -399,6 +425,17 @@ def do_update_event(
         )
     if emails:
         cues["attendees_added"] = emails
+    if edit.added_optional:
+        cues["optional_attendees_added"] = edit.added_optional
+    if edit.made_optional:
+        cues["made_optional"] = edit.made_optional
+    if edit.adds_organiser and "attendees" in changes:
+        cues["organiser_added"] = "You were added as an accepted guest (the API never adds the organiser itself)."
+    if edit.added_optional or edit.made_optional:
+        cues["optional_attendees"], drop = optional_readback(
+            patched, edit.added_optional + edit.made_optional)
+        if drop:
+            warnings.append(drop)
     if programme_keys:
         # Read-back of the merged map proves the keys landed beside the rest.
         cues["properties"] = patched.get("extendedProperties", {}).get("private", {})
@@ -415,6 +452,16 @@ def do_update_event(
     meet_link = extract_meet_link(patched)
     if meet and meet_link:
         cues["meet_link"] = meet_link
+        if edit.meet_defaulted:
+            cues["meet_default"] = (
+                "Meet link added because guests joined an event that had none "
+                "(the Calendar UI's default); pass meet=False to skip it."
+            )
+    elif meet and "meet" in changes:
+        warnings.append(
+            "A Meet link was requested but none came back — check the event "
+            "in the Calendar UI."
+        )
     elif meet is False and "meet" in changes:
         cues["meet_removed"] = (
             "Meet link removed" if not meet_link

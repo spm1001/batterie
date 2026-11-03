@@ -7,7 +7,7 @@ renders (tools/confirm_gate.py) — so the human approves exactly what the
 preview shows, never less.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from cues_util import with_identity
@@ -37,6 +37,11 @@ class Edit:
     effective_updates: str
     start: dict[str, Any] | None  # the new bounds, resolved (zone attached) — None unless moving
     end: dict[str, Any] | None
+    added_optional: list[str] = field(default_factory=list)  # new, invited as optional
+    made_optional: list[str] = field(default_factory=list)  # already on it, demoted
+    meet: bool | None = None  # effective: True adds, False removes, None leaves alone
+    meet_defaulted: bool = False  # meet was None and guests joined a guestless event
+    adds_organiser: bool = False  # a hold becoming a meeting: you join it, accepted
 
 
 _UPDATE_EMAILS = {
@@ -68,9 +73,17 @@ def _preview_message(edit: Edit, described: dict[str, Any]) -> str:
         rec = described["recurrence"]
         was = "; ".join(rec["from"]) if rec["from"] else "none"
         lines.append(f"Repeat: {was} → {'; '.join(rec['to'])}")
-    if "attendees_to_add" in described:
-        lines.append(f"Add: {', '.join(described['attendees_to_add'])}")
-    if "meet" in described:
+    add = ", ".join(described.get("attendees_to_add", []))
+    if described.get("optional_to_add"):
+        add += ("; " if add else "") + f"optional: {', '.join(described['optional_to_add'])}"
+    if add:
+        # A hold being promoted: its default Meet rides this line, not one of
+        # its own, so the common promotion still fits the 4-line dialog.
+        lines.append(f"Add: {add}" + (" + you" if edit.adds_organiser else "")
+                     + (" + Meet" if edit.meet_defaulted else ""))
+    if described.get("make_optional"):
+        lines.append(f"Make optional: {', '.join(described['make_optional'])}")
+    if "meet" in described and not (add and edit.meet_defaulted):
         lines.append(f"Meet: {described['meet']}")
     if "also_cosmetic" in described:
         lines.append(f"Also: {', '.join(described['also_cosmetic'])}")
@@ -91,6 +104,18 @@ def edit_preview(
         edit.event, edit.changes, time_min, time_max, edit.emails,
         edit.recurrence_lines, meet,
     )
+    if "attendees" in edit.changes:
+        for key, people in (("optional_to_add", edit.added_optional),
+                            ("make_optional", edit.made_optional)):
+            if people:
+                described[key] = people
+        if edit.adds_organiser:
+            described["organiser_joins"] = True
+    if edit.meet_defaulted:
+        described["meet_default"] = (
+            "Meet added because guests are joining an event that had none "
+            "(the Calendar UI's default); pass meet=False to skip it."
+        )
     return {
         "preview": True,
         "operation": "update_event",

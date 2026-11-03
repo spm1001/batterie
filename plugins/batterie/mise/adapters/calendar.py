@@ -143,7 +143,7 @@ def list_events(
     query: str = "",
     time_min: datetime | None = None,
     time_max: datetime | None = None,
-    private_property: str | None = None,
+    private_property: str | list[str] | None = None,
     calendar_id: str = "primary",
 ) -> CalendarSearchResult:
     """
@@ -174,7 +174,7 @@ def list_events(
             summary, description, attendees, location). Empty = no filter.
         time_min: Explicit window start (aware datetime).
         time_max: Explicit window end (aware datetime, exclusive).
-        private_property: 'key=value' filter on extendedProperties.private —
+        private_property: 'key=value' filter(s) on extendedProperties.private (a list ANDs) —
             the reconciler's keyed query (mise-gujiro). Instances of a
             recurring series inherit the master's properties and each match
             the filter under singleEvents (probed live 2026-08-19).

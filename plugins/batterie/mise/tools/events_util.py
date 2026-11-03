@@ -201,6 +201,61 @@ def normalise_attendees(attendees: list[str] | str) -> list[str]:
     return emails
 
 
+def split_attendees(
+    attendees: list[str] | str | None, optional_attendees: list[str] | str | None,
+) -> tuple[list[str], list[str]]:
+    """(required, optional) email lists. Raises ValueError on a non-email or a
+    person named in both — guessing which list they meant would be a guess."""
+    required = normalise_attendees(attendees) if attendees else []
+    optional = normalise_attendees(optional_attendees) if optional_attendees else []
+    both = {e.lower() for e in required} & {e.lower() for e in optional}
+    if both:
+        raise ValueError(
+            f"{', '.join(sorted(both))} named in both attendees and "
+            "optional_attendees — name each person once."
+        )
+    return required, optional
+
+
+def optional_readback(created: dict[str, Any], expected: list[str]) -> tuple[list[str], str | None]:
+    """Who Google's response marks optional, and a warning naming anyone asked
+    for as optional who came back without the flag — read back, never echoed."""
+    landed = [a.get("email", "") for a in created.get("attendees", []) if a.get("optional")]
+    missing = sorted({e.lower() for e in expected} - {e.lower() for e in landed})
+    warning = (
+        f"Asked for as optional but NOT optional on read-back: {', '.join(missing)} — "
+        "check the event in the Calendar UI." if missing else None
+    )
+    return landed, warning
+
+
+def other_guests(event: dict[str, Any]) -> list[dict[str, Any]]:
+    """The people on an event besides you and its organiser: rooms (resource
+    attendees) are not guests. The ONE rule for "has guests" — delete_event's
+    refusal, the hold-becoming-a-meeting test and the organiser-add all ask
+    this question, and three private versions of it disagreed on rooms."""
+    organiser = event.get("organizer", {}).get("email", "").lower()
+    return [
+        a for a in event.get("attendees", [])
+        if not a.get("self") and not a.get("resource")
+        and a.get("email", "").lower() != organiser
+    ]
+
+
+def is_hold_becoming_meeting(event: dict[str, Any], gaining_guests: bool) -> bool:
+    """Guests are joining an event YOU organise that had none and no link yet.
+
+    The Calendar UI adds a Meet link to every event with guests; the API adds
+    none, and four in-person 1:1s booked through mise on 26 Aug 2026 went out
+    Meet-less because the caller left meet out. So on update, meet unset means
+    Meet in exactly this case (a hold being promoted) — never on a meeting
+    that already has guests, and never on someone else's event, where a guest
+    adding people must stay an attendee-add and nothing more.
+    """
+    return (gaining_guests and bool(event.get("organizer", {}).get("self"))
+            and not other_guests(event) and not event.get("conferenceData"))
+
+
 # The classic event palette (colors.get 'event' map) — fixed and global, so
 # enumerable here without the calendars-resource scope mise doesn't hold.
 # Labels (eventLabelId) are deliberately NOT surfaced: the palette lives on

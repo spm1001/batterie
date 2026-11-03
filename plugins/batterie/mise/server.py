@@ -121,13 +121,10 @@ def search(
     raw_query: str | None = None,
     time_min: str | None = None,
     time_max: str | None = None,
-    calendar_id: str | None = None,
+    calendar_id: str | None = None, properties: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """
-    Search across Drive and Gmail.
-
-    Writes results to .mise/ and returns path + summary.
-    Read the deposited JSON file for full results.
+    Search Drive, Gmail and more; results deposit in .mise/ — read that JSON for the full rows.
 
     Args:
         query: Search terms. Optional when type or folder_id is set.
@@ -147,11 +144,9 @@ def search(
             no query term needed ('what is in the diary 3–5 Aug?').
         time_max: Window end; a bare date runs to the END of that day.
         calendar_id: colleague's email (ACL-gated; forces sources=['calendar']); omitted = all calendars in your list, 'primary' = yours only.
+        properties: {key: value} — your events whose private properties (create_event properties=) all match; forces calendar, primary.
 
-    Returns:
-        path: Path to deposited search results JSON; query/sources echoed
-        drive_count/gmail_count/activity_count/calendar_count: per-source counts
-        cues: Scope notes and warnings
+    Returns: path (the deposited JSON), per-source counts, cues (scope notes, warnings).
     """
     if query.strip() and raw_query and raw_query.strip():
         return {"error": True, "kind": "invalid_input",
@@ -181,21 +176,15 @@ def search(
                 "message": f"Unknown type '{type}'. Valid: {', '.join(sorted(CANONICAL_TYPE_NAMES))}"}
 
     call_params: dict[str, Any] = {"query": query, "sources": sources, "max_results": max_results}
-    if raw_query:
-        call_params["raw_query"] = raw_query
-    if folder_id:
-        call_params["folder_id"] = folder_id
-    if type:
-        call_params["type"] = type
-    if time_min:
-        call_params["time_min"] = time_min
-    if time_max:
-        call_params["time_max"] = time_max
+    call_params.update({k: v for k, v in (("raw_query", raw_query), ("folder_id", folder_id), ("type", type), ("time_min", time_min),
+                                          ("time_max", time_max), ("calendar_id", calendar_id), ("properties", properties)) if v})
 
     # ValueError from do_search is a boundary refusal with teaching text
     # (window vs sources/folder_id, garbage ISO bounds) — same conversion the
     # fetch router applies, so it reaches the caller as JSON, not a traceback.
     if _REMOTE_MODE:
+        if properties is not None:  # never accept-and-drop: remote search has no calendar property lane
+            return {"error": True, "kind": "invalid_input", "message": "properties= is not available in remote mode."}
         try:
             result = search_remote(query, sources, max_results, base_path, folder_id, type,
                                    raw_query, time_min=time_min, time_max=time_max)
@@ -210,7 +199,8 @@ def search(
     try:
         result = do_search(query, sources, max_results, base_path=Path(base_path),
                            folder_id=folder_id, type=type, raw_query=raw_query,
-                           time_min=time_min, time_max=time_max, calendar_id=calendar_id).to_dict()
+                           time_min=time_min, time_max=time_max, calendar_id=calendar_id,
+                           properties=properties).to_dict()
     except ValueError as e:
         result = {"error": True, "kind": "invalid_input", "message": str(e)}
     _log_search_result(call_params, result)
@@ -328,7 +318,7 @@ def do(
     range: str | None = None,  # noqa: A002 — MCP property name; A1 notation for Sheets
     tab: str | None = None,
     anchor: str | None = None, suggest: bool = False, quote: str | None = None,  # three on one line: server.py sits at its 500-line cap
-    attendees: list[str] | str | None = None,
+    attendees: list[str] | str | None = None, optional_attendees: list[str] | str | None = None,
     time_min: str | None = None, time_max: str | None = None,
     location: str | None = None, meet: bool | None = None,
     recurrence: str | list[str] | None = None,
@@ -351,7 +341,7 @@ def do(
         ("reply_all", reply_all), ("confirm", confirm),
         ("comment_id", comment_id), ("action", action), ("force", force),
         ("supersede", supersede), ("range", range), ("tab", tab), ("anchor", anchor), ("suggest", suggest), ("quote", quote),
-        ("attendees", attendees), ("time_min", time_min), ("time_max", time_max),
+        ("attendees", attendees), ("optional_attendees", optional_attendees), ("time_min", time_min), ("time_max", time_max),
         ("location", location), ("meet", meet), ("recurrence", recurrence),
         ("send_updates", send_updates), ("duration", duration),
         ("properties", properties), ("color", color),
@@ -411,7 +401,7 @@ def do(
         "location": location, "meet": meet, "recurrence": recurrence,
         "send_updates": send_updates, "duration": duration,
         "properties": properties, "color": color,
-        "visibility": visibility, "transparency": transparency,
+        "visibility": visibility, "transparency": transparency, "optional_attendees": optional_attendees,
         "_elicit": confirm_gate,  # what the confirm dialog asked and what came back (tools/confirm_gate.py)
     }
 

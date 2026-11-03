@@ -17,6 +17,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from adapters.calendar import lookup_calendar_timezone
 from html_convert import html_to_text_with_links
 from models import CalendarEvent
+from tools.events_util import validate_properties
 
 # httpx's own message quotes the status: "Client error '404 Not Found' for url '…'"
 _HTTPX_STATUS = re.compile(r"'(\d{3} [^']*)' for url")
@@ -57,7 +58,30 @@ _DESCRIPTION_CAP = 500  # agenda-check length; the full text is one get_event aw
 _HTML_TAG = re.compile(r'<[a-zA-Z/][^>]*>')
 
 
-def format_calendar_result(event: CalendarEvent) -> dict[str, Any]:
+def calendar_property_filter(
+    properties: dict[str, str] | None, calendar_id: str | None,
+    folder_id: str | None, raw_query: str | None,
+) -> list[str]:
+    """search's properties= → privateExtendedProperty 'k=v' terms (all must match).
+
+    A private key lives on ONE calendar's copy of an event — yours, where
+    create_event's properties= wrote it — so the filter reads primary; any
+    other calendar would match nothing, which is refused rather than
+    answered with a misleading zero (mise-en-space-naseto). [] = no filter.
+    """
+    if properties is None:
+        return []
+    if calendar_id not in (None, "primary"):
+        raise ValueError("properties= filters YOUR primary calendar's private keys — drop calendar_id.")
+    if folder_id or raw_query:
+        raise ValueError("properties= is a calendar filter — drop folder_id/raw_query.")
+    cleaned = validate_properties(properties)
+    if not cleaned:
+        raise ValueError("properties= needs at least one key:value pair.")
+    return [f"{k}={v}" for k, v in cleaned.items()]
+
+
+def format_calendar_result(event: CalendarEvent, with_properties: bool = False) -> dict[str, Any]:
     """Convert CalendarEvent to JSON-serializable dict for search results."""
     human_attendees = [a for a in event.attendees if not a.is_resource]
     result: dict[str, Any] = {
@@ -89,6 +113,12 @@ def format_calendar_result(event: CalendarEvent) -> dict[str, Any]:
         result["attachment_count"] = len(event.attachments)
     if event.meet_link:
         result["meet_link"] = event.meet_link
+    # Private keys (create_event's properties=, plus mise's mint stamps) — so a
+    # keyed sweep sees every tag on what it found (mise-en-space-naseto). Only
+    # on a properties= read, which is primary-only: a colleague's calendar
+    # read through calendar_id could otherwise surface THEIR private keys.
+    if with_properties and event.extended_properties:
+        result["properties"] = dict(event.extended_properties)
     # Agenda-check reads had no route to the description without mutating the
     # event (mise-bonezo): an absent key read as an empty agenda.
     if event.description:

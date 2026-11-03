@@ -30,6 +30,7 @@ from .trash import do_trash
 from .respond import do_respond
 from .create_event import do_create_event
 from .update_event import do_update_event
+from .delete_event import do_delete_event
 from .freebusy import do_freebusy
 
 # Single source of truth for valid do() operation names.
@@ -37,7 +38,7 @@ OPERATIONS = frozenset({
     "create", "copy", "move", "rename", "share", "overwrite", "prepend", "append",
     "replace_text", "draft", "reply_draft", "archive", "star", "label", "comment",
     "comment_reply", "setup_oauth", "trash", "respond",
-    "create_event", "update_event", "freebusy", "suggest",
+    "create_event", "update_event", "delete_event", "freebusy", "suggest",
 })
 
 __all__ = [
@@ -45,7 +46,7 @@ __all__ = [
     "do_prepend", "do_append", "do_replace_text", "do_draft", "do_reply_draft",
     "do_archive", "do_star", "do_label", "do_comment", "do_comment_reply", "do_setup_oauth",
     "do_trash", "do_respond",
-    "do_create_event", "do_update_event", "do_freebusy",
+    "do_create_event", "do_update_event", "do_delete_event", "do_freebusy",
     "OPERATIONS",
     "do_suggest",
 ]

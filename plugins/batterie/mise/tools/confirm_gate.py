@@ -73,6 +73,7 @@ def gate_question(
     include: list[str] | None = None, send_updates: str | None = None,
     properties: dict[str, str] | None = None, color: str | None = None,
     visibility: str | None = None, transparency: str | None = None,
+    optional_attendees: list[str] | str | None = None,
 ) -> GateQuestion:
     """Resolver: the confirmation question for this call, or why there is none.
 
@@ -90,10 +91,10 @@ def gate_question(
         elif operation == "create_event":
             message = create_event_confirm_message(
                 title=title, time_min=time_min, time_max=time_max,
-                attendees=attendees, location=location, meet=bool(meet),
+                attendees=attendees, location=location, meet=meet,
                 recurrence=recurrence, include=include, send_updates=send_updates,
                 properties=properties, color=color, visibility=visibility,
-                transparency=transparency,
+                transparency=transparency, optional_attendees=optional_attendees,
             )
         else:
             message = update_event_confirm_message(
@@ -102,6 +103,7 @@ def gate_question(
                 recurrence=recurrence, include=include, meet=meet,
                 send_updates=send_updates, properties=properties, color=color,
                 visibility=visibility, transparency=transparency,
+                optional_attendees=optional_attendees,
             )
     except (MiseError, CredentialsUnavailable):  # a Google read failed, or no usable token
         question = GateQuestion(skipped=UNAVAILABLE)

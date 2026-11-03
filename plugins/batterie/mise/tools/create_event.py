@@ -41,9 +41,10 @@ from tools.events_util import (
     error,
     extract_meet_link,
     meet_request,
-    normalise_attendees,
     normalise_recurrence,
+    optional_readback,
     readback_field,
+    split_attendees,
     validate_color,
     validate_properties,
     validate_send_updates,
@@ -58,7 +59,9 @@ logger = logging.getLogger(__name__)
 class _Plan:
     """Validated inputs, shared by the preview, the dialog and the booking."""
 
-    emails: list[str]
+    emails: list[str]  # everyone invited: required then optional
+    optional: list[str]
+    meet_defaulted: bool
     recurrence_lines: list[str]
     effective_updates: str
     programme_keys: dict[str, str]
@@ -72,6 +75,7 @@ class _Plan:
 
 def _plan(
     time_min: str, time_max: str, attendees: list[str] | str | None,
+    optional_attendees: list[str] | str | None, meet: bool | None,
     recurrence: str | list[str] | None, send_updates: str | None,
     properties: dict[str, str] | None, color: str | None,
     visibility: str | None, transparency: str | None,
@@ -79,7 +83,8 @@ def _plan(
     """Validate once for every path; an error dict on bad input."""
     warnings: list[str] = []
     try:
-        emails = normalise_attendees(attendees) if attendees else []
+        required, optional = split_attendees(attendees, optional_attendees)
+        emails = required + optional
         recurrence_lines = normalise_recurrence(recurrence) if recurrence else []
         effective_updates = validate_send_updates(send_updates) or "all"
         programme_keys = validate_properties(properties) if properties else {}
@@ -96,9 +101,14 @@ def _plan(
     byday_warning = byday_mismatch_warning(start, recurrence_lines)
     if byday_warning:
         warnings.append(byday_warning)
-    return _Plan(emails, recurrence_lines, effective_updates, programme_keys,
+    return _Plan(emails, optional, meet is None and bool(emails), recurrence_lines, effective_updates, programme_keys,
                  color_id, vis, transp, start, end, warnings)
 
+
+_MEET_DEFAULT_CUE = (
+    "A Meet link is added because the event has guests (the Calendar UI's "
+    "default); pass meet=False for an event without one."
+)
 
 _INVITE_EMAILS = {
     "all": "invites emailed",
@@ -124,7 +134,7 @@ def _preview_message(
     if location:
         what += f" at {location}"
     if meet:
-        what += " with a Meet link"
+        what += " + Meet"
     if include:
         what += f" + {len(include)} Drive attachment(s)"
     when = f"When: {describe_when(plan.start, plan.end)}"
@@ -133,10 +143,15 @@ def _preview_message(
     clash_line = f"Clashes: {'; '.join(clashes)}." if clashes else "Clashes: none."
     if clash_note:
         clash_line += f" {clash_note}"
+    optional = {e.lower() for e in plan.optional}
+    required = [e for e in plan.emails if e.lower() not in optional]
+    invite = ", ".join(required) or "nobody required"
+    if plan.optional:
+        invite += f"; optional: {', '.join(plan.optional)}"
     lines = [
         what,
         when,
-        f"Invite: {', '.join(plan.emails)} ({_INVITE_EMAILS[plan.effective_updates]})",
+        f"Invite: {invite} ({_INVITE_EMAILS[plan.effective_updates]})",
         clash_line,
     ]
     lines.extend(f"Warning: {w}" for w in plan.warnings)
@@ -160,6 +175,7 @@ def _preview(
         "start": plan.start,
         "end": plan.end,
         "attendees": plan.emails,
+        "optional_attendees": plan.optional,
         "send_updates": plan.effective_updates,
         "meet": meet,
         "clashes": clashes,
@@ -173,6 +189,7 @@ def _preview(
                 "invites, call again with confirm=True."
             ),
             "warnings": plan.warnings,
+            **({"meet_default": _MEET_DEFAULT_CUE} if meet and plan.meet_defaulted else {}),
         }),
     }
     if plan.recurrence_lines:
@@ -185,10 +202,11 @@ def _preview(
 
 def create_event_confirm_message(
     title: Any, time_min: Any, time_max: Any,
-    attendees: list[str] | str | None, location: str | None, meet: bool,
+    attendees: list[str] | str | None, location: str | None, meet: bool | None,
     recurrence: str | list[str] | None, include: list[str] | None,
     send_updates: str | None, properties: dict[str, str] | None,
     color: str | None, visibility: str | None, transparency: str | None,
+    optional_attendees: list[str] | str | None = None,
 ) -> str | None:
     """The dialog text for an attendee-bearing booking: the preview's message.
 
@@ -197,13 +215,14 @@ def create_event_confirm_message(
     the error, exactly as it does without a dialog.
     """
     if not (isinstance(title, str) and isinstance(time_min, str)
-            and isinstance(time_max, str) and attendees):
+            and isinstance(time_max, str) and (attendees or optional_attendees)):
         return None
-    plan = _plan(time_min, time_max, attendees, recurrence, send_updates,
-                 properties, color, visibility, transparency)
+    plan = _plan(time_min, time_max, attendees, optional_attendees, meet, recurrence,
+                 send_updates, properties, color, visibility, transparency)
     if isinstance(plan, dict) or not plan.emails:
         return None
-    return str(_preview(title, plan, meet, location, include)["message"])
+    meet_on = meet if meet is not None else True  # guests present ⇒ Meet by default
+    return str(_preview(title, plan, meet_on, location, include)["message"])
 
 
 def do_create_event(
@@ -213,7 +232,7 @@ def do_create_event(
     content: str | None = None,
     attendees: list[str] | str | None = None,
     location: str | None = None,
-    meet: bool = False,
+    meet: bool | None = None,
     recurrence: str | list[str] | None = None,
     include: list[str] | None = None,
     send_updates: str | None = None,
@@ -221,6 +240,7 @@ def do_create_event(
     color: str | None = None,
     visibility: str | None = None,
     transparency: str | None = None,
+    optional_attendees: list[str] | str | None = None,
     confirm: bool = False,
     answer: ElicitationResult[ConfirmAnswer] | None = None,
     question: GateQuestion | None = None,
@@ -232,10 +252,12 @@ def do_create_event(
     """
     assert title is not None and time_min is not None and time_max is not None
 
-    plan = _plan(time_min, time_max, attendees, recurrence, send_updates,
-                 properties, color, visibility, transparency)
+    plan = _plan(time_min, time_max, attendees, optional_attendees, meet, recurrence,
+                 send_updates, properties, color, visibility, transparency)
     if isinstance(plan, dict):
         return plan
+    # Guests present and meet unset ⇒ Meet, as the Calendar UI does (26 Aug 2026).
+    meet = plan.meet_defaulted or bool(meet)
     emails, recurrence_lines = plan.emails, plan.recurrence_lines
     effective_updates, programme_keys = plan.effective_updates, plan.programme_keys
     color_id, vis, transp = plan.color_id, plan.vis, plan.transp
@@ -274,7 +296,11 @@ def do_create_event(
     if transp:
         body["transparency"] = transp
     if emails:
-        body["attendees"] = [{"email": e} for e in emails]
+        optional = {e.lower() for e in plan.optional}
+        body["attendees"] = [
+            {"email": e, "optional": True} if e.lower() in optional else {"email": e}
+            for e in emails
+        ]
         # The API does NOT add the organiser to attendees the way the Calendar UI
         # does: every 1:1 booked through here listed only the other person, so
         # the invite showed Sameer as organiser but not as a guest (2026-09-23).
@@ -320,6 +346,10 @@ def do_create_event(
         cues["confirm_gate"] = gate_cue
     if emails:
         cues["attendees_invited"] = emails
+        if plan.optional:
+            cues["optional_attendees"], drop = optional_readback(created, plan.optional)
+            if drop:
+                warnings.append(drop)
         cues["attendees_notified"] = (
             f"invites emailed (sendUpdates={effective_updates})"
             if effective_updates != "none"
@@ -329,10 +359,12 @@ def do_create_event(
     meet_link = extract_meet_link(created)
     if meet_link:
         cues["meet_link"] = meet_link
+        if plan.meet_defaulted:
+            cues["meet_default"] = _MEET_DEFAULT_CUE
     elif meet:
         warnings.append(
-            "meet=True was requested but no Meet link came back — check the "
-            "event in the Calendar UI."
+            "A Meet link was expected but none came back — check the event "
+            "in the Calendar UI."
         )
     if recurrence_lines:
         cues["recurrence"] = created.get("recurrence", recurrence_lines)

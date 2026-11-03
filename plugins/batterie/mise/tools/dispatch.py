@@ -45,6 +45,7 @@ from tools import (
     do_respond,
     do_create_event,
     do_update_event,
+    do_delete_event,
     do_freebusy,
 )
 

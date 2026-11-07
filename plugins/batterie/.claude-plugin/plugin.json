@@ -1,7 +1,7 @@
 {
   "name": "batterie",
   "displayName": "Batterie",
-  "version": "2.16.5",
+  "version": "2.17.0",
   "description": "Kitchen tools for knowledge work, in one plugin: session rituals and GTD tracking (bon), Google Workspace (mise), browser automation (passe), messaging between Claude sessions (sonner), Todoist coaching (accomplis), review and isolation tools (trousse), and keeping it all current",
   "author": {
     "name": "Sameer Modha",
@@ -27,6 +27,21 @@
     "./sonner/skills/",
     "./passe/skills/"
   ],
+  "types": "./suite/types/index.d.ts",
+  "userConfig": {
+    "kg_index_roots": {
+      "type": "string",
+      "title": "Knowledge graph roots (kg-index)",
+      "description": "Colon-separated folders, each holding an index file (MEMORY.md, _index.md or index.md); ~ is your home. Leave blank to keep kg-index off: blank, it registers no hooks and says nothing.",
+      "default": ""
+    },
+    "kg_index_system_prompt": {
+      "type": "boolean",
+      "title": "kg-index: top index in the system prompt",
+      "description": "Turn off on a machine whose managed settings fence prompt changes from plugins (Claude Code then says the prompt.compose hook was skipped). Topic indexes and subagents still get the index.",
+      "default": true
+    }
+  },
   "hooks": {
     "SessionStart": [
       {

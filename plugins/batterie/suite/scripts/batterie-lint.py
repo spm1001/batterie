@@ -198,11 +198,29 @@ def lint_plugin(name: str, plugin_dir: Path) -> list[str]:
     # carries a "hooks" key (inline or pointing at that same file) is the
     # shape behind i-have-adhd's "Duplicate hooks file detected" refusal
     # (their ed6a0a2). Pick one home.
-    if "hooks" in pj and (plugin_root / "hooks" / "hooks.json").exists():
-        fails.append(
-            f"{name}: hooks declared twice — plugin.json has a 'hooks' key AND "
-            "hooks/hooks.json exists; keep one"
+    # A hooks.json carrying only a hooks module (`modules`, with an empty
+    # classic `hooks` record) is not a second declaration: Claude Code loads
+    # it beside inline classic hooks (measured on 2.1.150, 2.1.250, 2.1.311
+    # and 2.1.319, 7 Nov 2026). The refusal is for a manifest `hooks` that
+    # names the file again, or two sets of classic hooks.
+    hooks_json = plugin_root / "hooks" / "hooks.json"
+    if "hooks" in pj and hooks_json.exists():
+        try:
+            hj = json.loads(hooks_json.read_text())
+        except json.JSONDecodeError as e:
+            hj = None
+            fails.append(f"{name}: hooks/hooks.json is not JSON: {e}")
+        modules_only = (
+            isinstance(hj, dict)
+            and isinstance(pj["hooks"], dict)
+            and not hj.get("hooks")
+            and bool(hj.get("modules"))
         )
+        if hj is not None and not modules_only:
+            fails.append(
+                f"{name}: hooks declared twice — plugin.json has a 'hooks' key AND "
+                "hooks/hooks.json carries classic hooks; keep one"
+            )
 
     # ── SKILL.md files ────────────────────────────────────────────
     skills_dir = plugin_root / "skills"

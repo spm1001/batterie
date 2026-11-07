@@ -1,0 +1,5 @@
+{
+  "description": "The batterie hooks module (kg-index). Classic hooks stay inline in plugin.json; the empty hooks record keeps Claude Code builds that predate hooks modules from refusing this file.",
+  "hooks": {},
+  "modules": ["./kg-index.ts"]
+}

@@ -77,6 +77,8 @@ The assembler's copy-list is `commands`, `skills`, `agents`, `hooks`, `scripts`,
 - **`from = ["all"]` in `[[dependency]]`** — sentinel for "All tools" in the dependency direction table. Documented in brigade.toml's schema comment.
 - **Vocabulary and key-repos have static rows in separate tables** — GTD terms (Brigade, Outcome, Action, etc.) live in a "GTD & Brigade Terms" sub-table below the generated vocabulary table. The "This docs site" row lives in a separate mini-table below the generated key-repos table. Both are intentionally excluded from generation. The split exists because kramdown can't parse a table that spans across comment markers.
 
+- **`hooks/hooks.json` holds only `modules` and an empty `hooks: {}`; the classic SessionStart hook stays inline in plugin.json** — the kg-index hooks module (`hooks/kg-index.ts`, contract `types/index.d.ts`, engine tests `tests/kg-index.test.ts`: `claude plugin test .`). The empty record keeps Claude Code 2.1.150 from refusing the file; the batterie assembler requires exactly this shape and writes the kit-root copy. The module reads its roots from the plugin option `kg_index_roots` (never an env var) and registers nothing when it is blank, because a registered `prompt.compose` hook alone earns a per-session "was skipped" notice on any machine with managed settings. Measured 7 Nov 2026; detail in spm1001/batterie's CLAUDE.md.
+
 ## Local Jekyll preview
 
 Test rendering before pushing: `docker run --rm -v "$PWD/docs:/srv/jekyll" -p 4000:4000 jekyll/jekyll jekyll serve`. Saves deploy-wait-screenshot cycles — kramdown quirks (HTML comment blocks, SmartyPants em-dash conversion) only show up in the real Jekyll pipeline, not in GitHub's GFM preview.

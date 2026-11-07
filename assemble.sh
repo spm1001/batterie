@@ -410,7 +410,9 @@ print('yes' if d.get('mcpServers') else 'no')
     # below are deliberately uniform, and special-casing one plugin to strip
     # dead weight would mean exempting it from the guard that protects the
     # plugins whose scripts DO run vendored. Not worth the assembler risk.
-    for item in commands skills agents hooks scripts .mcp.json CLAUDE.md instructions.md; do
+    # types/ is a hooks module's state contract (the kit manifest names it;
+    # `claude plugin validate` holds the module's $.state keys to it).
+    for item in commands skills agents hooks scripts types .mcp.json CLAUDE.md instructions.md; do
       if [ -e "$src/$item" ]; then
         if [ -d "$src/$item" ]; then
           # Same genuinely-anywhere hygiene patterns as the MCP branch:
@@ -559,7 +561,7 @@ done
 for d in "$KIT_DIR"/* "$KIT_DIR"/.[!.]*; do
   [ -e "$d" ] || continue
   n=$(basename "$d")
-  case "$n" in .claude-plugin|CHANGELOG.md) continue ;; esac
+  case "$n" in .claude-plugin|CHANGELOG.md|hooks) continue ;; esac  # hooks/: write_kit_manifest writes or removes it
   if ! printf '%s\n' $COMPONENT_NAMES | grep -qx "$n"; then
     rm -rf "$d"
     echo "  PRUNED plugins/$KIT/$n (not a component)"
@@ -586,6 +588,19 @@ done
 #                 own), but the public kit runs no Google server — a ring kit
 #                 (mit, family) does, with its own OAuth client. Skipped even for a
 #                 held-back component, so a quarantine never brings it back.
+#   userConfig  — the union of every component's options; a key declared twice
+#                 fails (one settings row, one meaning). Options reach the kit's
+#                 hooks module as `register`'s second argument.
+#   hooks module — a component's hooks/hooks.json may carry `modules` and
+#                 nothing else (an empty classic `hooks` record, which builds that
+#                 predate hooks modules need in order not to refuse the file —
+#                 measured on 2.1.150, 7 Nov 2026). Claude Code reads hooks.json
+#                 only at the plugin root and takes ONE module per plugin, so the
+#                 kit carries at most one: written to the kit's hooks/hooks.json
+#                 with the path re-rooted, and a second component with a module
+#                 fails until someone writes a kit-level module that imports both.
+#   types       — the module's state contract, re-rooted; at most one, for the
+#                 same reason.
 write_kit_manifest() {
   BATTERIE_DIR="$BATTERIE_DIR" MISE_COMP="$MISE_COMP" python3 - "$KIT_DIR" "$KIT" "$COMPONENT_NAMES" <<'PYEOF'
 import json, os, re, sys
@@ -600,7 +615,8 @@ ROOT = "${CLAUDE_PLUGIN_ROOT}"
 # dependencies, monitors, lspServers, commands, agents, skills, settings…)
 # needs a designed merge first.
 ALLOWED = {"name", "displayName", "identity", "version", "description", "author",
-           "repository", "homepage", "license", "keywords", "hooks", "mcpServers"}
+           "repository", "homepage", "license", "keywords", "hooks", "mcpServers",
+           "userConfig", "types"}
 fails = []
 UNWIRED_COMPONENTS = {os.environ["MISE_COMP"]}  # the mise-en-space component: the public kit never wires its servers
 
@@ -610,6 +626,7 @@ for k in ("displayName", "version", "description", "author", "repository", "lice
     if k in suite:
         manifest[k] = suite[k]
 skills, hooks, servers, owner = [], {}, {}, {}
+user_config, uc_owner, modules, types = {}, {}, [], []
 
 for comp in comps:
     cdir = kit_dir / comp
@@ -620,9 +637,31 @@ for comp in comps:
     for d in ("commands", "agents"):
         if (cdir / d).is_dir():
             fails.append(f"{comp}: ships {d}/, which the fold does not wire yet")
-    for f in (".mcp.json", "hooks/hooks.json"):
-        if (cdir / f).exists():
-            fails.append(f"{comp}: ships {f}, which only loads at a plugin root")
+    if (cdir / ".mcp.json").exists():
+        fails.append(f"{comp}: ships .mcp.json, which only loads at a plugin root")
+    hj = cdir / "hooks/hooks.json"
+    if hj.exists():
+        doc = json.load(open(hj))
+        if set(doc) - {"description", "hooks", "modules"} or doc.get("hooks") or not doc.get("modules"):
+            fails.append(f"{comp}: hooks/hooks.json may carry only `modules` (classic hooks stay inline in plugin.json)")
+        else:
+            for rel in doc["modules"]:
+                target = (hj.parent / rel).resolve()
+                if not target.is_file() or kit_dir.resolve() / comp not in target.parents:
+                    fails.append(f"{comp}: hooks module {rel} is not a file inside the component")
+                    continue
+                modules.append((comp, os.path.relpath(target, (kit_dir / "hooks").resolve())))
+    if "types" in pj:
+        t = (cdir / pj["types"]).resolve()
+        if not t.is_file() or kit_dir.resolve() / comp not in t.parents:
+            fails.append(f"{comp}: types {pj['types']} is not a file inside the component")
+        else:
+            types.append((comp, "./" + os.path.relpath(t, kit_dir.resolve())))
+    for key, field in (pj.get("userConfig") or {}).items():
+        if key in user_config:
+            fails.append(f"{comp}: userConfig option '{key}' already declared by {uc_owner[key]}")
+            continue
+        user_config[key], uc_owner[key] = field, comp
     if (cdir / "skills").is_dir():
         skills.append(f"./{comp}/skills/")
 
@@ -654,7 +693,13 @@ for comp in comps:
             continue
         servers[name], owner[name] = reroot_tree(cfg, comp), comp
 
+if len(modules) > 1:
+    fails.append("more than one hooks module (" + ", ".join(f"{c}: {m}" for c, m in modules) + ") — Claude Code loads one per plugin; write a kit-level module that imports them")
+if len(types) > 1:
+    fails.append("more than one types contract (" + ", ".join(c for c, _ in types) + ") — the kit names one")
 if skills: manifest["skills"] = skills
+if types: manifest["types"] = types[0][1]
+if user_config: manifest["userConfig"] = user_config
 if hooks: manifest["hooks"] = hooks
 if servers: manifest["mcpServers"] = servers
 for f in fails:
@@ -665,6 +710,24 @@ if fails:
 with open(kit_dir / ".claude-plugin/plugin.json", "w") as f:
     json.dump(manifest, f, indent=2, ensure_ascii=False)
     f.write("\n")
+kit_hooks = kit_dir / "hooks"
+if modules:
+    kit_hooks.mkdir(exist_ok=True)
+    for stray in kit_hooks.iterdir():
+        if stray.name != "hooks.json":
+            fails.append(f"kit-root hooks/ holds {stray.name}; only the generated hooks.json belongs there")
+    with open(kit_hooks / "hooks.json", "w") as f:
+        json.dump({"description": f"GENERATED by assemble.sh: the hooks module of the {modules[0][0]} component. "
+                   "Classic hooks are inline in plugin.json; the empty hooks record keeps builds that predate hooks modules from refusing this file.",
+                   "hooks": {}, "modules": [modules[0][1]]}, f, indent=2, ensure_ascii=False)
+        f.write("\n")
+    for f_ in fails:
+        print(f"FAIL: kit manifest — {f_}", file=sys.stderr)
+    if fails:
+        sys.exit(1)
+elif kit_hooks.exists():
+    import shutil
+    shutil.rmtree(kit_hooks)
 PYEOF
 }
 write_kit_manifest || exit 1

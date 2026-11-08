@@ -23,11 +23,20 @@ import type { KgIndexEntry, KgIndexSection, KgIndexTop } from '../types'
 //     "kg_index_roots": "~/repos/me/my-kg:~/repos/team/team-kg" } } }
 // Changing the setting reloads the module with the new value.
 //
-// `kg_index_system_prompt` (default true) turns off the system-prompt part
-// alone. Set it false on a machine whose managed settings fence prompt
-// changes from person-installed plugins: the top index cannot land there
-// anyway, and the registered hook would bring the "was skipped" notice back.
-// Topics and the subagent preface still work.
+// `kg_index_system_prompt` (default true) picks how the top index travels.
+// Set it false on a machine whose managed settings fence prompt changes from
+// person-installed plugins (the atelier): there Claude Code's built-in security
+// plugin passes over a person's prompt.compose hook and says it "was skipped".
+// False registers no prompt.compose hook; the top index arrives instead as a
+// <system-reminder> row just before the first prompt of each thread, the way
+// topic indexes arrive. The security plugin passes over a person's hooks on
+// prompt.compose, prompt.section, prompt.context, prompt.attachment,
+// skill.prompt, attribution.text, session.compact and settings.read, and on
+// session.append only for attachment, hook-context and compaction rows; it
+// leaves prompt.submit and a plugin's own appended rows alone (read from the
+// 2.1.319 binary, 8 Nov 2026). Because session.compact never reaches this
+// module there, the row's absence from the conversation is what says a
+// compaction or /clear happened.
 //
 // A kg is a folder holding an index file (INDEX_NAMES, first found wins). A
 // note's topic is the nearest folder above it, below the kg's root, that holds
@@ -39,6 +48,9 @@ import type { KgIndexEntry, KgIndexSection, KgIndexTop } from '../types'
 // `claude plugin test .` from the batterie-de-savoir root.
 
 const INDEX_NAMES = ['MEMORY.md', '_index.md', 'index.md']
+// Every top-index section, loaded or refused, opens with `# ${TOP_TITLE}`; the
+// message route finds its own row in the conversation by that heading.
+const TOP_TITLE = 'Knowledge graph index'
 const DEFAULT_CAP = 25_000
 
 // Tags change when the stored shape changes: an older value then reads as the
@@ -106,11 +118,11 @@ async function readTop($: EngineInterface, roots: string[]): Promise<KgIndexSect
     const id = `kg-index:${name}`
     if (bytes > cap) {
       $.ui.log(`kg-index refused ${path}, ${bytes} bytes over the ${cap}-byte cap`)
-      sections.push({ id, path, bytes, isRefused: true, text: refusal(`Knowledge graph index ${name}`, path, bytes, cap) })
+      sections.push({ id, path, bytes, isRefused: true, text: refusal(`${TOP_TITLE} ${name}`, path, bytes, cap) })
       continue
     }
     const text = [
-      `# Knowledge graph index: ${name}`,
+      `# ${TOP_TITLE}: ${name}`,
       `The top index of the kg at ${root}, loaded by the kg-index mod when this thread started. Each line points at a note or a topic under that folder: read one with the Read tool when it bears on the task. The first time you read a note inside a topic folder, that topic's own index arrives as a message, unless you have already read that index file yourself.`,
       '',
       body.trim(),
@@ -153,6 +165,10 @@ async function topOf($: EngineInterface, roots: string[]): Promise<KgIndexTop> {
 const reminder = (text: string) =>
   `<system-reminder>\n${text.replaceAll('</system-reminder>', '<\\/system-reminder>')}\n</system-reminder>`
 
+const TOP_ROW_MARK = `<system-reminder>\n# ${TOP_TITLE}`
+const holdsTopRow = (rows: readonly { role: string; text: string }[]) =>
+  rows.some(row => row.role === 'user' && row.text.includes(TOP_ROW_MARK))
+
 export const register: Register = (on, options) => {
   const written = parseRoots(options.kg_index_roots)
   // Nothing configured: register nothing, so nothing can run, say or be skipped.
@@ -173,6 +189,33 @@ export const register: Register = (on, options) => {
           ...snapshot.sections.map(section => ({ id: section.id, text: section.text, scope: 'session' as const })),
         ],
       }
+    })
+  }
+
+  // The message route: where the system prompt is fenced, the top index rides
+  // a row of its own, appended just before the prompt that starts a thread, so
+  // the model reads it with the person's first words. Checked against the
+  // conversation itself each time the person submits at an idle prompt: that
+  // covers a fresh thread, a resumed one (the row is already there), and a
+  // compaction or /clear (the row is gone, and so is every topic row).
+  if (options.kg_index_system_prompt === false) {
+    on('prompt.submit', async ($, e, next) => {
+      // Folded into a running turn: a row here could land between a tool call
+      // and its result. The thread's first prompt is never one of these.
+      if (e.turnId !== undefined) return next(e)
+      if (holdsTopRow(await $.session.messages())) return next(e)
+      if ((await read($, entered)).some(entry => entry.loop === 'main')) {
+        await update($, entered, list => list.filter(entry => entry.loop !== 'main'))
+      }
+      const { sections } = await topOf($, await expandRoots($, written))
+      if (sections.length === 0) return next(e)
+      await $.session.append({
+        message: { type: 'user', content: [{ type: 'text', text: reminder(sections.map(s => s.text).join('\n\n')) }] },
+      })
+      return next(e)
+    }).catch(($, e, next) => {
+      $.ui.log(`kg-index could not add the top index before this prompt (${next.error.kind}: ${next.error.message ?? 'no message'}); the prompt goes on without it`)
+      return next(e)
     })
   }
 
@@ -247,7 +290,9 @@ export const register: Register = (on, options) => {
     const lines = [
       `Roots: ${(await expandRoots($, written)).join(', ')}`,
       ...(options.kg_index_system_prompt === false
-        ? ['Top index: kept out of the system prompt (kg_index_system_prompt is false); subagents still get it']
+        ? [
+            `Top index: sent as a message, not in the system prompt (kg_index_system_prompt is false); in this conversation now: ${holdsTopRow(await $.session.messages()) ? 'yes' : 'no, it comes with the next prompt'}`,
+          ]
         : []),
       ...(!snapshot.isTaken
         ? ['Top index: not read yet in this thread']

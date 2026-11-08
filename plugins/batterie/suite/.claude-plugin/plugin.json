@@ -1,6 +1,6 @@
 {
   "name": "batterie",
-  "version": "2.17.0",
+  "version": "2.17.1",
   "displayName": "Batterie",
   "description": "Kitchen tools for knowledge work, in one plugin: session rituals and GTD tracking (bon), Google Workspace (mise), browser automation (passe), messaging between Claude sessions (sonner), Todoist coaching (accomplis), review and isolation tools (trousse), and keeping it all current",
   "author": {
@@ -29,7 +29,7 @@
     "kg_index_system_prompt": {
       "type": "boolean",
       "title": "kg-index: top index in the system prompt",
-      "description": "Turn off on a machine whose managed settings fence prompt changes from plugins (Claude Code then says the prompt.compose hook was skipped). Topic indexes and subagents still get the index.",
+      "description": "Turn off on a machine whose managed settings fence prompt changes from plugins (Claude Code then says the prompt.compose hook was skipped). Off, the top index arrives as a message just before the first prompt of each thread instead; topic indexes and subagents are unchanged.",
       "default": true
     }
   },

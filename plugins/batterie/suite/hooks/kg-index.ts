@@ -165,9 +165,19 @@ async function topOf($: EngineInterface, roots: string[]): Promise<KgIndexTop> {
 const reminder = (text: string) =>
   `<system-reminder>\n${text.replaceAll('</system-reminder>', '<\\/system-reminder>')}\n</system-reminder>`
 
+// Read in the Messages API form, what the model is sent: the engine stores a
+// plugin's row as a hidden user row, which the plain form of
+// $.session.messages() leaves out (seen live on 2.1.319, 8 Nov 2026: reading
+// the plain form, the row went again with every prompt).
 const TOP_ROW_MARK = `<system-reminder>\n# ${TOP_TITLE}`
-const holdsTopRow = (rows: readonly { role: string; text: string }[]) =>
-  rows.some(row => row.role === 'user' && row.text.includes(TOP_ROW_MARK))
+async function holdsTopRow($: EngineInterface): Promise<boolean> {
+  const sent = await $.session.messages({ as: 'api' })
+  return sent.some(
+    message =>
+      message.role === 'user' &&
+      message.content.some(block => block.type === 'text' && typeof block.text === 'string' && block.text.includes(TOP_ROW_MARK)),
+  )
+}
 
 export const register: Register = (on, options) => {
   const written = parseRoots(options.kg_index_roots)
@@ -203,7 +213,7 @@ export const register: Register = (on, options) => {
       // Folded into a running turn: a row here could land between a tool call
       // and its result. The thread's first prompt is never one of these.
       if (e.turnId !== undefined) return next(e)
-      if (holdsTopRow(await $.session.messages())) return next(e)
+      if (await holdsTopRow($)) return next(e)
       if ((await read($, entered)).some(entry => entry.loop === 'main')) {
         await update($, entered, list => list.filter(entry => entry.loop !== 'main'))
       }
@@ -291,7 +301,7 @@ export const register: Register = (on, options) => {
       `Roots: ${(await expandRoots($, written)).join(', ')}`,
       ...(options.kg_index_system_prompt === false
         ? [
-            `Top index: sent as a message, not in the system prompt (kg_index_system_prompt is false); in this conversation now: ${holdsTopRow(await $.session.messages()) ? 'yes' : 'no, it comes with the next prompt'}`,
+            `Top index: sent as a message, not in the system prompt (kg_index_system_prompt is false); in this conversation now: ${(await holdsTopRow($)) ? 'yes' : 'no, it comes with the next prompt'}`,
           ]
         : []),
       ...(!snapshot.isTaken

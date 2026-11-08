@@ -43,7 +43,7 @@ docs/           Design documents and references
 |------|---------|---------|
 | `html_convert.py` | HTML↔markdown: HTML→markdown via markitdown (needs tempfile — why it's not in extractors); markdown→HTML via python-markdown (`markdown_to_html`, for email draft bodies); Gmail body-selection policy (`select_body_text`, `has_data_table` — see the 'Gmail body selection' bullet in docs/tool-behaviours.md) | adapters, tools |
 | `markdown_import.py` | Pre-import rewrite for Drive's markdown→Doc engine (`convert_fenced_blocks`) — fenced code blocks become per-line inline-code spans (see Gotchas) | tools |
-| `filters.py` | Attachment filtering logic (`is_trivial_attachment`, `filter_attachments`) — holds two `lru_cache`s | adapters, tools |
+| `filters.py` | Attachment filtering logic (`is_trivial_attachment`, `filter_attachments`, and `trivial_reason`, which says why a part was hidden: images by shown size, see `extractors/inline_images.py`) — holds two `lru_cache`s | adapters, tools |
 | `validation.py` | ID/URL validation (`validate_drive_id`, `validate_gmail_id`, etc.) | tools, adapters |
 | `retry.py` | Retry decorator with exponential backoff and jitter. `idempotent=` is REQUIRED (mise-en-space-covubi): True retries 5xx, 429 and httpx transport errors; False (a write that duplicates on repeat) retries only 429, and its final error says "This write may have landed" and is not retryable. A missing keyword fails at import; `tests/unit/test_retry_idempotent_declared.py` AST-scans every site | adapters |
 | `logging_config.py` | Structured logging setup (`logger`, `log_retry`) | everywhere |

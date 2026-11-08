@@ -79,6 +79,14 @@ The assembler's copy-list is `commands`, `skills`, `agents`, `hooks`, `scripts`,
 
 - **`hooks/hooks.json` holds only `modules` and an empty `hooks: {}`; the classic SessionStart hook stays inline in plugin.json** — the kg-index hooks module (`hooks/kg-index.ts`, contract `types/index.d.ts`, engine tests `tests/kg-index.test.ts`: `claude plugin test .`). The empty record keeps Claude Code 2.1.150 from refusing the file; the batterie assembler requires exactly this shape and writes the kit-root copy. The module reads its roots from the plugin option `kg_index_roots` (never an env var) and registers nothing when it is blank, because a registered `prompt.compose` hook alone earns a per-session "was skipped" notice on any machine with managed settings. Measured 7 Nov 2026; detail in spm1001/batterie's CLAUDE.md.
 
+## goûteur — the guard hook (`hooks/gouteur.py`)
+
+Moved here from Sameer's hand-placed `~/.claude/scripts/gouteur.py` on 2026-11-08 (Todoist outcome "Batterie: goûteur inside", cards dot-claude-tipuce and batterie-de-savoir-busoko). It runs on every Bash call (PreToolUse `--pre`, PostToolUse, PermissionRequest `--perm`, wired inline in plugin.json through `hooks/gouteur.sh`) and holds two kinds of render only: **guards** against irreversible or third-party harm, and **Claude Code harness quirks** no model knows from training. General command-line knowledge was retired (the `RETIRED` dict says what and why).
+
+- **It fails closed in `--pre`:** a crash denies every Bash call, for every teammate. Run `python3 hooks/gouteur.py --self-test` before and after any edit; CI runs it under the runner's python3 and 3.9.
+- **Personal renders never go in this file** (the marketplace is public). They live in the user's own `~/.claude/gouteur.d/*.py`, which the engine loads; the module docstring has the contract. Sameer's are in `~/.claude/gouteur.d/estate.py` (repo `spm1001/.claude`).
+- Editing it is vendored content (`hooks/`), so it rides a suite bump: ship with `/ship`.
+
 ## Local Jekyll preview
 
 Test rendering before pushing: `docker run --rm -v "$PWD/docs:/srv/jekyll" -p 4000:4000 jekyll/jekyll jekyll serve`. Saves deploy-wait-screenshot cycles — kramdown quirks (HTML comment blocks, SmartyPants em-dash conversion) only show up in the real Jekyll pipeline, not in GitHub's GFM preview.

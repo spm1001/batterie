@@ -904,6 +904,26 @@ PYEOF
 }
 check_mcp_entrypoints "$BATTERIE_DIR"
 
+# goûteur gate (2026-11-08, batterie-de-savoir-busoko): the guard hook runs on
+# every Bash call of every teammate, and its --pre gate fails CLOSED on a
+# crash, so a broken engine would deny all their Bash. The source repo's own CI
+# runs after the push and gates nothing, and this script auto-ships pushed
+# content (bds-hajeli), so the gate has to live HERE: run the vendored copy's
+# self-test with no personal extensions and refuse to publish on red. Hard
+# fail, like the leak scan: a crashing guard is corruption, not a lag.
+GOUTEUR="$BATTERIE_DIR/plugins/batterie/suite/hooks/gouteur.py"
+if [ -f "$GOUTEUR" ]; then
+  _gst=$(mktemp -d)
+  if GOUTEUR_EXTENSIONS= GOUTEUR_STATE_DIR="$_gst" python3 "$GOUTEUR" --self-test > "$_gst/log" 2>&1; then
+    echo "  OK goûteur self-test: $(tail -1 "$_gst/log" | cut -d' ' -f1)"
+  else
+    grep -v '^PASS' "$_gst/log" >&2
+    echo "FAIL: goûteur self-test failed on the vendored engine — refusing to publish a guard that may deny every Bash call" >&2
+    exit 1
+  fi
+  rm -rf "$_gst"
+fi
+
 # Leak scan (bds-tevuhe): nothing private reaches the public shelf. Every text
 # file in the assembled kit is scanned for email addresses, OAuth client ids
 # and secrets, tokens, private keys, ITV hostnames and the private personal-term

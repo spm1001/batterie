@@ -42,7 +42,9 @@ HOME = Path(os.environ.get("HOME", str(Path.home())))
 # ~/.claude-commis/projects are symlinks to ~/.claude/projects today; realpath
 # dedupes them, and a seat that later gets its own dir is still covered.
 CONFIG_DIRS = [HOME / ".claude", HOME / ".claude-commis", HOME / ".claude-credits"]
-HANDOFF_ROOTS = [HOME / "repos", HOME / "notes", HOME / ".bon"]
+# ~/knowledge (the kgs) and ~/projects (project repos) are the atelier layout
+# of 8 Nov 2026; a root that does not exist is skipped.
+HANDOFF_ROOTS = [HOME / "repos", HOME / "knowledge", HOME / "projects", HOME / "notes", HOME / ".bon"]
 PRUNE = {".git", "node_modules", ".venv", "venv", "__pycache__", ".pytest_cache", ".mypy_cache"}
 SKIP_PROJECT_DIRS = {"-home-modha--local-state-stop-judge"}
 
@@ -296,6 +298,9 @@ def handoff_dirs() -> list[str]:
     live = [str(p) for p in HOME.glob("*/handoffs")]   # ~/notes, ~/scratch
     live += [str(p) for p in HOME.glob(".*/handoffs")]  # ~/.bon, ~/.claude, ~/.dotfiles
     live += [str(p) for p in (HOME / "repos").glob("*/*/handoffs")]
+    live += [str(p) for p in (HOME / "knowledge").glob("*/handoffs")]  # a kg's repo-level pile
+    live += [str(p) for p in (HOME / "projects").glob("*/handoffs")]
+    live += [str(p) for p in (HOME / "projects").glob("*/*/handoffs")]  # a project inside a projects repo
     cache = dirs_cache_path()
     try:
         cached = [l for l in cache.read_text().splitlines() if l]

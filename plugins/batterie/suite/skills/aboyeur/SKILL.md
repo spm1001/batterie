@@ -31,12 +31,20 @@ If `PASEO_AGENT_ID` is set, rename this chat so the sidebar can find it again:
 
 ```bash
 own=$(paseo inspect "$PASEO_AGENT_ID" --json 2>/dev/null | python3 -c 'import json,sys; print(json.load(sys.stdin).get("Cwd",""))')
-[ "$own" = "$HOME" ] && paseo agent update "$PASEO_AGENT_ID" --name "Aboyeur · $(hostname -s) · $(date '+%a %-d %b')"
+name="Aboyeur · $(hostname -s) · $(date '+%a %-d %b')"
+if [ "$own" = "$HOME" ]; then
+  paseo agent update "$PASEO_AGENT_ID" --name "$name"
+  # The sidebar row shows the WORKSPACE title, not the chat's name, so rename that too.
+  # No CLI maps a chat to its workspace; the chat's own record holds it.
+  rec=$(ls "${PASEO_HOME:-$HOME/.paseo}"/agents/*/"$PASEO_AGENT_ID"*.json 2>/dev/null | head -1)
+  wks=$([ -n "$rec" ] && python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("workspaceId",""))' "$rec")
+  [ -n "$wks" ] && paseo workspace rename "$wks" "$name"
+fi
 ```
 
 The check matters: `PASEO_AGENT_ID` is inherited by anything started from a Paseo chat's shell, so a session launched from inside another chat (a tmux probe, a terminal opened from it) carries that chat's id, and renaming without checking renames the wrong chat (it happened on the first test, 11 Nov 2026). Only a chat whose own folder is the home folder is yours to name. Keep `--thinking` out of the update call: paseo refuses `--name` and `--thinking` together. Why: a chat named after its first prompt reads "/open" or "hi" in the sidebar, and a day of those can't be told apart.
 
-*Done when* the sidebar shows the dated name, or there is no Paseo to name it in.
+*Done when* the sidebar row shows the dated name (renaming only the chat leaves the row on its first prompt: seen 11 Nov 2026), or there is no Paseo to name it in.
 
 ### 2. Read the first message
 

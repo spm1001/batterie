@@ -1,6 +1,6 @@
 ---
 name: aboyeur
-description: "Orchestrates the front door of the working day — required FIRST in an interactive session launched at the home folder, and whenever /open is typed there. A 6-step workflow (name the chat, read the ask, menu on a bare start, route, launch, keep the day's list) ensures each errand runs in the folder it belongs to, its destination said before launch and every relayed claim checked. Triggers on a bare first message at ~, '/open' at the home folder, 'aboyeur', 'showrunner', 'what's on today', 'dispatch this'. In a project or repo folder, /open is batterie:open's ritual instead."
+description: "Orchestrates the front door of the working day — required FIRST in an interactive session launched at the home folder, and whenever /open is typed there. A 6-step workflow (name the chat, read the ask, menu on a bare start, route, launch, keep the day's list), plus closing off a batch of unclosed sessions on request, ensures each errand runs in the folder it belongs to, its destination said before launch and every relayed claim checked. Triggers on a bare first message at ~, '/open' at the home folder, 'aboyeur', 'showrunner', 'what's on today', 'dispatch this', 'close those off', 'clear the unclosed sessions'. In a project or repo folder, /open is batterie:open's ritual instead."
 ---
 
 # Aboyeur
@@ -95,6 +95,22 @@ Give the chat a title (four or five words naming the errand, not the folder) and
 ### 6. Keep the day's list, and check before you relay
 
 For each launch, note the title, folder, chat id and what done looks like. When a chat reports back, or the person asks how one is going, check its claim with one read-only command before relaying it: `ls` the folder it says it made, `git log -1` in the repo it says it pushed, `systemctl --user list-timers` for a robot it says it moved. A chat's summary is written at its happiest moment and drops whatever didn't fit. Don't do the launched work yourself.
+
+### 7. Close off a batch of unclosed sessions (when asked)
+
+Unclosed sessions pile up (a phone or Paseo chat goes idle rather than exiting), and the person clears them in one go. Never close, resume or dismiss one without their word: whether a session holds anything is theirs to judge.
+
+1. **List them** with bon's scanner, shipped in this plugin: `python3 "${CLAUDE_SKILL_DIR}/../../../bon/scripts/crumbs.py" --all --json` (session id, folder, last active, first and last human message). Show a numbered sheet, one line each: what it was (its first ask, in plain words), its last message, its age, its folder.
+2. **Take one word per line: close, dismiss or leave.** "1-3 close, 4 dismiss, rest leave" is a complete answer.
+3. **close** sends the session back to the person as a Paseo chat that runs its own close, so the close's questions reach them:
+   - If a Paseo chat holds it (its record under `${PASEO_HOME:-$HOME/.paseo}/agents/*/*.json` has `persistence.sessionId` equal to the session id), `paseo send <agent> --no-wait "/batterie:close"`.
+   - If not (it ran in a terminal), `paseo import <session id> --provider <lane> --cwd <folder> --json`, then `paseo agent mode <new> bypassPermissions` and `paseo agent update <new> --thinking high` (an import ignores the default profile), then the same send.
+   - Without Paseo, print `cd <folder> && claude --resume <session id>` and ask them to type `/close`.
+   Never run a close headless: unattended, its questions have nobody to answer them.
+4. **dismiss** a spent one: `python3 "${CLAUDE_SKILL_DIR}/../../../bon/scripts/crumbs.py" --dismiss <id8> [<id8> …]`. Nothing is written.
+5. **Check, then report one line per session.** Re-run the list: a session whose close filed its handoff drops off it by itself, and a dismissed one is gone. Say which closes are still running and which list entries remain.
+
+*Done when* every line has its verdict carried out, checked against the re-run list.
 
 ## Common Mistakes
 

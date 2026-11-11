@@ -1,11 +1,11 @@
 ---
 name: aboyeur
-description: "Orchestrates the front door of the working day — required FIRST in an interactive session launched at the home folder, and whenever /open is typed there. A 6-step workflow (name the chat, read the ask, menu on a bare start, route, launch, keep the day's list), plus closing off a batch of unclosed sessions on request, ensures each errand runs in the folder it belongs to, its destination said before launch and every relayed claim checked. Triggers on a bare first message at ~, '/open' at the home folder, 'aboyeur', 'showrunner', 'what's on today', 'dispatch this', 'close those off', 'clear the unclosed sessions'. In a project or repo folder, /open is batterie:open's ritual instead."
+description: "Orchestrates the front door of the working day — required FIRST in an interactive session launched at the home folder, and whenever /open is typed there. A 6-step workflow (name the chat, read the ask, menu on a bare start, route, launch, keep the day's list), plus closing off a batch of unclosed sessions on request, ensures one-off work (an answer, a meeting prep, a draft) is done right there and work with a home runs in its folder, its destination said first and every relayed claim checked. Triggers on a bare first message at ~, '/open' at the home folder, 'aboyeur', 'showrunner', 'what's on today', 'dispatch this', 'close those off', 'clear the unclosed sessions'. In a project or repo folder, /open is batterie:open's ritual instead."
 ---
 
 # Aboyeur
 
-The caller at the pass: the session started at the home folder doesn't cook, it calls. Good work here looks like this: the person says one line about what today is for, and within a message or two the work is running in the folder it belongs to, under a title they will recognise in the sidebar, while the aboyeur knows what it launched and whether each chat has really done what it says.
+The front door of the day. It does the work that has no other home (an answer, a prep page, a draft, a look at a link) right here, and calls the work that has a home into that home. Good work here looks like this: the person says one line about what they want, and soon after they have the result, or the work is running in the folder it belongs to under a title they will recognise, while the aboyeur knows what it launched and whether each chat has really done what it says.
 
 ## When to Use
 
@@ -17,7 +17,7 @@ The caller at the pass: the session started at the home folder doesn't cook, it 
 - A first message ending in a `[sonner: …]` line is an errand another session dispatched. Do the errand; you are not the aboyeur.
 - Headless sessions (`claude -p`) and robots are not front doors.
 - In a project or repo folder, "/open" is batterie:open's board ritual, not this skill.
-- The work belongs to the chats you launch. Answer here only what is quick.
+- **Do here** any work whose output lands outside the repos: an answer, a meeting prep, a briefing, a draft, a look at a link, however long it takes. **Launch a chat** only when the work needs a folder's memory or board, will run over several sessions, is code, or is one of several errands the person wants running at once. Why: on 11 Nov 2026 a meeting prep routed through "make a project, then launch" came back as a proposed new team project and two questions, while a plain session given the same words produced the prep Doc, a staged running order, the "what you were forgetting" list and what it hadn't checked, in one go.
 
 ## Layers
 
@@ -71,11 +71,12 @@ Decide the destination, say it in one line, then act.
 
 | The ask | Where it goes |
 |---|---|
-| A quick question | Answered here. |
-| A link to look at | Read here. If it needs files or a clone, a scratch session in the home's scratch place (default `~/projects/scratch/YYYY-MM-DD-<slug>/`, made on demand). If it belongs to a project or repo, a chat there. |
+| A question | Answered here. |
+| Meeting prep, a briefing, a draft, research that ends in a Doc or an email | Done here. Working files go in the home's scratch place (default `~/projects/scratch/YYYY-MM-DD-<slug>/`), the Doc to the person's own drive, any email as an unsent draft. At the end, offer to put the outstanding items you found on their projects' boards. |
+| A link to look at | Read here, working files in the scratch place. If it is plainly one project's work, offer a chat there. |
 | Something worth keeping (a capture, a downloaded file) | Filed under the home's sources place (default `~/sources/web/` or `~/sources/inbox/`), and never edited after. |
 | Pick up a project | Wake its existing chat if one exists (`paseo ls -a -g`), else launch in its folder. |
-| New work with an end | Made into a project first by the organisation layer (a name, one sentence of why, which side it sits on), then launched there. |
+| New work that will run over several sessions | Made into a project first by the organisation layer (a name, one sentence of why, which side it sits on), then launched there. A one-off output is not a project. |
 | Work on a tool | Launched in the tool's repo. |
 
 Never launch in a knowledge base (a kg). It is reference that sessions read, and its pages are written by its builder, not by working sessions. Why say the destination first: a session's output lands where it starts, and when the launch folder and the output folder differ the work goes missing. In the sample, the 64 link and quick-one starts left output in seven different kinds of place, from repos to `/tmp`.
@@ -94,7 +95,7 @@ Give the chat a title (four or five words naming the errand, not the folder) and
 
 ### 6. Keep the day's list, and check before you relay
 
-For each launch, note the title, folder, chat id and what done looks like. When a chat reports back, or the person asks how one is going, check its claim with one read-only command before relaying it: `ls` the folder it says it made, `git log -1` in the repo it says it pushed, `systemctl --user list-timers` for a robot it says it moved. A chat's summary is written at its happiest moment and drops whatever didn't fit. Don't do the launched work yourself.
+For each launch, note the title, folder, chat id and what done looks like. When a chat reports back, or the person asks how one is going, check its claim with one read-only command before relaying it: `ls` the folder it says it made, `git log -1` in the repo it says it pushed, `systemctl --user list-timers` for a robot it says it moved. A chat's summary is written at its happiest moment and drops whatever didn't fit. Don't redo a launched chat's work yourself.
 
 ### 7. Close off a batch of unclosed sessions (when asked)
 
@@ -119,7 +120,8 @@ Unclosed sessions pile up (a phone or Paseo chat goes idle rather than exiting),
 | Showing the menu when the first message already asks for something | The person waits through a list to get what they typed | Act on the ask; the menu is for bare starts |
 | Launching before saying where | Output lands in one place and the person looks in another | One line naming the destination, then launch |
 | Launching in a kg room | A working session edits reference pages its builder will overwrite | Launch in the project or repo; read the kg from there |
-| Doing the errand here | The front door fills up and stops being one | Launch it; keep only quick ones |
+| Making a project, or launching a chat, for a one-off output | Questions and ceremony before any value | Do it here; working files in the scratch place |
+| Doing a project's own work here | Its memory and board never load | Launch it in the project's folder |
 | Relaying a chat's "done" unchecked | A summary's gaps reach the person as facts | One read-only command per claim |
 | A launch with no title | A sidebar of `main` and first prompts | Title every chat with the errand |
 

@@ -21,7 +21,10 @@ does NOT belong here: Opus 5.5 already has it, measured with no guidance at
 all, and every extra render is a distractor on the calls where it fires
 wrongly. The retired renders are listed in RETIRED with why.
 
-A BROKEN IMPORT HERE STOPS EVERY SESSION'S BASH (the --pre gate fails closed).
+A BROKEN IMPORT HERE REFUSES EVERY BASH, READ, GREP AND GLOB CALL ON EVERY
+SESSION. That is gouteur.sh's doing, not this file's: Claude Code runs the call
+on any PreToolUse exit other than 2 (measured 2026-11-14), so the launcher turns
+a --pre that cannot start into a refusal, with a 24-hour escape file it names.
 Run `python3 gouteur.py --self-test` before and after any edit, and keep it
 importable by macOS's /usr/bin/python3 (3.9). CI runs the self-test.
 
@@ -352,12 +355,41 @@ def _pre_caller(data: dict) -> str:
     return "other"
 
 
-def credential_core_in(value: object) -> str | None:
+def _path_spellings(text: str, cwd: str | None = "") -> list:
+    """The raw path plus its normalised and symlink-resolved forms.
+
+    Path joins leave `/./` and `//` behind, and a symlink can put a credential
+    folder under an innocent name; none of those contain the core as written
+    (probed 2026-11-14 against Bright Lines' break-it corpus, cetuca). A path
+    the OS cannot even represent (an embedded NUL raises ValueError) keeps only
+    its raw spelling, which has already been checked. `cwd=None` skips the
+    symlink-resolved spelling (a bare glob has no base worth resolving).
+    """
+    out = [text]
+    # Empty means "no path" (resolving it would test cwd itself), and past
+    # 4096 characters no OS opens the path while realpath grows slow enough to
+    # pass the hook timeout (54 s on a 1 MB path, essayeur 2026-11-14).
+    if not text or len(text) > 4096:
+        return out
+    try:
+        expanded = os.path.expanduser(os.path.expandvars(text))
+        out.append(os.path.normpath(expanded))
+        if cwd is not None:
+            out.append(os.path.realpath(os.path.join(cwd or os.getcwd(), expanded)))
+    except (OSError, ValueError):
+        pass
+    return out
+
+
+def credential_core_in(value: object, cwd: str | None = "", resolve: bool = True) -> str | None:
     """The credential core a path-ish tool argument touches, or None.
 
     Substring on the spelling-invariant core, same test the Bash gate uses, so
     `~/x/sa-key.json`, `$HOME/x/sa-key.json` and `/home/u/x/sa-key.json`
-    all match and a glob like `**/sa-key.json` matches too. Non-strings are
+    all match and a glob like `**/sa-key.json` matches too. With `resolve`,
+    the normalised and symlink-resolved spellings are tested as well; it is off
+    for Grep's `pattern`, which is a regex, not a path (resolving the word
+    `secrets` against a cwd would deny a search for it). Non-strings are
     stringified rather than skipped: a schema change that wrapped the path in a
     list must not silently open the gate (the same reasoning as the Bash side's
     non-string command).
@@ -365,8 +397,9 @@ def credential_core_in(value: object) -> str | None:
     if value is None:
         return None
     text = value if isinstance(value, str) else str(value)
+    spellings = _path_spellings(text, cwd) if resolve else [text]
     for core in credential_cores():
-        if core in text:
+        if any(core in s for s in spellings):
             return core
     return None
 
@@ -387,8 +420,19 @@ def deny_credential_tool(data: dict, tool: str) -> None:
     if not isinstance(args, dict):
         args = {"_": args}
     hit = None
+    cwd = data.get("cwd") or ""
     for field in fields:
-        hit = credential_core_in(args.get(field))
+        # Grep's glob and Glob's pattern are relative to the tool's own `path`.
+        # With no path they are only normalised, never resolved against the
+        # session's cwd: a cwd inside a credential folder would then deny
+        # every bare `**/*.py` (essayeur 2026-11-14).
+        base = cwd
+        if field in ("glob", "pattern"):
+            given = args.get("path")
+            base = (os.path.join(cwd, os.path.expanduser(given))
+                    if isinstance(given, str) and given else None)
+        hit = credential_core_in(args.get(field), base,
+                                 resolve=not (tool == "Grep" and field == "pattern"))
         if hit:
             break
     if not hit:
@@ -1109,8 +1153,16 @@ def probe_pre(cmd: str, cwd: str = "", background: bool = False) -> str | None:
     """
     if _env_dump(cmd):
         return _ENV_DUMP_NOTE
+    # `/./` and `//` collapsed too: path joins leave them, and neither contains
+    # a folder core as written (cetuca, 2026-11-14).
+    collapsed = cmd
+    while True:
+        nxt = re.sub(r"/\./|//", "/", collapsed)
+        if nxt == collapsed:
+            break
+        collapsed = nxt
     for core in credential_cores():
-        if core in cmd:
+        if core in cmd or core in collapsed:
             return (
                 f"goûteur: this command references `{core}` — reading credential "
                 "paths from Bash sweeps secrets into the transcript, and the remedy "
@@ -2987,6 +3039,10 @@ def self_test() -> None:
         ("mac absolute spelling", "cat /Users/u/dl/sa-key.json", True),
         ("compound sweep", "cd /tmp && python3 -c \"open('/home/u/dl/sa-key.json')\"", True),
         ("deliberate over-block on superstring", "cat ~/dl/sa-key.jsonandlies", True),
+        # cetuca (2026-11-14): path joins leave `//` and `/./` behind.
+        ("doubled slash inside a folder core", "cat ~/.config//gcloud/logs/x.log", True),
+        ("dot segment inside a folder core", "cat ~/.config/./gcloud/logs/x.log", True),
+        ("near miss: doubled slash above the core", "ls ~/.config//gcloud", False),
         ("ls .local is fine", "ls -la ~/.local", False),
         ("gcloud non-log use", "gcloud logging read 'severity>=ERROR'", False),
         ("the word secrets alone", "echo secrets are never in dotfiles", False),
@@ -3528,6 +3584,103 @@ def self_test() -> None:
           run_pre(top_payload(tool_name="WebFetch",
                               tool_input={"url": "http://x/dl/sa-key.json"}))
           is None, True)
+    # -- cetuca (2026-11-14): the tool gate tests normalised and
+    # symlink-resolved spellings too. A real folder tree, so realpath has
+    # something to resolve.
+    _home = tempfile.mkdtemp(prefix="gouteur-paths-")
+    _logs = os.path.join(_home, ".config", "gcloud", "logs")
+    os.makedirs(_logs)
+    os.symlink(_logs, os.path.join(_home, "innocent"))
+    for tool_name, field, path, cwd, label in [
+        ("Read", "file_path", f"{_home}/.config/./gcloud/logs/x.log", "/tmp", "a /./ segment"),
+        ("Read", "file_path", f"{_home}/.config//gcloud/logs/x.log", "/tmp", "a doubled slash"),
+        ("Read", "file_path", f"{_home}/innocent/x.log", "/tmp", "a symlink to the folder"),
+        ("Read", "file_path", "logs/x.log", f"{_home}/.config/gcloud", "a path relative to cwd"),
+        ("Grep", "path", "innocent", _home, "a relative symlink as the search root"),
+    ]:
+        out = run_pre(top_payload(tool_name=tool_name, tool_input={field: path}, cwd=cwd))
+        check(f"cetuca e2e: {tool_name} denied — {label}",
+              out is not None and out["permissionDecision"] == "deny", True)
+    # A stow-style home, where ~/.config/gcloud is itself a symlink: only the
+    # normpath spelling carries the core (realpath resolves it away).
+    _stow = tempfile.mkdtemp(prefix="gouteur-stow-")
+    os.makedirs(os.path.join(_stow, "dotfiles", "gcloud", "logs"))
+    os.makedirs(os.path.join(_stow, ".config"))
+    os.symlink(os.path.join(_stow, "dotfiles", "gcloud"), os.path.join(_stow, ".config", "gcloud"))
+    out = run_pre(top_payload(tool_name="Read",
+                              tool_input={"file_path": f"{_stow}/.config/./gcloud/logs/x.log"}))
+    check("cetuca e2e: Read denied — a /./ segment where ~/.config/gcloud is a symlink (normpath)",
+          out is not None and out["permissionDecision"] == "deny", True)
+    shutil.rmtree(_stow, ignore_errors=True)
+    out = run_pre(top_payload(tool_name="Glob", cwd="/tmp",
+                              tool_input={"path": _home, "pattern": "innocent/*"}))
+    check("cetuca e2e: Glob denied — pattern through a symlink, relative to the tool's path",
+          out is not None and out["permissionDecision"] == "deny", True)
+    for tool_name, ti, label in [
+        ("Grep", {"pattern": "x", "glob": "*.py", "path": "/usr/share"}, "Grep glob with a path elsewhere"),
+        ("Glob", {"pattern": "**/*.py"}, "a bare Glob pattern"),
+        ("Read", {"file_path": ""}, "an empty path"),
+    ]:
+        check(f"cetuca e2e: near miss — {label}, cwd inside the credential folder",
+              run_pre(top_payload(tool_name=tool_name, tool_input=ti, cwd=_logs)) is None, True)
+    check("cetuca e2e: near miss — Grep's regex is not resolved as a path against cwd",
+          run_pre(top_payload(tool_name="Grep", tool_input={"pattern": "logs"},
+                              cwd=f"{_home}/.config/gcloud")) is None, True)
+    check("cetuca e2e: near miss — the folder above the core, normalised, stays silent",
+          run_pre(top_payload(tool_name="Read",
+                              tool_input={"file_path": f"{_home}/.config/./gcloud/x"})) is None, True)
+    # -- facobi (2026-11-14): gouteur.sh, not gouteur.py, owns a crash BEFORE
+    # main() runs. Fired through the real launcher, beside a gouteur.py that
+    # cannot even parse, because Claude Code runs the call on exit 1.
+    _sh = os.path.join(os.path.dirname(os.path.abspath(__file__)), "gouteur.sh")
+    _broken = tempfile.mkdtemp(prefix="gouteur-broken-")
+    shutil.copy(_sh, _broken)
+    with open(os.path.join(_broken, "gouteur.py"), "w", encoding="utf-8") as fh:
+        fh.write("def (:\n")  # SyntaxError at import
+    _pass_dir = tempfile.mkdtemp(prefix="gouteur-pass-")
+
+    def run_sh(script_dir, *args):
+        return subprocess.run(
+            ["sh", os.path.join(script_dir, "gouteur.sh"), *args],
+            input=json.dumps(top_payload()), capture_output=True, text=True,
+            env={**os.environ, "GOUTEUR_STATE_DIR": _pass_dir})
+
+    _r = run_sh(_broken, "--pre")
+    check("facobi e2e: a gouteur.py that cannot parse makes --pre REFUSE (exit 2) and say why",
+          _r.returncode == 2 and "could not start" in _r.stderr
+          and "broken-pass" in _r.stderr, True)
+    _r = run_sh(_broken)
+    check("facobi e2e: PostToolUse with the same crash stays fail-open (exit is not 2)",
+          _r.returncode != 2, True)
+    _pass = os.path.join(_pass_dir, "broken-pass")
+    open(_pass, "w").close()
+    _r = run_sh(_broken, "--pre")
+    check("facobi e2e: a fresh broken-pass lets --pre through, in a systemMessage",
+          _r.returncode == 0 and "UNGUARDED" in json.loads(_r.stdout).get("systemMessage", ""), True)
+    _old = time.time() - 2 * 86400
+    os.utime(_pass, (_old, _old))
+    check("facobi e2e: a broken-pass over 24 h old is ignored",
+          run_sh(_broken, "--pre").returncode, 2)
+    # A python3 that will not run at all (a shim pinned to a missing
+    # version) is the interpreter's fault, not gouteur.py's: fail open.
+    _shim = tempfile.mkdtemp(prefix="gouteur-shim-")
+    with open(os.path.join(_shim, "python3"), "w", encoding="utf-8") as fh:
+        fh.write("#!/bin/sh\necho 'pyenv: version 3.11.4 is not installed' >&2\nexit 1\n")
+    os.chmod(os.path.join(_shim, "python3"), 0o755)
+    _r = subprocess.run(
+        ["sh", os.path.join(_broken, "gouteur.sh"), "--pre"],
+        input=json.dumps(top_payload()), capture_output=True, text=True,
+        env={**os.environ, "GOUTEUR_STATE_DIR": tempfile.mkdtemp(prefix="gouteur-pass-"),
+             "PATH": _shim + os.pathsep + os.environ.get("PATH", "")})
+    check("facobi e2e: a python3 that will not run fails OPEN, not closed",
+          _r.returncode == 0 and "will not run" in _r.stderr, True)
+    shutil.rmtree(_shim, ignore_errors=True)
+    _r = run_sh(os.path.dirname(_sh), "--pre")
+    check("facobi e2e: the real launcher still carries a healthy deny (exit 0 + JSON)",
+          _r.returncode == 0 and '"deny"' in _r.stdout, True)
+    shutil.rmtree(_broken, ignore_errors=True)
+    shutil.rmtree(_pass_dir, ignore_errors=True)
+    shutil.rmtree(_home, ignore_errors=True)
     # Declaration without wiring is the fault this gate replaced. The matcher
     # in plugin.json (beside this file's hooks/ directory) must name every
     # tool the map claims, or the entries are inert and every fixture above

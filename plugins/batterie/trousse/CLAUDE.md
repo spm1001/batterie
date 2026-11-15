@@ -127,6 +127,6 @@ The handoff contract (`HANDOFF-CONTRACT.md`) lives in bon — it specifies bon's
 The Skills table in README.md (between `GENERATED:SKILLS` markers) is rendered from
 `skills/*/SKILL.md` frontmatter — never hand-edit it. After adding, removing or renaming
 a skill: `uv run --script ../batterie-de-savoir/scripts/render-skills.py .` from the repo
-root. CI re-checks it on every push (fetching the canonical script from batterie-de-savoir
-raw main), so a stale table fails the build. If a table one-liner reads badly, fix the
+root. CI re-checks it on every push (fetching the published copy from spm1001/batterie
+main, `plugins/batterie/suite/scripts/render-skills.py`, byte-identical to the source), so a stale table fails the build. If a table one-liner reads badly, fix the
 SKILL.md description (skill-forge), not the table.

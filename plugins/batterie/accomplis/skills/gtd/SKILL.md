@@ -142,7 +142,7 @@ accomplis tasks --project "Shared Project" --team
 accomplis tasks --project "Shared Project" --assignee "Full Name"
 ```
 
-**A task you just created in a workspace project is invisible to the default view.** API-created tasks arrive with no assignee, and the default workspace filter shows assigned-to-you only — so your own fresh create reads as "it's gone." It isn't: fetch it directly by id (`accomplis task <id>`), which is also the reliable existence check whenever a workspace listing comes back suspiciously empty. When creating tasks others should see, say so and have the user assign an owner promptly — unassigned cards hide from everyone's default view, not just yours.
+**A task you just created in a workspace project is invisible to the default view.** API-created tasks arrive with no assignee, and the default workspace filter shows assigned-to-you only — so your own fresh create reads as "it's gone." It isn't: fetch it directly by id (`accomplis task <id>`), which is also the reliable existence check whenever a workspace listing comes back suspiciously empty (a deleted task exits 1 saying so). When creating tasks others should see, say so and have the user assign an owner promptly — unassigned cards hide from everyone's default view, not just yours.
 
 ### GTD Contexts Are Usually Projects
 

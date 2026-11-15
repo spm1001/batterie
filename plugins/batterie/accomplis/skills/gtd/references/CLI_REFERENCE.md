@@ -24,7 +24,13 @@ Token is stored in macOS Keychain (if available) or in `~/.claude/plugins/data/a
 
 If auth fails, prompt user to run `accomplis auth` or re-run `accomplis auth --token` with a fresh token.
 
-**Key design choice:** On workspace (team) projects, the CLI auto-filters to show only your tasks by default. Use `--team` for all tasks, `--unassigned` for triage. On personal projects, all tasks are shown regardless of collaborators.
+**Key design choice:** On workspace (team) projects, the CLI auto-filters to show only your tasks by default. Use `--team` for all tasks, `--unassigned` for triage. On personal projects, all tasks are shown regardless of collaborators. `--unassigned` filters to assignee-null tasks on **any** project (it used to be ignored outside workspace projects; accomplis-sadibi).
+
+**Big lists: `--no-comments`.** `tasks` fetches each task's comments with one API call per task, so a 100-task list costs 100 extra calls (it prints a stderr note above 25). Add `--no-comments` when you only need titles, dates and ids — it drops `comments`, `attachment_count` and `attachments` from the output.
+
+**Attachments:** `tasks` and `task` carry `attachment_count` and `attachments` (file names) per task, counted from comments. An image or file often sits in a comment with empty text, so check these before judging a task to have no substance (accomplis-cajiho).
+
+**`completed --since/--until`** take local dates: `--since` from local midnight, `--until` through 23:59:59 local, and the default `until` is now plus a minute. Todoist's completed index can lag a fresh completion briefly; if a just-completed task is missing, confirm with `accomplis task <id>` (accomplis-hudace).
 
 ### Error Handling
 
@@ -40,6 +46,9 @@ When CLI commands fail, use these patterns:
 | `Task not found` | Bad task ID | Verify ID with user |
 | `Cannot move between workspaces` | API limitation | Suggest complete + recreate |
 | 502/503 (server wobble) | Todoist transient | Retry after ~15s — then read back (below) |
+| `Todoist kept returning 429/503 … after retries` | Retries exhausted within the CLI's budget | Wait a minute, retry once, then tell user |
+
+**The CLI retries for you, out loud.** Transient failures (429, 503, connection drops, and 5xx/read timeouts on reads) retry automatically, each with one `⏳` stderr line naming the attempt (`attempt 2 of 4`), the reason and the wait, and a request stops retrying once the next wait would pass a 60 s budget (the last attempt can still run its own timeout, so allow up to about 100 s). So a run that seems stuck will say why on stderr. Don't hide stderr with `2>/dev/null` when you need to know. Loop or poll callers that would rather fail fast and try again next cycle set `ACCOMPLIS_FAST_FAIL=1` (one retry, 5 s budget, 5 s timeouts); `ACCOMPLIS_MAX_RETRIES` and `ACCOMPLIS_RETRY_BUDGET` (seconds) override either profile.
 
 **5xx wobbles mid-sweep need read-back verification.** Todoist 502/503s happen under load, and parallel writes fail unevenly — three of four writes once failed silently while the fourth succeeded. After any failed or partially-failed sweep: retry after ~15s, then **read back everything the sweep touched** before reporting done. A write you didn't verify is a write you can't claim.
 
@@ -225,15 +234,15 @@ accomplis tasks --label "waiting-for"  # Works if label exists
 # But no: list-all-labels                       # Doesn't exist
 ```
 
-**`--labels ""` does not clear labels** — an empty value is dropped before the request, and the command reports success (accomplis-jalupa, 14 Sep 2026). Until that lands, clear through the SDK: `api.update_task(id, labels=[])` from accomplis's own venv.
+**Clear every label with `accomplis update <id> --labels ""`.** `--labels` replaces the whole set, so `--labels "a,b"` leaves exactly those two. (Before 15 Nov 2026 the empty value was silently dropped; accomplis-jalupa.)
 
-### Deleted Tasks Still Fetch by ID
+### Deleted Tasks and Fetch by ID
 
-**`accomplis task <id>` returns a deleted task as if it were live** — no `is_deleted`, no error (measured 14 Sep 2026 on a workspace task). The board listing is the truth: after `accomplis delete`, assert with `accomplis tasks --project "…" --team` and check the id is absent, not with a direct fetch.
+**`accomplis task <id>` on a deleted task exits 1 with `Error: Task '<id>' is deleted`.** Todoist still serves deleted tasks by id; the CLI reads the raw `is_deleted` flag and refuses, so a direct fetch is a real existence check. Live tasks carry `"is_deleted": false` in the output. (Before 15 Nov 2026 a deleted task rendered as live; accomplis-kudajo.) `delete` and `uncomplete` against a completed task still report `success: true` without proving a change; read back with `task <id>`.
 
 ### Cross-Workspace Limitation
 
-**Moving tasks between personal and shared projects fails.** The `move_task` API cannot move tasks across workspace boundaries (personal account ↔ a team workspace).
+**Moving tasks between personal and shared projects fails.** The `move_task` API cannot move tasks across workspace boundaries (personal account ↔ a team workspace). `accomplis update --project` checks both sides first and exits 1 naming the boundary, before calling the API. After any move it re-fetches the task and exits 1 with `Move did not land` if the project or section did not change (accomplis-zevota), so a zero exit means the move is real.
 
 **Workaround:** Complete the task in the source project, then recreate it in the target project. History is preserved in both locations.
 

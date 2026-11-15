@@ -362,13 +362,14 @@ Modular package under `src/passe/`:
 | `client.py` | `CDPClient` — WebSocket message routing, tab lifecycle, network capture |
 | `connection.py` | `connect()` context manager, `discover_chrome()`, Chrome discovery/launch, `set_cdp_override()` |
 | `verbs.py` | Re-export shim — imports from `verbs_navigation`, `verbs_interaction`, `verbs_observation`, `verbs_control` |
-| `verbs_navigation.py` | `do_navigate`, `do_back`, `do_forward`, `do_wait_idle` (~105 lines) |
+| `verbs_navigation.py` | `do_navigate`, `do_back`, `do_forward`, `do_reload`, `do_wait_idle` |
 | `verbs_interaction.py` | `do_click`, `do_type`, `do_fill`, `do_select`, `do_press`, `do_hover`, `do_tap`, `do_swipe`, `do_scroll` (~296 lines) |
 | `verbs_observation.py` | `do_screenshot`, `do_snapshot`, `do_read`, `do_fetch`, `do_eval`, `do_watch`, `do_ax_tree`, `do_ax_find`, `do_ax_node` (~960 lines) |
 | `verbs_control.py` | `do_wait_for`, `do_wait_stable`, `do_frame`, `do_device`, `do_viewport` (~117 lines) |
 | `runner.py` | `run_script()` dispatch loop, capture summary helpers |
 | `commands.py` | CLI subcommands: `cmd_run`, `cmd_screenshot`, `cmd_eval`, `cmd_devices` |
 | `cli.py` | Entry point: `main()`, help text, re-exports for backward compat |
+| `extraction.py` | passe's one trafilatura call (`trafilatura_markdown`, `TRAFILATURA_OPTIONS`); the fast path, the cascade, iframe descent and `tests/bench` all import it (zero passe imports) |
 | `_libs.py` | JS constants (Readability.js, Turndown.js, shadow flattening, extraction) |
 | `_devices.py` | Device emulation presets |
 | `log_daemon.py` | Continuous multi-tab capture daemon — own WebSocket handler, NOT CDPClient |

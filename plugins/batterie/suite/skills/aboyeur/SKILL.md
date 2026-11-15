@@ -87,6 +87,9 @@ Never launch in a knowledge base (a kg). It is reference that sessions read, and
 
 Give the chat a title (four or five words naming the errand, not the folder) and a brief: what's wanted in the person's words, what done looks like, the clock (the meeting it serves), the facts you read live rather than recalled, and where you didn't look. Pass the brief through a heredoc, because a brief holding quotes breaks an inline argument.
 
+Pick the route by where the person will watch it, first match wins:
+
+- **In a Claude Desktop session** (`mcp__ccd_session__start_session` is in your tool list): use it, even when a launcher exists. Call it with `initiation: "user_asked"`, `context: "fresh"`, `cwd` set to the folder, the title, a short `name`, the brief as `prompt` and a sentence of `background`. Why: the chat nests under this one in Desktop's sidebar, the app lists it in this session's linked sessions and sends a note here when each of its turns ends, and `SendMessage` to its `local_…` id reaches it (seen 15 Nov 2026, three launches from an atelier front door). The launcher and `paseo run` can't do any of that from Desktop. Three limits send work elsewhere instead. It starts sessions only on the machine this session runs on. It doesn't show on the phone, because Remote Control is unavailable over Desktop's SSH connections. And the session leans on the Mac: Desktop mints its model credentials there and the person's turns arrive through it. So work that must show on the phone, or run on with the laptop shut, goes to Paseo below, and work for another machine goes to `sonner --host` (batterie:ping). A folder Desktop has never opened may stop at a prompt the person answers in the app, so say that when you launch.
 - With the organisation layer's launcher: use it. It titles the chat and files it under its group in the sidebar.
 - With Paseo and no launcher: `paseo run --workspace <the folder's row> --cwd <folder> --title "<title>" --no-wait "$BRIEF"` (create the row with `paseo workspace create --isolation local --path <folder> --title "<title>"` when the folder has none). Without `--workspace` paseo titles a fresh row after the git branch, so every chat reads `main`.
 - Without Paseo: print `cd <folder> && claude` and the brief to paste.
@@ -95,7 +98,7 @@ Give the chat a title (four or five words naming the errand, not the folder) and
 
 ### 6. Keep the day's list, and check before you relay
 
-For each launch, note the title, folder, chat id and what done looks like. When a chat reports back, or the person asks how one is going, check its claim with one read-only command before relaying it: `ls` the folder it says it made, `git log -1` in the repo it says it pushed, `systemctl --user list-timers` for a robot it says it moved. A chat's summary is written at its happiest moment and drops whatever didn't fit. Don't redo a launched chat's work yourself.
+For each launch, note the title, folder, chat id and what done looks like. In Desktop the app keeps the ids for you (`mcp__ccd_session_mgmt__list_sessions` with `linked: true`), and its turn-end notes arrive here by themselves, so don't poll. When a chat reports back, or the person asks how one is going, check its claim with one read-only command before relaying it: `ls` the folder it says it made, `git log -1` in the repo it says it pushed, `systemctl --user list-timers` for a robot it says it moved. A chat's summary is written at its happiest moment and drops whatever didn't fit. Don't redo a launched chat's work yourself.
 
 ### 7. Close off a batch of unclosed sessions (when asked)
 

@@ -27,7 +27,10 @@
 #     all subsequent processing (Finding 4).
 #
 # This hook is therefore designed to be calm, factual, and abundance-framed:
-#   - Context is reported as "% free" (what's available), not "% used"
+#   - Context is reported as "% free" (what's available), not "% used" —
+#     but only when the window size is known. A guessed window reports the
+#     tokens used ("195k in context") and never nudges, because a false
+#     "2% free" is itself a scarcity signal
 #   - The low-context nudge uses identical language at 20% free and 1% free —
 #     no escalation curve, because escalation amplifies exactly the vectors
 #     that degrade output quality when it matters most
@@ -202,6 +205,15 @@ done
 # to model-based inference, so the window stays CORRECT (1M for fable/[1m]), not
 # merely non-crashing.
 SIDECAR_WINDOW=""
+# WINDOW_KNOWN=false only when the 200k below is the last-resort guess. A
+# guessed denominator must never drive "% free" or the wrap-up nudge: on
+# Claude Desktop (no statusline, so no sidecar; no ~/.claude/settings.json;
+# the transcript holds the bare id claude-opus-5-5) a 1M session read as
+# "2% free — a natural point to wrap up" at 195k used, and the Claude
+# believed it and told the user it was nearly out of room (15 Nov 2026).
+# A confident wrong number is worse than a coarse right one, so when the
+# window is unknown we report the tokens used, which are always measured.
+WINDOW_KNOWN=true
 [ -n "$cc_pid" ] && SIDECAR_WINDOW=$(cat "/tmp/.claude-ctx-${cc_pid}" 2>/dev/null)
 if [[ "$SIDECAR_WINDOW" =~ ^[0-9]+$ ]]; then
     MAX_TOKENS="$SIDECAR_WINDOW"
@@ -240,6 +252,7 @@ else
                MAX_TOKENS=1000000
            else
                MAX_TOKENS=200000
+               WINDOW_KNOWN=false
            fi ;;
     esac
 fi
@@ -256,7 +269,9 @@ CURRENT_WINDOW=${MAX_TOKENS:-200000}
 FREE_PCT=""
 USED_PCT_INT=0
 CTX_PART=""
-if [ "$TOTAL_IN" -gt 0 ] 2>/dev/null; then
+if [ "$TOTAL_IN" -gt 0 ] 2>/dev/null && [ "$WINDOW_KNOWN" = false ]; then
+    CTX_PART="$(( TOTAL_IN / 1000 ))k in context"
+elif [ "$TOTAL_IN" -gt 0 ] 2>/dev/null; then
     FREE_PCT=$(awk "BEGIN { printf \"%d\", 100 - ($TOTAL_IN / $MAX_TOKENS * 100) }")
     USED_PCT_INT=$(awk "BEGIN { printf \"%d\", $TOTAL_IN / $MAX_TOKENS * 100 }")
     CTX_PART="${FREE_PCT}% free"
@@ -349,7 +364,9 @@ if [ "$FIRST_TURN" = true ]; then
     fi
     [ "${CLAUDE_CODE_DISABLE_AUTOCOMPACT:-0}" = "1" ] && AUTOCOMPACT="off"
     WINDOW_K=$((${CURRENT_WINDOW:-200000} / 1000))
-    CONDITIONALS+=("Session: ${HOST} · auto-compact: ${AUTOCOMPACT} · ${WINDOW_K}k window")
+    WINDOW_PART="${WINDOW_K}k window"
+    [ "$WINDOW_KNOWN" = false ] && WINDOW_PART="window size unknown"
+    CONDITIONALS+=("Session: ${HOST} · auto-compact: ${AUTOCOMPACT} · ${WINDOW_PART}")
 fi
 
 # Resumed session notification (one-time, after /exit + restart)
@@ -412,7 +429,7 @@ jq -n \
     --arg last_ts "${LAST_TS:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}" \
     --arg perm_mode "$PERM_MODE" \
     --arg branch "${CURRENT_BRANCH:-}" \
-    --argjson window "${CURRENT_WINDOW:-0}" \
+    --argjson window "$( [ "$WINDOW_KNOWN" = true ] && echo "${CURRENT_WINDOW:-0}" || echo 0 )" \
     '{turn: $turn, last_ts: $last_ts, perm_mode: $perm_mode, branch: $branch, window: $window}' \
     > "$STATE_FILE" 2>/dev/null
 

@@ -15,7 +15,7 @@ Everything below was measured live on tube on 2026-08-08 against Claude Code 2.1
 - When a `cross-session-message` arrives and you are deciding how to answer.
 - When choosing between messaging a session and filing a board item.
 - When a peer message asks you for something that feels like it needs your user's say-so.
-- Starting a session in a named repo, on this host or another. The phone can only launch sessions at tube's root, so a ring is the route to any other repo: `sonner REPO "what to do"` spawns a Claude there and hands it the brief as a peer message.
+- Starting a session in a named repo, on this host or another. The phone can only launch sessions at tube's root, so a ring is the route to any other repo: `sonner REPO "what to do"` spawns a Claude there and hands it the brief as a peer message. From Claude Desktop, or for work the phone must follow, another launcher may fit better: see *Which route starts a new Claude*.
 
 ## When not to use
 
@@ -102,6 +102,21 @@ Sending carries the mirror duty: route work your own session was denied back to 
 
 **Plain text, same machine**, for anything you initiate.
 
+## Which route starts a new Claude
+
+Sonner is one of four ways to start a Claude on this estate, and it is the right one only when the others can't see the job. Pick by where the person will watch the new session, first match wins:
+
+| You are… | Use | Why |
+|---|---|---|
+| A Claude Desktop session (`mcp__ccd_session__start_session` is in your tool list), starting work **on a machine Desktop can reach** that the person will **watch in Desktop** | `start_session` | The new chat nests under yours in Desktop's sidebar, the app lists it in your linked sessions and sends you a note at each of its turn ends, and `SendMessage` to its `local_…` id reaches it. A sonner spawn is a tmux window nobody sees from Desktop. Its reach: a Desktop session running on the atelier starts children on the atelier only; one running on the Mac can also target the app's saved SSH connections (tube isn't one, 15 Nov 2026). It leans on the Mac, which mints its credentials, so it stalls once the laptop has been shut for about an hour |
+| Starting work the person will follow **on the phone** | Paseo (`paseo run`, the `paseo` skill) | Remote Control is unavailable over Desktop's SSH connection, so a Desktop child never shows on the phone. Paseo is a daemon on the box: it shows on the phone, and as a systemd unit it is the only route here that survives a reboot |
+| Starting work on **a machine Desktop can't reach**, or you are a **robot or script** | `sonner` (`--host HOST` for the other machine) | An MCP tool can't be called from a script, and start_session reaches only the machines above. Sonner needs neither a parent session nor an app |
+| Starting **overnight** work on the atelier that nobody watches live | a sonner spawn (`--errand` if it should end itself), or `claude --bg` | Both run on the box's own credentials, so they carry on with the laptop shut, and both are ringable. Neither survives a reboot, and the atelier reboots itself at 04:15 UTC on any day a patch needs it, so work that must outlast 04:15 goes to Paseo. From a Desktop shell prefer the sonner spawn: sonner strips Desktop's host-auth variables itself, while a bare `claude --bg` started there inherits them and fails `401 CREDENTIALS_MISSING` (seen 15 Nov 2026). `claude --bg` lists in `claude agents`; a sonner spawn lives in the `claude` tmux session and shows in `sonner --list` with who rang it |
+
+The table is the common cases, not every case: when none fits cleanly, reason from the why column, which is about who can see the session and whose credentials keep it alive.
+
+A Desktop session that makes sonner spawn on its own host gets one stderr line, `desktop: …`, naming `start_session`. The spawn goes ahead regardless, because only you know whether the person is watching Desktop; read the line as a question to ask yourself, not an error. Rings into a session that is already running are unaffected.
+
 ## sonner — ring a repo, not a session
 
 `SendMessage` addresses a *session*. `sonner` addresses a *repo*, which is usually what you mean, and it works whether or not anyone is home.
@@ -112,7 +127,7 @@ sonner --name modha-7a "…"       # ring one session by registry name (repo too
 sonner --wake REPO               # just ensure a session exists — no message
 sonner --wake REPO --work        # same, on MIT work billing (claudev: Opus 5.5 on Vertex) — it gets an inbox
 sonner REPO "…" --work           # empty repo: spawn on work billing, deliver as usual
-sonner --list                    # every live session, its tmux window and repo — deaf ones tagged [deaf: no inbox]
+sonner --list                    # every live session, its tmux window and repo — tagged [deaf: no inbox], [desktop], and [rung by …] on sonner's own spawns
 sonner --list --name modha-7a    # one session, plus the line that jumps you to its window
 sonner --list --json             # the full registry record per session, both seats — for scripts, not eyes
 sonner --no-spawn REPO "…"       # fail rather than start a session
@@ -121,9 +136,10 @@ sonner --host tube REPO "…"      # run the ring on another machine (also --wak
 sonner REPO "…" --errand         # a one-off job: if this spawns, ask it to /close and hang up when done
 sonner REPO "…" --wait           # deliver, block until the session answers and goes idle, print its reply (--timeout S, default 600)
 sonner --hangup                  # from inside a session sonner spawned: end it (any other session is refused)
+SONNER_DISABLED=1 sonner …       # every verb off, exit 6 — for a test bench that must not touch live sessions
 ```
 
-**When you want the answer back, ring with `--wait`.** Sonner delivers, waits until the receiving session has taken the ring and finished that turn (Claude Code's own idle notice, not polling), then prints that turn's last assistant message on stdout. It works for a script or a robot as well as a session, and with `--host` across machines. The receiver is asked to answer in its final message rather than with `SendMessage`, and it sees one short informational line per `--wait`. Read the exit code before you act, because only one of them means "not delivered":
+**When you want the answer back, ring with `--wait`.** Sonner delivers, waits until the receiving session has taken the ring and finished that turn (Claude Code's own idle notice, not polling), then prints that turn's last assistant message on stdout. It works for a script or a robot as well as a session, and with `--host` across machines. The receiver is asked to answer in its final message rather than with `SendMessage`, and it sees one short informational line per `--wait`. Read the exit code before you act, because two of them mean "not delivered":
 
 | Exit | Means | Do |
 |---|---|---|
@@ -132,8 +148,9 @@ sonner --hangup                  # from inside a session sonner spawned: end it 
 | 5 | Delivered, but no reply can come (the session exited or is unavailable) | Look at what it left; don't re-send blindly |
 | 3 | Held for that session's user to approve | Don't ring again; it waits |
 | 1 | Not delivered | Safe to retry |
+| 6 | Nothing sent: sonner is switched off (`SONNER_DISABLED` is set, for a test bench) | Don't retry and don't route round it; the run is fenced on purpose |
 
-A delivered message never exits 1, so a script that retries only on 1 can't ring twice. `--wait` won't combine with `--all`. Measured 15 Nov 2026 with a real Claude in a sandbox: a cold spawn, a script caller, a ring queued behind a busy turn, and one absorbed mid-way through a tool turn all printed the right reply. Not yet measured: a receiver parked on a permission prompt, a Desktop receiver with the Mac asleep, and `--host` (sonner-zarunu).
+A delivered message never exits 1 or 6, so a script that retries only on 1 can't ring twice. `--wait` won't combine with `--all`. Measured 15 Nov 2026 with a real Claude in a sandbox: a cold spawn, a script caller, a ring queued behind a busy turn, and one absorbed mid-way through a tool turn all printed the right reply. Not yet measured: a receiver parked on a permission prompt, a Desktop receiver with the Mac asleep, and `--host` (sonner-zarunu).
 
 Grammar honesty rules (all measured 2026-08-09): a ring lands on the session sitting *exactly* at the path before any deeper one, and a deeper one counts only inside the same git repo — a plain directory such as `~/repos` or `~` matches a session sitting exactly there or gets a fresh spawn, never a session in some repo below it (sonner-lumaki, 2026-09-30); a repo occupied by a live-but-deaf session (one with no inbox) is refused with an explanation, never doubled — `--force-spawn` is the one explicit way past that, and it says on stderr which deaf session it is spawning beside; `--list` shows the deaf so their repos never read as empty; and sonner works out which session is calling it — a socketed caller's name goes in `from` so replies route natively, while a deaf or absent caller gets `script:` plus a body footer telling the receiver **not to attempt a reply**. If a message you receive carries that footer, act on it or ignore it; there is nobody to answer.
 

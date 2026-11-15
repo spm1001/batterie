@@ -252,8 +252,8 @@ Three legs is the whole check. A fourth, or a fifteen-minute investigation, is t
 
 **Constraints:**
 - **Actions only** — `bon work` on an outcome will error
-- One active tactical per session (CWD) — different worktrees can run in parallel
-- Two CWDs cannot claim the same action
+- One active tactical per **clone**, not per cwd: every directory inside one checkout resolves to the same board root, so a second session in the same clone is refused even on a different card (bon-kapipu). Different git worktrees each get their own claim and can run in parallel
+- A second lane in the same clone: work in a separate worktree, or mark the card with `bon edit ID --append-how "CLAIMED <date> by <lane>"` and work it without steps. Never `--release` or `--clear` a claim you didn't make — that is the other session's progress
 - Context-switch: `bon wait <id> "reason"` (clears tactical — re-plan on return)
 - Parking work that's waiting on a scheduled event, not on a blocker: `bon work --release`
   keeps the steps and your position, hands the claim back so the session can draw down
@@ -265,7 +265,7 @@ Three legs is the whole check. A fourth, or a fifteen-minute investigation, is t
 
 A hook injects the current tactical step into every prompt. When you see a `<user-prompt-submit-hook>` mentioning bon tactical, work on the current step and, when complete, run the `bon step --expect N` invocation the hook prints — the guard refuses without writing if another session moved the board (re-read with `bon work --status`).
 
-**The injected tactical may belong to another live session.** Session identity is CWD-keyed, so a parallel session in the same repo (a bg fork, a second roster session, a dispatched agent) sees — and is invited to advance — a tactical it didn't claim. If the injected step doesn't match work you've been asked to do, leave it alone: it's another Claude's thread, and stepping it desynchronises their bookkeeping (observed 2026-06-10: an email-dispatched session finished a tester's tactical and closed an item under them).
+**The injected tactical may belong to another live session.** Session identity is keyed on the board root (one per clone), so a parallel session in the same repo (a bg fork, a second roster session, a dispatched agent) sees — and is invited to advance — a tactical it didn't claim. If the injected step doesn't match work you've been asked to do, leave it alone: it's another Claude's thread, and stepping it desynchronises their bookkeeping (observed 2026-06-10: an email-dispatched session finished a tester's tactical and closed an item under them).
 
 ---
 
@@ -306,6 +306,13 @@ read-modify-write:**
 bon edit bon-zovili --append-how "UPDATE: blocked on the API rename, resuming after."
 printf '%s' '{"append_how": "Text with \"quotes\" survives the pipe."}' | bon edit bon-zovili
 ```
+
+The same verb exists for every brief field and for a done item's closing note:
+`--append-why`, `--append-what`, `--append-done`, and `--append-note` (stored as
+`done_note`; done items only). A follow-up to a closing note is
+`bon edit ID --append-note "..."`, never a read of `done_note` plus `--note`, which
+replaces the whole note: that is how a 1,685-character closing note was lost
+on 30 Oct 2026 (bon-jevali).
 
 The append is atomic (sets the field when absent, joins with a blank line when
 present). The old recipe — read the field, concatenate in python, write it back
@@ -420,6 +427,8 @@ bon edit ID --title/--why/--how/--what/--done/--note/--order  # Edit fields
 printf '%s' '{"how":"..."}' | bon edit ID    # JSON stdin — only the keys present change
 bon edit ID --how ""         # Clear how field
 bon edit ID --note "..."     # Repair a closing note (done items only)
+bon edit ID --append-how "..."   # Add to a field atomically (also --append-why/-what/-done)
+bon edit ID --append-note "..."  # Add a follow-up to a done item's closing note
 bon edit ID --parent NEW     # Move action to another outcome ('none' = standalone)
 bon convert ID               # Action → outcome, or outcome → standalone action
 bon convert ID --outcome P   # Outcome → action under P (demote + re-home in one move)
@@ -456,6 +465,7 @@ All commands support `--json` for output. `bon new` reads JSON from piped stdin 
 | `item["how"]` | `item["brief"]["how"]` |
 | `item["done"]` | `item["brief"]["done"]` (not `item["done_at"]`) |
 | `item["parent_id"]` | `item["parent"]` |
+| `item["note"]` | `item["done_note"]` (the closing note) |
 
 **JSON shape contract:**
 - `bon list --json` → `{"outcomes": [...], "standalone": [...]}`

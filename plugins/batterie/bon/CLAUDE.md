@@ -294,7 +294,7 @@ applied, nothing lost; a WHILE-APART collision (an already-committed offline/def
 edit meeting origin's at integration) resolves newest-wins with every displaced
 version preserved in the committed `.bon/sync-conflicts.jsonl` sidecar, the collision
 named loudly, and a standing warning on every clone's every verb until the sidecar is
-reviewed and deleted. Offline degrades to write + commit locally with one warning,
+reviewed and deleted (`bon doctor` counts it as an issue too). Offline degrades to write + commit locally with one warning,
 and a later verb pushes the backlog; a push is refused (with the reason named) when
 unpushed commits touch non-board files, so a board verb can never publish code as a
 side effect. The item-grain three-way

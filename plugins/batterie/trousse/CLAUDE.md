@@ -38,7 +38,7 @@ Two paths:
 | Path | Command | Skill names |
 |------|---------|-------------|
 | **Plugin** (recommended) | `claude plugin marketplace add spm1001/batterie` then `/plugin install batterie@batterie` (trousse ships inside it since the kit fold) | `/batterie:deep-review` |
-| **Manual** | `git clone` → plugin auto-discovers | `/titans` |
+| **Manual** | `git clone` → plugin auto-discovers | `/deep-review` |
 
 The plugin system discovers skills from `skills/*/SKILL.md` — no hooks, no settings.json registration needed.
 
@@ -48,8 +48,7 @@ The plugin system discovers skills from `skills/*/SKILL.md` — no hooks, no set
 
 | Type | Trigger | Example |
 |------|---------|---------|
-| User-invocable | Slash command | `/titans`, `/skill-forge` |
-| Alias | Slash command → delegates | `/review` → titans |
+| User-invocable | Slash command | `/deep-review`, `/skill-forge` |
 
 ### Conventions
 
@@ -57,23 +56,23 @@ The plugin system discovers skills from `skills/*/SKILL.md` — no hooks, no set
 - `user-invocable: false` for skills loaded programmatically (companion skills)
 - Reference files live in `references/` subdirectory, linked from main SKILL.md
 
-### Current Skills (5 + `review` alias)
+### Current Skills (4)
 
-ardoise, deglacer, hublot, review, skill-forge, titans
+deep-review, fresh, skill-forge, transcripts
 
-(No commands — the `consomme-*` set moved to mit-commons with the consommé skill. See "Skill homes" above for where everything else went.)
+The 27 Sep 2026 rename (5eab669) made titans `deep-review`, ardoise `fresh` and deglacer `transcripts`, retired the `review` alias, and moved hublot to sameer-kit as `claude-tmux`. `scripts/ardoise.sh` stays here as the engine `fresh` drives. No commands. See "Skill homes" above for where everything else went.
 
-### Titans Review
+### Deep Review
 
-`/titans` (or `/review`) dispatches three parallel Opus reviewers:
+`/deep-review` dispatches three parallel Opus reviewers:
 
-| Titan | Lens |
+| Lens | What it checks |
 |-------|------|
 | **Mnemosyne** | Memory — what the change broke that used to work (replaced Epimetheus, Oct 2026) |
 | **Metis** | Craft — clarity, idiom, structure, fragility, debt |
 | **Prometheus** | Foresight — vision, extensibility |
 
-Uses `Task` tool with `subagent_type: "explore-opus"`. Worth it for substantial work; overkill for quick fixes.
+Each runs as an `Explore` subagent with `model: "opus"` (skills/deep-review/SKILL.md). Worth it for substantial work; overkill for quick fixes.
 
 ## Extending trousse
 
@@ -106,9 +105,9 @@ Tests check:
 - Scripts executable with shebang
 - Anti-patterns table format consistency
 
-### Semantic (titans)
+### Semantic (deep-review)
 
-For "does this skill actually make sense?" — use `/titans`. Three Opus reviewers catch issues the linter can't see (stale references, semantic contradictions, missing error handling).
+For "does this skill actually make sense?" — use `/deep-review`. Three Opus reviewers catch issues the linter can't see (stale references, semantic contradictions, missing error handling).
 
 ## Architecture References
 
@@ -120,8 +119,8 @@ The handoff contract (`HANDOFF-CONTRACT.md`) lives in bon — it specifies bon's
 
 ### Cross-Skill Routing
 
-- **Before running jq on `~/.claude/projects/**/*.jsonl`** → load `/deglacer` first. The CC JSONL schema has dragons (triple-duty user entries, streaming-duplicated message IDs, version-dependent fields). Deglacer has the schema reference and `deglacer` CLI tool.
-- **Past session recall** → deglacer reads full transcripts.
+- **Before running jq on `~/.claude/projects/**/*.jsonl`** → load `/transcripts` first. The CC JSONL schema has dragons (triple-duty user entries, streaming-duplicated message IDs, version-dependent fields). The skill carries the schema reference and drives the `deglacer` CLI (its own repo, spm1001/deglacer, shipped as a wheel inside the kit).
+- **Past session recall** → `/transcripts`; the `deglacer` CLI reads full transcripts.
 
 ## README skill table is generated
 

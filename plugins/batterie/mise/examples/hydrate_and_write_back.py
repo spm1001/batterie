@@ -47,6 +47,12 @@ writes — same ambient code path the deployment uses. The scope tier is
 per-deployment: set MISE_SCOPES=readonly for a consumer that never
 writes; unset means read-write.
 
+Keep the output folder separate from the corpus folder (GARNI_OUTPUT_FOLDER
+below is not GARNI_CORPUS_FOLDER), and keep working files in subfolders,
+which hydrate() skips: an agent that writes back into the folder it reads
+re-ingests its own past answers on the next run. Folders do this job, so
+mise has no lane for Drive file properties (mise-en-space-vehojo).
+
 The deposit shape
 -----------------
 Every fetch lands a PER-FILE FOLDER under `<base_path>/.mise/`:

@@ -168,7 +168,8 @@ def do_fetch(file_id: str, base_path: Path | None = None, attachment: str | None
                 f"This URL is a Gmail DRAFT link. mise resolved draft "
                 f"'{draft_id}' to the thread holding it ('{thread_id}') via "
                 f"drafts.get and fetched that thread. To edit the draft itself, "
-                f"use do(draft, file_id='{draft_id}')."
+                f"use do(replace_text, file_id='{draft_id}', find=…, content=…) "
+                f"for a targeted change or do(draft, file_id='{draft_id}') to rewrite it."
             )
 
         problem = detect_fetch_input_problem(file_id) if source is None else None

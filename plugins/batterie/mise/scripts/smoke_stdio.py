@@ -224,7 +224,28 @@ async def main() -> int:
                 print(f"   MISSING: {missing}")
             print()
 
-    total = len(CASES) + 2
+            # do(replace_text) on a Gmail draft id (mise-en-space-gujuku): the new
+            # count= param must cross the wire and reach the draft path, which
+            # refuses a zero count BEFORE any Gmail call. Writes nothing.
+            result = await session.call_tool("do", {
+                "operation": "replace_text", "file_id": "r1234567890",
+                "find": "smoke", "content": "probe", "count": 0,
+                "base_path": "/tmp/mise-smoke",
+            })
+            text = "".join(getattr(block, "text", "") for block in result.content)
+            wanted = ["count=", "whole number"]
+            missing = [w for w in wanted if w not in text]
+            status = "PASS" if not missing else "FAIL"
+            if missing:
+                failures += 1
+            print(f"[{status}] do(replace_text) on a draft id with count=0 — count "
+                  "crosses the wire and is refused before Gmail (mise-en-space-gujuku)")
+            print(f"   raw: {text[:400]}")
+            if missing:
+                print(f"   MISSING: {missing}")
+            print()
+
+    total = len(CASES) + 3
     print(f"{total - failures}/{total} cases passed")
     return 1 if failures else 0
 

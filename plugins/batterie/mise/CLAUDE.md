@@ -368,6 +368,7 @@ Data models have `warnings: list[str]` fields. Extractors populate them during p
 - `do(draft)` and `do(reply_draft)` **auto-append the user's real Gmail signature** (sendAs settings) to both MIME parts
 - **`do(reply_draft)` quotes the message it answers**
 - **Superseded-draft guard**
+- **`do(replace_text)` on a Gmail draft id edits just the matched text in place** — exact-count guarded (`count=`), every byte outside the edited text bodies kept
 - **Doc tabs**
 - **Sheets editing**
 - **Pre-edit restore point**

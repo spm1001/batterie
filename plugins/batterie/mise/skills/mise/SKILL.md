@@ -366,6 +366,9 @@ releases above the campaign reports you actually wanted — those sort to the bo
 vendor-name search returned `drive_count: 25`; the preview held five contracts; the post-campaign
 analyses sat at ranks 8 and 21–25. The preview was taken for the whole answer and the session
 reported "no such report exists" — then repeated the same mistake on a second vendor an hour later.
+And Gmail rows are not ranked at all: they arrive **newest first**, because the Gmail API sells no
+other order. One fresh broad thread topped three of four Gmail queries on the 1 Aug bench. Read a
+Gmail row's position as recency; for an older thread, narrow the query (`before:`, `from:`) instead.
 
 **Two different numbers are hiding, and the response now names both.**
 
@@ -484,7 +487,7 @@ fetch("spaces/AAAA…/threads/…", base_path="...")
 | `overwrite` | Replace full file content (Google Doc or plain file; Sheets: CSV content, `range=` aims a tab or cells; Forms: YAML/JSON spec replaces all questions) | `file_id`, `content` OR `source` OR `file_path` (bytes as-is for plain files: PDF, PNG…, id kept) |
 | `prepend` | Insert at start of file | `file_id`, `content` |
 | `append` | Insert at end of file — or, with `tab='Title'`, place content in a NEW Google Doc tab | `file_id`, `content`, optional `tab` |
-| `replace_text` | Find-and-replace in file — applies across ALL tabs, Docs and Sheets alike (probed 2026-08-24) | `file_id`, `find`, `content`; `remove=True` instead of `content` deletes |
+| `replace_text` | Find-and-replace in file — applies across ALL tabs, Docs and Sheets alike (probed 2026-08-24). On a Gmail draft id: edits just that text in the draft, everything else kept | `file_id`, `find`, `content`; `remove=True` instead of `content` deletes; drafts: `count=N` when N matches are meant (default 1) |
 | `draft` | Compose a new Gmail draft — or update an existing one in place | `to`, `subject`, `content`, optional `include` (Drive file IDs); update: `file_id` (draft ID) + `content` |
 | `reply_draft` | Reply draft in an existing thread, quoting the message it answers | `file_id` (thread ID), `content`, optional `include`, `to=` to override the inferred recipient, `quote='none'` to leave it bare |
 | `respond` | Accept/decline/tentative a calendar invite — the RSVP lands live, organiser sees it | `file_id` (invite thread ID or Calendar event ID), `action` (`accept`/`decline`/`tentative`) |
@@ -527,6 +530,12 @@ fetch("spaces/AAAA…/threads/…", base_path="...")
 **Editing a Form:** `overwrite` on a form takes the same YAML/JSON spec as `create` — fetch the form first (`structure.json` shows current state), tweak the spec (e.g. add one option to a checkbox question), and overwrite. It replaces ALL questions wholesale; if the form already has responses, edit in the Forms UI instead.
 
 **Updating a draft:** `draft` with `file_id` (the draft ID a previous draft/reply_draft returned) rewrites that draft instead of minting a stray new one. `content` is required; `to`/`subject`/`cc` carry over when not resupplied; reply drafts keep their threading; attachments ride along (`cues.attachments_kept`), and when they are unreadable the update refuses rather than deleting them. If the draft is open in someone's Gmail compose window, its next autosave overwrites your update. **An update refuses when the draft changed since this mise process last wrote it** (someone edited it in Gmail, or a compose window autosaved): the refusal quotes its opening lines. Pull first — fetch the `#drafts` link from the draft result; the thread deposit includes the draft but does not mark which message it is, so match it against the quoted lines — merge your change onto that text, then repeat with `supersede=True` (always needed after a pull: fetching does not reset mise's record). The guard only knows drafts this server process wrote; a draft made in Gmail, or any draft after a restart, is overwritten without a check — so pull first there too (mise-en-space-cijugo, 2026-10-24; end-to-end pull is mise-en-space-ruvume). Superseded drafts and files: `trash` — Drive files go to the recoverable bin, drafts are discarded permanently.
+
+**Changing a few words in a draft: `replace_text` on the draft id.** `do(operation="replace_text", file_id="r-123…", find="Thursday at 10:00", content="Friday at 11:00")` edits the draft's stored message in place: only the matched text changes, in both the plain and HTML parts, and the headers (To, Cc, Bcc, Subject, In-Reply-To, References), the thread, attachments, the quoted history and the signature stay exactly as they were. Reach for it whenever the change is smaller than the body — a date, a name, a sentence — because `draft` with `file_id` rebuilds the whole body and re-appends the signature. It works on the draft's *current* text, so a human's edits survive, and like every draft op it only saves (sending stays with the user).
+
+- **It writes only on an exact count.** Each part must match `find` exactly `count` times (default 1), and the quoted history counts too: a word the person you're answering also used matches twice. The refusal gives each part's count and writes nothing; add surrounding words, or pass `count=2` when both are meant.
+- **The HTML part must agree.** A plain-text `find` also matches its HTML-escaped spelling (`Q&A` as `Q&amp;A`, `I'd` as `I&#39;d`), and only in visible text (an image's alt text or a style block is left alone), but when the HTML has markup inside the phrase — bold, a link, a line break between lines — it refuses rather than edit one part, saying the phrase is in the visible text with markup inside. Edit a shorter span that sits inside one line and one style, in more than one call if need be. Each call is its own save.
+- **Read `cues.preview`** (the edit in context) before telling the user it's done, and the compose-window caveat below still applies: an open composer's autosave overwrites any API edit.
 
 ### Writing & Replying to Comments
 
@@ -970,7 +979,7 @@ Both draft ops auto-append the user's Gmail signature (from their sendAs setting
 
 **Check who a reply draft is addressed to before you report it.** It answers the last LIVE message in the thread (trashed ones are skipped) and its result states `to`, `cc` and `reply_anchor`. If that last message was an internal aside, the inferred To is your colleague, not the correspondent: a warning names the thread's originator when they are missing, and `to=` (plus `cc=`) sets the addressing explicitly.
 
-**One draft per thread.** Gmail's conversation view shows only ONE draft inline per thread — a second draft object exists but hides exactly where the user hits Send. So `reply_draft` refuses when the thread already carries a draft, naming its id. The right move is almost always to **update the existing draft**: `do(operation="draft", file_id="<draft_id>", content=...)`. Pass `supersede=True` only when you deliberately want to discard the old draft and start fresh (permanent — and it may eat the user's hand-edits, so check whose words are in it first: the refusal includes a snippet).
+**One draft per thread.** Gmail's conversation view shows only ONE draft inline per thread — a second draft object exists but hides exactly where the user hits Send. So `reply_draft` refuses when the thread already carries a draft, naming its id. The right move is almost always to **update the existing draft**: `do(operation="replace_text", file_id="<draft_id>", find=..., content=...)` for a targeted change, or `do(operation="draft", file_id="<draft_id>", content=...)` to rewrite it. Pass `supersede=True` only when you deliberately want to discard the old draft and start fresh (permanent — and it may eat the user's hand-edits, so check whose words are in it first: the refusal includes a snippet).
 
 **Don't update a draft the user has open.** Gmail's composer holds its own copy, and their Send ships that copy: on 2026-09-09 an update reported "Draft updated in place", and the mail sent an hour later carried the old body. The API reports success either way. If they may be editing, give them the replacement lines to paste, or ask them to close the composer first, and after any in-place update confirm the body from Gmail before relying on it (dot-claude-divufu).
 
@@ -1005,7 +1014,7 @@ The server retries reads by itself: up to 3 attempts, with backoff, on a 429, an
 | Operation | Safe to repeat? | After an error or unclear result |
 |---|---|---|
 | `overwrite`, `rename`, `move`, `archive`, `star`, `label`, `trash`, `respond` | Yes: the same call lands in the same state | Retry |
-| `replace_text` | Yes, unless the replacement contains the find text | Retry, or fetch and check |
+| `replace_text` | Yes, unless the replacement contains the find text (on a draft a repeat refuses: the find text is gone, so its count no longer matches) | Retry, or fetch and check |
 | `share` | Partly: the permission ends the same, but a non-Google address gets Google's required notification email again (Google accounts are shared with no email) | Check the sharing panel before repeating with `confirm=True` |
 | `create`, `copy` | No: a repeat makes a second file | `search` for the title in the folder first |
 | `prepend`, `append` | No: a repeat doubles the text | Fetch the doc and look |

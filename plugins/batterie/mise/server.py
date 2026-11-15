@@ -327,7 +327,8 @@ def do(
     properties: dict[str, str] | None = None,
     color: str | None = None,
     visibility: str | None = None,
-    transparency: str | None = None, confirm_gate: ConfirmGate = None,  # resolved by mcp, never a wire param
+    transparency: str | None = None, count: int | None = None,
+    confirm_gate: ConfirmGate = None,  # resolved by mcp, never a wire param
 ) -> dict[str, Any]:
     """Act on Google Workspace."""
     # Build log params — include operation and non-None values that matter,
@@ -345,7 +346,7 @@ def do(
         ("location", location), ("meet", meet), ("recurrence", recurrence),
         ("send_updates", send_updates), ("duration", duration),
         ("properties", properties), ("color", color),
-        ("visibility", visibility), ("transparency", transparency),
+        ("visibility", visibility), ("transparency", transparency), ("count", count),
     ]:
         if v is not None and (v is not False or k == "meet"):  # meet=False removes (mise-tijeko)
             call_params[k] = v
@@ -401,7 +402,7 @@ def do(
         "location": location, "meet": meet, "recurrence": recurrence,
         "send_updates": send_updates, "duration": duration,
         "properties": properties, "color": color,
-        "visibility": visibility, "transparency": transparency, "optional_attendees": optional_attendees,
+        "visibility": visibility, "transparency": transparency, "optional_attendees": optional_attendees, "count": count,
         "_elicit": confirm_gate,  # what the confirm dialog asked and what came back (tools/confirm_gate.py)
     }
 

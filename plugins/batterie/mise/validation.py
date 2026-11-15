@@ -545,7 +545,8 @@ def diagnose_gmail_url(url: str) -> str | None:
             f"This is a Gmail draft link (draft id '{token}'). fetch() resolves "
             f"it to the thread holding the draft automatically; for other "
             f"operations pass that thread id, or edit the draft itself with "
-            f"do(draft, file_id='{token}')."
+            f"do(replace_text, file_id='{token}', find=…, content=…) for a targeted "
+            f"change or do(draft, file_id='{token}') to rewrite it."
         )
 
     if not token.startswith(GMAIL_WEB_ID_PREFIXES):
@@ -731,6 +732,11 @@ def is_gmail_api_id(id_value: str) -> bool:
     if not id_value:
         return False
     return bool(GMAIL_API_ID_PATTERN.match(id_value))
+
+
+def is_gmail_draft_id(id_value: object) -> bool:
+    """True for a Gmail draft id ('r' + optional '-' + digits). Drive ids never match."""
+    return isinstance(id_value, str) and bool(GMAIL_DRAFT_ID_PATTERN.match(id_value))
 
 
 _GMAIL_ID_SAFE_RE = re.compile(r'^[0-9a-zA-Z]+$')
@@ -1109,7 +1115,8 @@ def diagnose_fetch_404(file_id: str, *, tried_message_lookup: bool = False) -> s
             f"draft is a separate object with its own id space. Retrying will 404 "
             f"forever. To read the conversation it belongs to, use the thread id that "
             f"appears alongside the draft in the draft listing; to edit the draft "
-            f"itself, use do(draft, file_id='{s}')."
+            f"itself, use do(replace_text, file_id='{s}', find=…, content=…) for a targeted change "
+            f"or do(draft, file_id='{s}') to rewrite the body."
         )
 
     # 16-hex: the Gmail API id band. Thread ids and message ids are indistinguishable

@@ -24,9 +24,6 @@ Sonner's mechanics (it rings a repo, not a session; the deaf provider-billed
 session; the silently dropped repeat) live in its own shard, `rules/sonner.md`, once
 sonner is installed.
 
-*Sonnette (the old conductor-mesh plugin) was delisted from the suite 2026-08-24;
-sonner supersedes it. Guidance still naming `send_message` or `mesh_peers` is stale.*
-
 ## Filesystem Zones
 
 | Zone | Path |

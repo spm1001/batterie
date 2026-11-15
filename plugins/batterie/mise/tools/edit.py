@@ -33,10 +33,11 @@ from tools.doc_control_chars import (
     sanitise_for_insert,
 )
 from tools.doc_tabs import add_tab_with_content, get_doc_tabs_meta
+from tools.draft_replace import do_draft_replace_text
 from tools.plain_file import plain_prepend, plain_append, plain_replace_text
 from tools.restore_point import capture_restore_point, merge_restore_cues
 from tools.sheet_edit import sheet_replace_text
-from validation import validate_drive_id
+from validation import is_gmail_draft_id, validate_drive_id
 
 
 # Google Docs API v1 base URL
@@ -288,12 +289,17 @@ def do_replace_text(
     metadata: dict[str, Any] | None = None,
     suggest: bool = False,
     remove: bool = False,
+    count: int | None = None,
 ) -> DoResult | dict[str, Any]:
     """Find and replace all occurrences of text in a document or plain file.
 
     remove=True deletes every match: the explicit route, because some MCP
     clients (Claude Code among them) drop a content='' argument, and an
     omitted content must refuse rather than delete (mise-necizu).
+
+    A Gmail draft id (r + digits) routes to the surgical draft edit
+    (tools/draft_replace.py): exact-count guarded, draft-only, never sends.
+    count= belongs to that path alone (mise-en-space-gujuku).
     """
     if not file_id:
         return {"error": True, "kind": "invalid_input",
@@ -315,6 +321,17 @@ def do_replace_text(
                            "content='' does the same but some MCP clients drop an "
                            "empty argument, which arrives as no content and is "
                            "refused rather than read as delete."}
+    if is_gmail_draft_id(file_id):
+        if suggest:
+            return {"error": True, "kind": "invalid_input",
+                    "message": "suggest=True applies to Google Docs; a Gmail draft has no "
+                               "tracked changes. Drop suggest= to edit the draft directly."}
+        return do_draft_replace_text(file_id, find, content, count)
+    if count is not None:
+        return {"error": True, "kind": "invalid_input",
+                "message": "count= guards replace_text on a Gmail draft (file_id r + digits). "
+                           "On Docs, Sheets and files replace_text changes every match; "
+                           "occurrences_changed reports how many. Nothing was written."}
     try:
         validate_drive_id(file_id, "file_id")
     except ValueError as e:

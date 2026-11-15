@@ -3,7 +3,7 @@ name = "mise-en-space"
 dynamic = ["version"]
 description = "Google Workspace MCP — mise-en-place for knowledge work"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.11.5"
 dependencies = [
     # MCP SDK, v2 line (2026-07-28 spec era; serves 2025-era clients unchanged).
     # The old <2.0.0 ceiling was a deliberate hold (bon mise-veraja, mise-kofoba);

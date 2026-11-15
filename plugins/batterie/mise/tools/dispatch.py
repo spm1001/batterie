@@ -20,7 +20,7 @@ from adapters.drive import get_file_metadata
 from models import MiseError
 from tools.confirm_gate import gate_asked, gate_outcome
 from token_store import ambient_mode
-from validation import diagnose_sa_quota_403
+from validation import diagnose_sa_quota_403, is_gmail_draft_id
 from tools import (
     OPERATIONS,
     do_append,
@@ -103,7 +103,7 @@ DO_PARAM_DEFAULTS: dict[str, Any] = {
     "attendees": None, "time_min": None, "time_max": None, "location": None,
     "meet": None, "recurrence": None, "send_updates": None, "duration": None,
     "properties": None, "color": None, "visibility": None, "transparency": None,
-    "optional_attendees": None,
+    "optional_attendees": None, "count": None,
 }
 
 # Which params each op actually CONSUMES — read straight off the DISPATCH
@@ -134,7 +134,8 @@ OP_PARAMS: dict[str, frozenset[str]] = {
                             "file_path", "restore_comment", "range"}),
     "prepend": frozenset({"file_id", "content", "suggest"}),
     "append": frozenset({"file_id", "content", "tab", "suggest"}),
-    "replace_text": frozenset({"file_id", "find", "content", "suggest", "remove"}),
+    "replace_text": frozenset({"file_id", "find", "content", "suggest", "remove",
+                               "count"}),
     "draft": frozenset({"to", "subject", "content", "cc", "include", "file_id", "quote",
                         "supersede"}),
     "reply_draft": frozenset({"file_id", "content", "cc", "include",
@@ -219,6 +220,7 @@ PARAM_HINTS: dict[str, str] = {
     "range": "range= is Sheets A1 notation ('Tab' or 'Tab!F9:F15') scoping how "
              "much of a sheet a full replace clears — a blast-radius limiter, "
              "not an insertion point.",
+    "count": "count= is how many times find must match in EACH part of a Gmail draft.",
     "file_id": "file_id= names an artefact that already exists; to change one, "
                "reach for overwrite/prepend/append/replace_text.",
 }
@@ -264,7 +266,7 @@ DISPATCH: dict[str, Any] = {
     "replace_text": lambda p: do_replace_text(
         file_id=p["file_id"], find=p["find"], content=p["content"],
         metadata=p.get("_metadata"), suggest=p.get("suggest", False),
-        remove=p.get("remove", False),
+        remove=p.get("remove", False), count=p.get("count"),
     ),
     "draft": lambda p: do_draft(
         to=p["to"], subject=p["subject"], content=p["content"],
@@ -332,18 +334,18 @@ DISPATCH: dict[str, Any] = {
 
 # Tool descriptions — server.py picks one at decoration time based on _REMOTE_MODE.
 DO_DESCRIPTION_FULL = """\
-Act on Google Workspace: create, move, edit, draft/reply email, organise Gmail, book calendar.
+Act on Google Workspace.
 
 Operations: create, copy, move, rename, share, overwrite, prepend, append, replace_text, draft, reply_draft, archive, star, label, comment, comment_reply, suggest, trash, respond, create_event, update_event, delete_event, freebusy, setup_oauth.
 Create: content + title + doc_type (doc/sheet/file/folder/form). page_setup='pageless'; file_path= reads disk; form: YAML/JSON.
-Edit: overwrite (full replace), prepend/append, replace_text (find + content); append tab='T' adds a new doc tab (plain text). Sheets: overwrite=CSV, range='Tab'/'Tab!F9:F15'; [label](url)→link, @url→chip. Docs: suggest=True on prepend/append/replace_text proposes a tracked change; do(suggest, action=accept|reject, find='s2') folds one ([sN] from a markup fetch; tags RENUMBER after each fold).
+Edit: overwrite (full replace), prepend/append, replace_text (find + content; a Gmail draft id too, count=N guard); append tab='T' adds a new doc tab (plain text). Sheets: overwrite=CSV, range='Tab'/'Tab!F9:F15'; [label](url)→link, @url→chip. Docs: suggest=True on prepend/append/replace_text proposes a tracked change; do(suggest, action=accept|reject, find='s2') folds one ([sN] from a markup fetch; tags RENUMBER after each fold).
 Calendar: create_event (title + time_min/time_max; attendees/optional_attendees ⇒ preview, confirm=True books; guests ⇒ Meet unless meet=False). update_event (event/invite-thread id; time/guests/Meet gated). delete_event (file_id(s): own guest-less events; confirm=True). freebusy (attendees+window). respond (RSVP). properties= tags. More: mise://docs/do.
-Email: draft (to + subject + content; file_id=draft_id updates it), reply_draft (file_id + content; refuses if thread has a draft, supersede=True discards), archive/star/label. Signature + quoted original auto-append (quote='none' skips) — no sign-off.
+Email: draft (to + subject + content; file_id=draft_id rewrites all; to edit words use replace_text), reply_draft (file_id + content; refuses if thread has a draft, supersede=True discards), archive/star/label. Signature + quoted original auto-append (quote='none' skips) — no sign-off.
 Trash: file_id(s) — Drive→trash (recoverable); Gmail drafts (r+digits) go for good.
 Comments: comment (file_id + content = NEW thread; anchor='slide 3'/'Tab!B12'/quoted doc text anchors it, else panel-only; to= assigns), comment_reply (comment_id + content/action=resolve|reopen). '[agent] ' prefix.
 Share: file_id + to + role (reader/writer/commenter); confirm=True executes.
 Copy/Move: file_id(s) + folder_id.
-setup_oauth: bootstrap credentials (force=true re-auths)."""
+setup_oauth: bootstrap auth (force=true re-auths)."""
 
 DO_DESCRIPTION_REMOTE = """\
 Act on Google Workspace (remote mode — safe operations only).
@@ -466,9 +468,17 @@ def run_operation(operation: str, params: dict[str, Any]) -> dict[str, Any]:
         return {"error": True, "kind": "INVALID_INPUT",
                 "message": f"'{operation}' requires: {', '.join(sorted(missing))}"}
 
+    # A Gmail draft id is not a Drive file: replace_text edits it surgically
+    # (mise-en-space-gujuku); the other content ops would 404 at Drive.
+    if operation in CONTENT_OPS and is_gmail_draft_id(params.get("file_id")):
+        if operation != "replace_text":
+            return {"error": True, "kind": "invalid_input", "message": (
+                f"'{operation}' works on Drive files; '{params['file_id']}' is a Gmail draft. Edit "
+                "its text with do(replace_text, file_id=<draft_id>, find=…, content=…), or "
+                "rewrite its body with do(draft, file_id=<draft_id>, content=…).")}
     # Pre-fetch metadata for content operations — one Drive API call shared
     # by routing logic and handler, instead of each handler fetching its own.
-    if operation in CONTENT_OPS and params.get("file_id"):
+    elif operation in CONTENT_OPS and params.get("file_id"):
         try:
             params["_metadata"] = get_file_metadata(params["file_id"])
         except MiseError as e:

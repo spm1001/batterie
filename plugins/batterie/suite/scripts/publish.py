@@ -86,6 +86,13 @@ FLAVOUR_SIBLINGS = {
     "mise": [("family", "family")],  # was mise-home@batterie-home until the 27 Sep rename (bds-cofico)
 }
 
+# Session residue a publish never deletes (bds-malaju). Handoffs and the bon
+# board are written by concurrent sessions in the same tree; a deletion there
+# is either another session's half-finished work or a stale tree missing what
+# a sibling just pushed — never part of a release. 2026-11-15 (d2fc346): a
+# publish shipped the deletion of a handoff an hour old.
+PROTECTED_PREFIXES = ("handoffs/", ".bon/")
+
 
 def registry_path(config_dir: str | None) -> Path:
     base = Path(config_dir or os.environ.get("CLAUDE_CONFIG_DIR") or Path.home() / ".claude")
@@ -273,6 +280,84 @@ def checked(cp: subprocess.CompletedProcess | None, what: str) -> subprocess.Com
     return cp
 
 
+def git_lines(repo: Path, *args: str) -> list[str]:
+    """NUL-separated git path output as a list; dies loud if git fails."""
+    cp = subprocess.run(["git", "-C", str(repo), *args, "-z"], text=True,
+                        capture_output=True, check=False)
+    checked(cp, "git " + " ".join(args))
+    return [p for p in cp.stdout.split("\0") if p]
+
+
+def protected(path: str) -> bool:
+    return path.startswith(PROTECTED_PREFIXES)
+
+
+def pending_protected_deletions(repo: Path) -> list[str]:
+    """Protected paths a `git add -u` would stage as deleted: missing from the
+    worktree, or already staged as deleted against HEAD."""
+    gone = set(git_lines(repo, "ls-files", "--deleted"))
+    gone |= set(git_lines(repo, "diff", "--cached", "--name-only", "--diff-filter=D"))
+    return sorted(p for p in gone if protected(p))
+
+
+def unstage_protected_deletions(repo: Path, *, dry: bool) -> list[str]:
+    """Run right after the publish's `git add`: put any staged deletion under
+    PROTECTED_PREFIXES back to HEAD in the index (the worktree is untouched,
+    so the file stays missing and the loss stays visible in `git status`),
+    and say so loudly. Returns the paths kept out."""
+    if dry:
+        paths = pending_protected_deletions(repo)
+    else:
+        paths = [p for p in git_lines(repo, "diff", "--cached", "--name-only",
+                                      "--diff-filter=D") if protected(p)]
+        if paths:
+            checked(run(["git", "-C", str(repo), "reset", "-q", "--", *paths],
+                        capture=True), "git reset (keep protected deletions out)")
+    if paths:
+        listing = "\n".join(f"    {p}" for p in paths)
+        print(f"  WARNING: {len(paths)} deletion(s) under {'/'.join(PROTECTED_PREFIXES)} "
+              f"kept out of this publish (bds-malaju) — still missing from {repo.name}'s "
+              f"worktree, left unstaged for whoever owns them:\n{listing}",
+              file=sys.stderr)
+    return paths
+
+
+def recover_from_race(repo: Path, pj_rel: str, cl_rel: str) -> None:
+    """Undo our unpushed publish commit and move onto the twin's upstream
+    without losing either side's work (bds-zofino, rebuilt for bds-malaju).
+
+    The old recovery, `reset --soft @{u}`, kept the INDEX of the commit we had
+    built on our stale base, so the retry commit reverted every file the twin
+    had touched beyond the two suite files (d2fc346, 2026-11-15: a fresh
+    handoff and its LEDGER line vanished), and in the 2-repo case it left
+    that stale index staged in the suite clone for the next plain commit.
+
+    Now: soft-reset to our commit's parent (our content stays as local
+    changes), put the two suite files back to that parent (the bump is
+    recomputed on the next attempt), then `reset --keep @{u}`, which moves
+    onto the twin's commit, updates every file it changed and keeps our local
+    changes — or refuses when both sides changed one file, which dies here
+    naming git's complaint rather than guessing a merge. Local changes come
+    back unstaged; the retry's `git add` (one repo) or pathspec commit (two
+    repos) takes it from there."""
+    ahead = subprocess.run(["git", "-C", str(repo), "rev-list", "--count", "@{u}..HEAD"],
+                           text=True, capture_output=True, check=False)
+    if ahead.returncode != 0 or ahead.stdout.strip() != "1":
+        die(f"{repo.name}: push raced a twin publish, but {ahead.stdout.strip() or '?'} "
+            "local commits are unpushed (expected only the publish commit) — "
+            "recovery would drop them. `git pull --rebase`, then publish again.")
+    checked(run(["git", "-C", str(repo), "reset", "--soft", "HEAD~1"], capture=True),
+            "race recovery (undo publish commit)")
+    checked(run(["git", "-C", str(repo), "checkout", "HEAD", "--", pj_rel, cl_rel],
+                capture=True), "race recovery (drop our bump)")
+    kept = run(["git", "-C", str(repo), "reset", "--keep", "@{u}"], capture=True)
+    if kept is not None and kept.returncode != 0:
+        print(kept.stderr, file=sys.stderr, end="")
+        die(f"{repo.name}: the twin publish changed a file this publish also changed — "
+            "nothing was lost (your edits are uncommitted in the tree, the bump undone). "
+            "Pull, resolve, and publish again.")
+
+
 def converge_project_scopes(key: str, *, env: dict | None, dry: bool,
                             expected: str | None = None) -> None:
     """Bring every project-scope copy of `key` level with the user scope just
@@ -397,9 +482,10 @@ def commit_and_push_suite(*, suite_repo: Path, commit_repo: Path, is_suite: bool
     reject makes the collision structurally impossible rather than mergeable
     — two publishes become two sequential versions with two stacked entries,
     and prepend_changelog's duplicate guard backstops. Recovery is
-    reset --soft to the fetched upstream plus restoring ONLY the two suite
-    files from the twin's HEAD, so an is_suite content commit survives
-    staged. Claim-first (bump before content) was rejected: it inverts the
+    recover_from_race: undo our commit, move onto the twin's commit keeping
+    our edits as local changes, re-bump on top (bds-malaju; the first
+    version's reset --soft to upstream reverted the twin's other files).
+    Claim-first (bump before content) was rejected: it inverts the
     content-first ordering that makes the safe half-failure (bds-kodoli)."""
     suite_pj = suite_repo / ".claude-plugin" / "plugin.json"
     changelog = suite_repo / "CHANGELOG.md"
@@ -425,6 +511,7 @@ def commit_and_push_suite(*, suite_repo: Path, commit_repo: Path, is_suite: bool
         if is_suite:
             checked(run(["git", "-C", str(commit_repo), "add", add_flag], dry=dry),
                     "git add")
+            unstage_protected_deletions(commit_repo, dry=dry)
             checked(run(["git", "-C", str(commit_repo), "commit", "-m", message],
                         dry=dry, capture=True), "git commit")
             pushed = run(["git", "-C", str(commit_repo), "push"], dry=dry, capture=True)
@@ -445,10 +532,7 @@ def commit_and_push_suite(*, suite_repo: Path, commit_repo: Path, is_suite: bool
         if behind.returncode != 0 or (behind.stdout or "0").strip() == "0":
             checked(pushed, "git push (suite)")
         print("  note: suite push raced a twin publish — recovering (bds-zofino)")
-        checked(run(["git", "-C", str(suite_repo), "reset", "--soft", "@{u}"],
-                    capture=True), "race recovery (reset)")
-        checked(run(["git", "-C", str(suite_repo), "checkout", "HEAD", "--",
-                     pj_rel, cl_rel], capture=True), "race recovery (restore)")
+        recover_from_race(suite_repo, pj_rel, cl_rel)
     die(f"suite push lost the race {attempts} times running — "
         "check for a publish storm before retrying")
 
@@ -631,8 +715,15 @@ def main() -> int:
         # -A with --all — bds-fifuko).
         if pending:
             checked(run(["git", "-C", str(repo), "add", add_flag], dry=dry), "git add (content)")
-            checked(run(["git", "-C", str(repo), "commit", "-m", message], dry=dry,
-                        capture=True), "git commit (content)")
+            unstage_protected_deletions(repo, dry=dry)
+            nothing = (not dry and subprocess.run(
+                ["git", "-C", str(repo), "diff", "--cached", "--quiet"],
+                check=False).returncode == 0)
+            if nothing:  # the only pending change was a protected deletion
+                print(f"  (nothing left to commit in {repo.name} after the guard)")
+            else:
+                checked(run(["git", "-C", str(repo), "commit", "-m", message], dry=dry,
+                            capture=True), "git commit (content)")
             checked(run(["git", "-C", str(repo), "push"], dry=dry, capture=True), "git push (content)")
         elif stamped:
             # Tree was clean apart from the stamp we just wrote: commit it

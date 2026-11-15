@@ -47,6 +47,14 @@ if stale and "batterie@batterie" in keys:
           + " (or `claude plugin uninstall <name>@batterie` for each).")
 PYEOF
 fi
+# Keep the batterie marketplace on autoUpdate (no silent pin). Claude Code holds
+# the flag per marketplace but per machine, and a non-Anthropic marketplace
+# defaults to off, so a machine where nobody flipped it freezes on its first
+# install. The helper merges extraKnownMarketplaces.<marketplace>.autoUpdate:
+# true into the user's settings.json, silent when already set; its byte-identical
+# twin (and the tests) live in spm1001/sameer-kit.
+python3 "$HOOK_DIR/ensure-autoupdate.py" "$PLUGIN_ROOT"
+
 # Consume stdin (hook protocol)
 cat > /dev/null
 exit 0

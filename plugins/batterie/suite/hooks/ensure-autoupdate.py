@@ -12,7 +12,12 @@ plugins/sameer/hooks/, spm1001/batterie-de-savoir hooks/ and ITV/mit-kit hooks/.
 Their hooks fire at once at session start, so the read-merge-write runs under a
 shared lock file. Edit one, copy to the other two (sameer-kit's test checks).
 
-Usage: ensure-autoupdate.py <plugin root>   (the hook passes its plugin root)
+Usage: ensure-autoupdate.py [--leave-false] <plugin root>
+  The hook passes its plugin root. --leave-false is for a kit shared with
+  teammates (mit-kit): it sets the flag only when it is absent, leaves an
+  explicit false alone (a teammate chose it), and when it does set the flag says
+  how to switch it off. Without it (Sameer's own kits) a false is flipped too,
+  since there a false is exactly the silent pin this exists to remove.
 
 Silent when the flag is already on (in the user's settings or the machine's
 managed settings — the atelier sets mit there for everyone), when the plugin
@@ -47,10 +52,10 @@ def marketplace_of(plugin_root):
     return None
 
 
-def managed_sets_it(name):
-    """True when a managed settings file already turns autoUpdate on for name.
-    A managed file we cannot read counts as not setting it: the user-settings
-    write that follows is harmless, so there is nothing to warn about."""
+def managed_value(name):
+    """The autoUpdate a managed settings file gives name: True, False, or None
+    when none says. A managed file we cannot read counts as not saying: the
+    user-settings write that follows is harmless, so nothing to warn about."""
     files = [os.path.join(MANAGED_DIR, "managed-settings.json")]
     d = os.path.join(MANAGED_DIR, "managed-settings.d")
     if os.path.isdir(d):
@@ -59,21 +64,26 @@ def managed_sets_it(name):
         try:
             with open(path) as f:
                 data = json.load(f)
-            if data["extraKnownMarketplaces"][name]["autoUpdate"] is True:
-                return True
+            value = data["extraKnownMarketplaces"][name]["autoUpdate"]
         except (OSError, ValueError, KeyError, TypeError):
             continue
-    return False
+        if isinstance(value, bool):
+            return value
+    return None
 
 
 def main():
-    if len(sys.argv) != 2:
+    args = sys.argv[1:]
+    leave_false = "--leave-false" in args
+    args = [a for a in args if a != "--leave-false"]
+    if len(args) != 1:
         return
-    name = marketplace_of(sys.argv[1])
+    name = marketplace_of(args[0])
     if not name:
         return  # not a marketplace install: nothing to keep current
-    if managed_sets_it(name):
-        return  # the machine already holds it for everyone
+    managed = managed_value(name)
+    if managed is True or (managed is False and leave_false):
+        return  # the machine already decides it for everyone
 
     cfg = os.environ.get("CLAUDE_CONFIG_DIR") or os.path.expanduser("~/.claude")
     settings_path = os.path.join(cfg, "settings.json")
@@ -100,10 +110,10 @@ def main():
         return
     with lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
-        merge(settings_path, name, source)
+        merge(settings_path, name, source, leave_false)
 
 
-def merge(path, name, source):
+def merge(path, name, source, leave_false):
     try:
         with open(path) as f:
             text = f.read()
@@ -137,6 +147,8 @@ def merge(path, name, source):
         return
     if entry and entry.get("autoUpdate") is True:
         return  # already on: the every-session case, so say nothing
+    if leave_false and entry and entry.get("autoUpdate") is False:
+        return  # someone chose off on this machine: theirs to keep
 
     new_entry = dict(entry or {})
     new_entry.setdefault("source", source)
@@ -171,9 +183,13 @@ def merge(path, name, source):
             os.unlink(tmp)
         say(f"could not write {path} ({e}); {name} autoUpdate not set.")
         return
-    was = "absent" if entry is None else f"autoUpdate={entry.get('autoUpdate')!r}"
-    say(f"turned on autoUpdate for the '{name}' plugin marketplace in {path} (was {was}), "
-        "so this machine follows its latest release.")
+    was = "absent" if "autoUpdate" not in (entry or {}) else f"autoUpdate={entry['autoUpdate']!r}"
+    msg = (f"turned on autoUpdate for the '{name}' plugin marketplace in {path} (was {was}), "
+           "so this machine follows its latest release.")
+    if leave_false:
+        msg += (f" To switch it off, set extraKnownMarketplaces.{name}.autoUpdate to false"
+                " there; this hook leaves a false alone.")
+    say(msg)
 
 
 if __name__ == "__main__":

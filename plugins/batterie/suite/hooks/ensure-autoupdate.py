@@ -7,15 +7,17 @@ nobody flipped it (Sameer's rule: no pinning). So each kit's SessionStart hook
 runs this, and it makes sure the user's settings.json carries
 extraKnownMarketplaces.<marketplace>.autoUpdate: true.
 
-Twin copies, kept byte-identical: sameer-kit plugins/sameer/hooks/ and
-batterie-de-savoir hooks/. Both kits' hooks fire at once at session start, so the
-read-merge-write runs under a shared lock file.
+Copies kept byte-identical in three kits: spm1001/sameer-kit
+plugins/sameer/hooks/, spm1001/batterie-de-savoir hooks/ and ITV/mit-kit hooks/.
+Their hooks fire at once at session start, so the read-merge-write runs under a
+shared lock file. Edit one, copy to the other two (sameer-kit's test checks).
 
 Usage: ensure-autoupdate.py <plugin root>   (the hook passes its plugin root)
 
-Silent when the flag is already on, when the plugin was not installed from a
-marketplace (loaded with --plugin-dir, say), and on a machine with no plugin
-registry. One line when it adds the flag. One line, file untouched, when
+Silent when the flag is already on (in the user's settings or the machine's
+managed settings — the atelier sets mit there for everyone), when the plugin
+was not installed from a marketplace (loaded with --plugin-dir, say), and on a
+machine with no plugin registry. One line when it adds the flag. One line, file untouched, when
 settings.json is unreadable or invalid, or the marketplace is not registered.
 """
 import fcntl
@@ -25,6 +27,11 @@ import sys
 import tempfile
 
 PREFIX = "autoupdate:"
+# Where Claude Code reads managed (machine-wide) settings. The env var is a
+# test seam only, so a test can stand in a fake managed dir.
+MANAGED_DIR = os.environ.get("ENSURE_AUTOUPDATE_MANAGED_DIR") or (
+    "/Library/Application Support/ClaudeCode" if sys.platform == "darwin" else "/etc/claude-code"
+)
 
 
 def say(msg):
@@ -40,12 +47,33 @@ def marketplace_of(plugin_root):
     return None
 
 
+def managed_sets_it(name):
+    """True when a managed settings file already turns autoUpdate on for name.
+    A managed file we cannot read counts as not setting it: the user-settings
+    write that follows is harmless, so there is nothing to warn about."""
+    files = [os.path.join(MANAGED_DIR, "managed-settings.json")]
+    d = os.path.join(MANAGED_DIR, "managed-settings.d")
+    if os.path.isdir(d):
+        files += [os.path.join(d, f) for f in sorted(os.listdir(d)) if f.endswith(".json")]
+    for path in files:
+        try:
+            with open(path) as f:
+                data = json.load(f)
+            if data["extraKnownMarketplaces"][name]["autoUpdate"] is True:
+                return True
+        except (OSError, ValueError, KeyError, TypeError):
+            continue
+    return False
+
+
 def main():
     if len(sys.argv) != 2:
         return
     name = marketplace_of(sys.argv[1])
     if not name:
         return  # not a marketplace install: nothing to keep current
+    if managed_sets_it(name):
+        return  # the machine already holds it for everyone
 
     cfg = os.environ.get("CLAUDE_CONFIG_DIR") or os.path.expanduser("~/.claude")
     settings_path = os.path.join(cfg, "settings.json")

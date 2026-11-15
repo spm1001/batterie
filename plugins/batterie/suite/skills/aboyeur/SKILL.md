@@ -1,6 +1,6 @@
 ---
 name: aboyeur
-description: "Orchestrates the front door of the working day — required FIRST in an interactive session launched at the home folder, and whenever /open is typed there. A 6-step workflow (name the chat, read the ask, menu on a bare start, route, launch, keep the day's list), plus closing off a batch of unclosed sessions on request, ensures one-off work (an answer, a meeting prep, a draft) is done right there and work with a home runs in its folder, its destination said first and every relayed claim checked. Triggers on a bare first message at ~, '/open' at the home folder, 'aboyeur', 'showrunner', 'what's on today', 'dispatch this', 'close those off', 'clear the unclosed sessions'. In a project or repo folder, /open is batterie:open's ritual instead."
+description: "Orchestrates the front door of the working day — required FIRST in an interactive session launched outside any project or repo (~, ~/projects, ~/repos), and whenever /open is typed there. A 6-step workflow (name the chat, read the ask, menu on a bare start, route, launch, keep the day's list), plus closing off a batch of unclosed sessions on request, ensures one-off work (an answer, a meeting prep, a draft) is done right there and work with a home runs in its folder, its destination said first and every relayed claim checked. Triggers on a bare first message there, '/open' outside a project or repo, 'aboyeur', 'showrunner', 'what's on today', 'dispatch this', 'close those off', 'clear the unclosed sessions'. In a project or repo folder, /open is batterie:open's ritual instead."
 ---
 
 # Aboyeur
@@ -9,7 +9,7 @@ The front door of the day. It does the work that has no other home (an answer, a
 
 ## When to Use
 
-- The session's launch folder is the home folder (`$HOME`), it is interactive, and the first message is the person's own, whatever it says: "hi", "/open", a pasted link, "prep for the 2pm".
+- The session's launch folder is not a work home, it is interactive, and the first message is the person's own, whatever it says: "hi", "/open", a pasted link, "prep for the 2pm". A work home is a project folder or a repo, or anything inside one; everywhere else is the front door: the home folder (`$HOME`), an umbrella folder that holds projects or repos (`~/projects`, `~/repos`), scratch, `/tmp`. A machine's own guidance may name its homes more exactly. Why everywhere else and not just `$HOME`: a desktop app or phone often opens a session one level up, at `~/projects`, and a missed front door costs more than a spurious one. The missed session drifts with no home and writes its memory to a folder nobody reads, while a spurious menu costs one line to wave off (widened 15 Nov 2026).
 - "/open" typed in such a session: batterie:open hands over to this skill there.
 
 ## Boundaries
@@ -32,7 +32,7 @@ If `PASEO_AGENT_ID` is set, rename this chat so the sidebar can find it again:
 ```bash
 own=$(paseo inspect "$PASEO_AGENT_ID" --json 2>/dev/null | python3 -c 'import json,sys; print(json.load(sys.stdin).get("Cwd",""))')
 name="Aboyeur · $(hostname -s) · $(date '+%a %-d %b')"
-if [ "$own" = "$HOME" ]; then
+if [ "$own" = "$PWD" ]; then
   paseo agent update "$PASEO_AGENT_ID" --name "$name"
   # The sidebar row shows the WORKSPACE title, not the chat's name, so rename that too.
   # No CLI maps a chat to its workspace; the chat's own record holds it.
@@ -42,7 +42,7 @@ if [ "$own" = "$HOME" ]; then
 fi
 ```
 
-The check matters: `PASEO_AGENT_ID` is inherited by anything started from a Paseo chat's shell, so a session launched from inside another chat (a tmux probe, a terminal opened from it) carries that chat's id, and renaming without checking renames the wrong chat (it happened on the first test, 11 Nov 2026). Only a chat whose own folder is the home folder is yours to name. Keep `--thinking` out of the update call: paseo refuses `--name` and `--thinking` together. Why: a chat named after its first prompt reads "/open" or "hi" in the sidebar, and a day of those can't be told apart.
+The check matters: `PASEO_AGENT_ID` is inherited by anything started from a Paseo chat's shell, so a session launched from inside another chat (a tmux probe, a terminal opened from it) carries that chat's id, and renaming without checking renames the wrong chat (it happened on the first test, 11 Nov 2026). Only a chat whose own folder is this session's launch folder (`$PWD` before any `cd`) is yours to name. Keep `--thinking` out of the update call: paseo refuses `--name` and `--thinking` together. Why: a chat named after its first prompt reads "/open" or "hi" in the sidebar, and a day of those can't be told apart.
 
 *Done when* the sidebar row shows the dated name (renaming only the chat leaves the row on its first prompt: seen 11 Nov 2026), or there is no Paseo to name it in.
 
@@ -133,7 +133,7 @@ These steps cover the starts seen so far, not every start. Where they run out, r
 
 ## Integration
 
-- **batterie:open** hands over here when launched at the home folder; in a project or repo it runs the board ritual.
+- **batterie:open** hands over here when launched outside any work home; in a project or repo it runs the board ritual.
 - **batterie:ping** carries messages between sessions (sonner) when a launched chat needs a nudge.
 - **Organisation and personal layers** (`mit:opener`, a `<name>:opener`) supply the projects, the launcher and the person's own sources.
 - **batterie:close** ends the day here like any other session.

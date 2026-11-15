@@ -85,7 +85,7 @@ Never launch in a knowledge base (a kg). It is reference that sessions read, and
 
 ### 5. Launch
 
-Give the chat a title (four or five words naming the errand, not the folder) and a brief: what's wanted in the person's words, what done looks like, the clock (the meeting it serves), the facts you read live rather than recalled, and where you didn't look. Pass the brief through a heredoc, because a brief holding quotes breaks an inline argument.
+Give the chat a title (four or five words naming the errand, not the folder) and a brief: what's wanted in the person's words, what done looks like, the clock (the meeting it serves), the facts you read live rather than recalled, where you didn't look, and how the chat finishes: once its work is done and checked, it runs `batterie:close` itself; if something still waits on the person, it asks, and closes once answered. Why: on 15 Nov 2026 four launched chats finished their work and sat idle, unclosed, until Sameer asked for each to be closed. Pass the brief through a heredoc, because a brief holding quotes breaks an inline argument.
 
 Pick the route by where the person will watch it, first match wins:
 
@@ -98,7 +98,7 @@ Pick the route by where the person will watch it, first match wins:
 
 ### 6. Keep the day's list, and check before you relay
 
-For each launch, note the title, folder, chat id and what done looks like. In Desktop the app keeps the ids for you (`mcp__ccd_session_mgmt__list_sessions` with `linked: true`), and its turn-end notes arrive here by themselves, so don't poll. When a chat reports back, or the person asks how one is going, check its claim with one read-only command before relaying it: `ls` the folder it says it made, `git log -1` in the repo it says it pushed, `systemctl --user list-timers` for a robot it says it moved. A chat's summary is written at its happiest moment and drops whatever didn't fit. Don't redo a launched chat's work yourself.
+For each launch, note the title, folder, chat id and what done looks like. In Desktop the app keeps the ids for you (`mcp__ccd_session_mgmt__list_sessions` with `linked: true`), and its turn-end notes arrive here by themselves, so don't poll. When a chat reports back, or the person asks how one is going, check its claim with one read-only command before relaying it: `ls` the folder it says it made, `git log -1` in the repo it says it pushed, `systemctl --user list-timers` for a robot it says it moved. A chat's summary is written at its happiest moment and drops whatever didn't fit. Don't redo a launched chat's work yourself. A checked chat that hasn't closed gets asked to: `SendMessage` to its id naming the skill, `batterie:close`, because a slash command inside a peer message arrives as plain text.
 
 ### 7. Close off a batch of unclosed sessions (when asked)
 

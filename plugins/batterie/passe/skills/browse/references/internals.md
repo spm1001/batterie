@@ -3,7 +3,9 @@
 ## Output protocol
 
 **stderr:** NDJSON per step — `{"i":0,"verb":"goto","ms":342,"url":"...","status_code":200}`
-**stdout:** summary — `{"ok":true,"steps":6,"total_ms":443,"files":[...],"final_url":"..."}`
+**stdout:** summary — `{"ok":true,"steps":6,"total_ms":443,"files":[...],"results":[...],"final_url":"..."}`
+Step lines stay on **stderr** so stdout is always one parseable object. A caller that reads only stdout still gets every value-returning step (`eval`, `eval-file`, `exists`, `count`, `visible`) in the summary's `results` list: `[{"i":0,"verb":"eval","result":true}]` (absent when no such step ran).
+**Eval results** are JSON values, not Python renderings: `eval true` gives `"result": true`, `null` gives `null`, strings stay strings. Objects are not serialised (you get CDP's description, e.g. `"Array(2)"`) — return `JSON.stringify(...)` for data. An awaited Promise must settle within **15 s**; past that the step fails with `eval timed out after 15s` — poll with `wait` for longer conditions. `passe eval` (the subcommand) prints strings raw and everything else as JSON.
 **Exit:** `passe fetch`: 0 = success, 1 = thin/degraded extraction (content returned, assess usability), 2 = tool failure (Chrome down, network error, bad args). Scripts (`passe run`): 0/1.
 
 ## HTTP fast-path (fetch only)

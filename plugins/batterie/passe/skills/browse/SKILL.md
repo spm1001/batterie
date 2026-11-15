@@ -42,7 +42,7 @@ The Claude in Chrome extension (the `mcp__claude-in-chrome__*` tools) is the oth
 | The person's everyday browser on their laptop, or a session on the phone or web with no route to a CDP port | extension | It connects through claude.ai, so it needs no tunnel or open port |
 | Exploring a UI by eye: screenshot, click, read, repeat | either; the extension is the lighter loop | It batches clicks, typing and screenshots in one call and finds elements by description |
 
-**Reverse-engineering with both.** Let the extension drive the UI while `passe log start` records underneath. The log sees every tab, the extension's included, with bodies. It also shows what the extension's own output filter hides: on 2026-10-25 that filter returned the path `/Search2/Home/Search` as `[BLOCKED: Base64 encoded data]`, and the log printed it plainly. Run `passe log stop` when you are done, because the log writes request headers verbatim, cookies included (passe-zinido); treat `~/.passe/logs/` like the capture files in recipe 6.
+**Reverse-engineering with both.** Let the extension drive the UI while `passe log start` records underneath. The log sees every tab, the extension's included, with bodies. It also shows what the extension's own output filter hides: on 2026-10-25 that filter returned the path `/Search2/Home/Search` as `[BLOCKED: Base64 encoded data]`, and the log printed it plainly. Run `passe log stop` when you are done. Since 2026-11-15 the log writes `Cookie`, `Set-Cookie` and `Authorization` values as a short hash (cookie names and the auth scheme kept, so the same session still matches across requests), and its directory and files are owner-only. `passe log start --keep-credentials` writes them verbatim for token-replay work; then treat `~/.passe/logs/` like the capture files in recipe 6 and delete them after (passe-zinido). Bodies are never redacted: a login POST or a token endpoint's response is still in the log.
 
 **Leave the extension's tabs alone.** They sit in a tab group the extension owns, and `--reuse-tab --tab <url-substring>` can match one: on 2026-10-25 only the "matches multiple tabs" refusal stopped passe attaching to it (passe-zohoha). When both tools are on the same site, take the tab id from `passe tabs` and pass that.
 
@@ -56,6 +56,7 @@ The Claude in Chrome extension (the `mcp__claude-in-chrome__*` tools) is the oth
 | See what APIs a page calls | `passe capture URL /tmp/reqs.jsonl` |
 | Multi-step interaction | `passe run` with heredoc |
 | Human needs to sign in | `passe login site.example.com` |
+| Put a page in front of a human (pre-filled form, page to review) | `passe tab 'URL'` — prints the tab id; the whole query survives, unlike a raw `PUT /json/new` |
 | Quick JS on current tab | `passe eval "expression"` |
 
 ## Anti-Patterns
@@ -167,7 +168,7 @@ passe run --reuse-tab -c 'visible ".error-banner"'
 passe run --reuse-tab -c 'pdf /tmp/page.pdf'
 ```
 
-`exists`, `count`, `visible` return their result directly in the step JSON — no eval wrappers needed. `pdf` writes via `Page.printToPDF` with backgrounds and CSS page sizes.
+`exists`, `count`, `visible` return their result directly in the step JSON — no eval wrappers needed. `pdf` writes via `Page.printToPDF` with backgrounds and CSS page sizes. **Checking what a person will print? Add `--no-background`:** real print dialogs default background graphics off, so a logo or swatch drawn as a CSS background prints blank for them while the default `pdf` shows it (passe-hotibi, 2026-08-19).
 
 **When to use which:** `ax-tree --flat-refs` for act-steps — cheapest scout, refs work across invocations. `snapshot` when you need CSS selectors (e.g. for `wait .selector`). `ax-tree` for understanding page semantics — what the page *means*, not just what's clickable. `ax-find` for targeted search (e.g. finding all buttons on a cookie banner). `exists`/`count`/`visible` for quick assertions without writing JS.
 
@@ -230,7 +231,7 @@ wait 2
 EOF
 ```
 
-Stderr summary shows request count by type and domains. Then:
+Stderr summary shows request count by type, domains, redirects and errors. In the file, a request that never completed has `failed: true` and `error` (Chrome's reason, e.g. `net::ERR_BLOCKED_BY_CLIENT`), and each redirect hop is its own record with `redirect_to`. Requests made inside cross-site iframes are not captured yet (passe-puvumu). Then:
 
 ```bash
 # Find the API calls
@@ -311,7 +312,7 @@ EOF
 
 `frame` matches by URL substring. Only works with cross-origin iframes (OOPiF). Same-origin iframes: use `eval` with `querySelector('iframe').contentDocument`. `screenshot` always captures the parent page (Chrome limitation).
 
-**A shell page reads empty.** Some intranets (Oak Engage, seen 2026-10-25) serve a near-empty top document and write the real page into a same-origin iframe with no `src`. `fetch` then returns 0 words with `fast_path_reason: empty_extraction`, and the extension's page readers are just as blind. List the frames after a short wait (the content frame is filled after load: 1 word at once, 356 words after `wait 4`, measured once on that site), then read or call APIs from the one that holds the content. passe-lawica tracks teaching `fetch` to do this itself:
+**A shell page reads empty.** Some intranets (Oak Engage, seen 2026-10-25) serve a near-empty top document and write the real page into a same-origin iframe with no `src`. `fetch` then returns 0 words with `fast_path_reason: empty_extraction`, and the extension's page readers are just as blind. List the frames after a short wait (the content frame is filled after load: 1 word at once, 356 words after `wait 4`, measured once on that site), then read or call APIs from the one that holds the content. Since 2026-11-15 `extract` and `fetch` do this themselves: when the top document extracts thin and holds an `<iframe>`, they read the same-origin frame with the most text and name it (`"frame": "main"` in the step line, `frame` in the `fetch` summary). Auto-wait now counts same-origin frame content, but if the frame fills late, `goto` + `wait 4` + `extract` is the sure route. To see the frames yourself:
 
 ```bash
 passe run -c 'goto https://intranet.example.com; wait 4; eval JSON.stringify([...document.querySelectorAll("iframe")].map(f=>({id:f.id, src:f.src, words:(f.contentDocument?.body?.innerText||"").split(/\s+/).length})))'
@@ -328,6 +329,8 @@ passe --cdp localhost:9223 look https://example.com
 ```
 
 When Chrome is unreachable, passe emits `[passe:connection]` diagnostics with `endpoint`, `reason`, and `alternatives`. Common causes: remote endpoint down, stale process holding the port, wrong `PASSE_CDP` value.
+
+**A site refuses headless Chrome** (a challenge page or a 403 where a person's browser loads fine): `passe --user-agent desktop run …` swaps `HeadlessChrome` for `Chrome` in the UA of every tab passe opens; `--user-agent '<string>'` sets any UA, `PASSE_USER_AGENT` does it per shell. `fetch`'s HTTP fast path is unaffected, so use `run` with `goto` + `extract` to be sure Chrome serves the page.
 
 **Auto-launch follows the address you give.** If nothing answers at a *local* endpoint, passe launches Chrome on that endpoint's port — headless when the endpoint was implicit (the default), visible when you named it explicitly or used `passe login`. Auto-launched headless Chrome dies when the run ends; the launched profile is bare (no auth cookies).
 
@@ -346,6 +349,8 @@ passe log stop
 ```
 
 **One-shot vs continuous:** `passe capture URL /tmp/out.jsonl` records one page visit. `passe log start` captures everything Chrome does indefinitely.
+
+**Credentials:** the log redacts `Cookie`/`Set-Cookie`/`Authorization` values to `<redacted:1a2b3c4d>` by default; `passe log start --keep-credentials` keeps them. One-shot `capture` does not redact (recipe 6).
 
 ---
 

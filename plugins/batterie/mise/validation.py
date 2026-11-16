@@ -660,6 +660,8 @@ def parse_chat_reference(value: str) -> ChatRef | None:
     - chat.google.com/room/S and chat.google.com/dm/S (optionally /u/N/ first,
       ?cls=… after) — the two shapes Chat's own `spaceUri` field emits
       (50 of 50 spaces measured 2026-10-24) — with /T or /T/M after S
+    - chat.google.com/app/chat/S (also /app/room/, /app/dm/) — what Chat's web
+      app shows in the address bar; a pasted one was refused until 2026-11-16
     - mail.google.com …#chat/space/S[/T[/M]] and #chat/dm/S — Chat inside Gmail
       (the DM and S/T/M shapes resolved live against the API, 2026-10-24)
 
@@ -693,6 +695,8 @@ def parse_chat_reference(value: str) -> ChatRef | None:
     path = [seg for seg in parts.path.split('/') if seg]
     if len(path) >= 2 and path[0] == 'u' and path[1].isdigit():
         path = path[2:]
+    if len(path) >= 3 and path[0] == 'app' and path[1] in ('chat', 'room', 'dm'):
+        return _chat_ref_from_ids(path[2:5])  # the web app's address bar (seen 2026-11-16)
     if len(path) >= 2 and path[0] in ('room', 'dm'):
         return _chat_ref_from_ids(path[1:4])
     return None

@@ -485,8 +485,8 @@ fetch("spaces/AAAA…/threads/…", base_path="...")
 | `rename` | Rename a file in-place | `file_id`, `title` |
 | `share` | Share file with people (confirm gate — two paths, see Share below) | `file_id`, `to`, `role`; then the client's dialog OR `confirm=True` |
 | `overwrite` | Replace full file content (Google Doc or plain file; Sheets: CSV content, `range=` aims a tab or cells; Forms: YAML/JSON spec replaces all questions) | `file_id`, `content` OR `source` OR `file_path` (bytes as-is for plain files: PDF, PNG…, id kept) |
-| `prepend` | Insert at start of file | `file_id`, `content` |
-| `append` | Insert at end of file — or, with `tab='Title'`, place content in a NEW Google Doc tab | `file_id`, `content`, optional `tab` |
+| `prepend` | Insert at start of file — on a Sheet, insert rows/columns BEFORE the one `range=` names (see Sheets: insert and delete) | `file_id`, `content`; Sheets: `range=`, optional `count=` |
+| `append` | Insert at end of file — or, with `tab='Title'`, place content in a NEW tab (Doc: plain text; Sheet: CSV). On a Sheet with `range=`, insert rows/columns AFTER the one named | `file_id`, `content`, optional `tab`; Sheets: `range=`, optional `count=` |
 | `replace_text` | Find-and-replace in file — applies across ALL tabs, Docs and Sheets alike (probed 2026-08-24). On a Gmail draft id: edits just that text in the draft, everything else kept | `file_id`, `find`, `content`; `remove=True` instead of `content` deletes; drafts: `count=N` when N matches are meant (default 1) |
 | `draft` | Compose a new Gmail draft — or update an existing one in place | `to`, `subject`, `content`, optional `include` (Drive file IDs); update: `file_id` (draft ID) + `content` |
 | `reply_draft` | Reply draft in an existing thread, quoting the message it answers | `file_id` (thread ID), `content`, optional `include`, `to=` to override the inferred recipient, `quote='none'` to leave it bare |
@@ -500,7 +500,7 @@ fetch("spaces/AAAA…/threads/…", base_path="...")
 | `label` | Add/remove label on thread(s) | `file_id` (str or list), `label`, optional `remove=True` |
 | `comment` | Open a NEW comment thread on a doc | `file_id`, `content` |
 | `comment_reply` | Reply to / resolve / reopen a doc comment | `file_id`, `comment_id`, `content` and/or `action` |
-| `trash` | Trash Drive file(s) / discard Gmail draft(s) — routed by ID shape | `file_id` (str or list) |
+| `trash` | Trash Drive file(s) / discard Gmail draft(s) — routed by ID shape. With `range=` on a Sheet: delete whole rows/columns (preview, then the client's dialog OR `confirm=True`) | `file_id` (str or list); Sheets: one id + `range=` |
 
 ### Choosing the Right Edit Operation
 
@@ -727,6 +727,35 @@ A **smart chip** (`@url` as the entire cell) replaces the cell text with the tar
 **Pasting a PDF deposit into a Doc keeps its page boundaries** (2026-08-24, mise-en-space-melaso). Google Docs deletes form feeds on *every* write path — measured, both the markdown import and the `insertText` one — and a form feed is exactly how `content.md` marks PDF page breaks, so this used to lose every boundary in silence. Mise now converts each one to a `---` line before writing (a real horizontal rule after `create`/`overwrite`, a literal `---` on `prepend`/`append`/`tab=`, which are plain text) and cues `page_breaks_marked`. NUL bytes get the sharper treatment: they are stripped, because the markdown import **truncates the document at the first one** and discards everything after it under an HTTP 200 — on an `overwrite` that means the old content is already gone and only the head of the new content arrives. `cues.nuls_removed` says how many, and a NUL in text content is usually a sign the source was binary or mis-decoded. Plain files (`doc_type='file'`, and `overwrite` on a `.md`) keep both characters untouched — that is the lossless route when the exact bytes matter.
 
 **Without `range=`, a multi-tab sheet refuses** (naming its tabs) rather than silently clearing the first tab — pass the range to say what you meant. A single-tab sheet still gets the whole-tab replace, symmetric with `create`.
+
+### Sheets: insert and delete rows, columns and tabs
+
+`overwrite` writes cells in place; making room is an insert. To put a new row *between* existing ones — an event in date order above a footer line, say — insert it. Rewriting the rows below one place down instead leaves each row's formatting where it was, so a colleague's row ends up wearing the footer's style.
+
+```python
+# New row AFTER row 33, CSV written into it; rows 34 onwards move down
+do(operation="append", file_id="1abc...", range="Events!33", content="TV Rise,21 Oct,London", base_path="...")
+
+# BEFORE row 2; 'Events!B2' would start the CSV in column B. count=3 with no content = 3 blank rows
+do(operation="prepend", file_id="1abc...", range="Events!2", count=3, base_path="...")
+
+# Columns: a letter instead of a number. The CSV fills the new column(s) from row 1
+do(operation="append", file_id="1abc...", range="Events!C", content="Status\nconfirmed", base_path="...")
+
+# A new tab at the end, filled from CSV (no content = an empty tab)
+do(operation="append", file_id="1abc...", tab="2027", content="Event,Date\n...", base_path="...")
+
+# Delete rows 34–36 (or 'Events!C:E' for columns): returns a preview of what goes
+do(operation="trash", file_id="1abc...", range="Events!34:36", base_path="...")
+```
+
+- **New rows take the formatting of the row you name.** `append` copies the row above the gap and `prepend` copies the row below it, so name a data row, not the header or the footer. To add above a footer, `append` after the last data row; to add under a header, `prepend` before the first data row. `cues.formatted_like` says which row was copied.
+- **Every result says what moved.** For example: `cues.inserted` "1 row after row 33 — new row 34" and `cues.shifted` "rows 34–1000 moved down by 1 (now 35–1001)". After a delete, `cues.deleted_values` holds what was removed.
+- **Deleting is gated like `share`, and stricter, because rows move.** The preview shows the doomed rows' contents. Show it to the user, then call again with `confirm=True`, or answer the client's dialog. mise remembers what each preview showed and deletes only if the rows still match when the yes arrives, by either route; otherwise it returns the current state as a fresh preview. So `confirm=True` with no preview first just previews. Rows have no Drive trash: only File → Version history brings them back. A delete that would empty a whole tab refuses, because a tab must keep one row.
+- **An insert is not safe to repeat; a delete is guarded.** A repeated insert adds a second block of rows, so after a timeout or an unclear error, fetch the tab and look before you issue it again. A delete clears mise's record of its preview, so a repeated `confirm=True` previews the rows that moved up into the gap and deletes nothing. If an insert landed but its write failed, the error says the new rows are there and empty, and gives you the `overwrite` and `trash` calls to fill or remove them.
+- **Name the tab.** A bare `range="33"` works only on a one-tab sheet. Otherwise the refusal lists the tabs. A cell range (`'A2:C3'`) refuses on `trash`, so clear cells with `overwrite` instead.
+
+Measured live 2026-11-15 on a scratch sheet (one run): a row appended after the last bold data row came out bold, the italic footer below it stayed italic, and a delete with `confirm=True` moved the rows below up by the right count. Formatting cells (colours, widths, freezing) is still outside mise.
 
 ### Surgical Edits
 

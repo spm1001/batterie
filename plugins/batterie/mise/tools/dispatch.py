@@ -19,6 +19,7 @@ from typing import Any
 from adapters.drive import get_file_metadata
 from models import MiseError
 from tools.confirm_gate import gate_asked, gate_outcome
+from tools.do_descriptions import DO_DESCRIPTION_FULL, DO_DESCRIPTION_REMOTE  # noqa: F401 — server.py imports them from here
 from token_store import ambient_mode
 from validation import diagnose_sa_quota_403, is_gmail_draft_id
 from tools import (
@@ -59,8 +60,8 @@ REQUIRED_PARAMS: dict[str, set[str]] = {
     "rename": {"file_id", "title"},
     "share": {"file_id", "to"},
     "overwrite": {"file_id"},  # content OR source — handler validates
-    "prepend": {"file_id", "content"},
-    "append": {"file_id", "content"},
+    "prepend": {"file_id"},  # content, or on a Sheet count= — handler validates
+    "append": {"file_id"},  # content, or on a Sheet count= — handler validates
     "replace_text": {"file_id", "find"},  # content OR remove=True — handler validates
     "draft": {"content"},  # create needs to+subject too; update (file_id) doesn't — handler validates
     "reply_draft": {"file_id", "content"},
@@ -132,8 +133,8 @@ OP_PARAMS: dict[str, frozenset[str]] = {
     "share": frozenset({"file_id", "to", "role", "confirm"}),
     "overwrite": frozenset({"file_id", "content", "source", "base_path",
                             "file_path", "restore_comment", "range"}),
-    "prepend": frozenset({"file_id", "content", "suggest"}),
-    "append": frozenset({"file_id", "content", "tab", "suggest"}),
+    "prepend": frozenset({"file_id", "content", "suggest", "range", "count"}),
+    "append": frozenset({"file_id", "content", "tab", "suggest", "range", "count"}),
     "replace_text": frozenset({"file_id", "find", "content", "suggest", "remove",
                                "count"}),
     "draft": frozenset({"to", "subject", "content", "cc", "include", "file_id", "quote",
@@ -146,7 +147,7 @@ OP_PARAMS: dict[str, frozenset[str]] = {
     "comment": frozenset({"file_id", "content", "anchor", "to"}),
     "comment_reply": frozenset({"file_id", "comment_id", "content", "action"}),
     "setup_oauth": frozenset({"force"}),
-    "trash": frozenset({"file_id"}),
+    "trash": frozenset({"file_id", "range", "confirm"}),
     "respond": frozenset({"file_id", "action"}),
     "create_event": frozenset({"title", "time_min", "time_max", "content",
                                "attendees", "location", "meet", "recurrence",
@@ -200,6 +201,9 @@ HANDLER_TOLERANCES: dict[tuple[str, str], str] = {
         "meet=False opts a guest event out of its default Meet link; on a solo "
         "event there is no link to skip, which is what it gets. Inferred from "
         "the same class, not measured.",
+    ("trash", "confirm"):
+        "Gates range= row/column deletes only. A whole-file Drive trash is "
+        "recoverable and ungated, so confirm=True there is already met.",
     ("update_event", "confirm"):
         "Gates structural edits; a cosmetic-only edit has nothing to confirm "
         "and runs directly. Inferred from the same class, not measured.",
@@ -217,10 +221,11 @@ PARAM_HINTS: dict[str, str] = {
                  "new body; the surgical edits take the text itself as content=.",
     "source": "source= replays a previously fetched .mise deposit as the whole "
               "new body; the surgical edits take the text itself as content=.",
-    "range": "range= is Sheets A1 notation ('Tab' or 'Tab!F9:F15') scoping how "
-             "much of a sheet a full replace clears — a blast-radius limiter, "
-             "not an insertion point.",
-    "count": "count= is how many times find must match in EACH part of a Gmail draft.",
+    "range": "range= is Sheets A1 notation. overwrite: 'Tab' or 'Tab!F9:F15' scopes "
+             "what a replace writes. append/prepend: 'Tab!33' inserts rows after/"
+             "before row 33. trash: 'Tab!34:36' deletes rows (previews first; confirm=True on the user's yes).",
+    "count": "count= is how many times find must match in EACH part of a Gmail draft "
+             "(replace_text), or how many blank rows a Sheet append/prepend inserts.",
     "file_id": "file_id= names an artefact that already exists; to change one, "
                "reach for overwrite/prepend/append/replace_text.",
 }
@@ -258,10 +263,12 @@ DISPATCH: dict[str, Any] = {
         range_=p.get("range"),
     ),
     "prepend": lambda p: do_prepend(file_id=p["file_id"], content=p["content"],
-                                    metadata=p.get("_metadata"), suggest=p.get("suggest", False)),
+                                    metadata=p.get("_metadata"), suggest=p.get("suggest", False),
+                                    range_=p.get("range"), count=p.get("count")),
     "append": lambda p: do_append(
         file_id=p["file_id"], content=p["content"],
         metadata=p.get("_metadata"), tab=p.get("tab"), suggest=p.get("suggest", False),
+        range_=p.get("range"), count=p.get("count"),
     ),
     "replace_text": lambda p: do_replace_text(
         file_id=p["file_id"], find=p["find"], content=p["content"],
@@ -297,7 +304,10 @@ DISPATCH: dict[str, Any] = {
         file_id=p["file_id"], action=p.get("action"), find=p.get("find"),
     ),
     "setup_oauth": lambda p: do_setup_oauth(force=p.get("force", False)),
-    "trash": lambda p: do_trash(file_id=p["file_id"]),
+    "trash": lambda p: do_trash(
+        file_id=p["file_id"], range_=p.get("range"), confirm=p.get("confirm", False),
+        answer=gate_outcome(p.get("_elicit")), question=gate_asked(p.get("_elicit")),
+    ),
     "respond": lambda p: do_respond(file_id=p["file_id"], action=p["action"]),
     "create_event": lambda p: do_create_event(
         title=p["title"], time_min=p.get("time_min"), time_max=p.get("time_max"),
@@ -330,46 +340,6 @@ DISPATCH: dict[str, Any] = {
         time_max=p.get("time_max"), duration=p.get("duration"),
     ),
 }
-
-
-# Tool descriptions — server.py picks one at decoration time based on _REMOTE_MODE.
-DO_DESCRIPTION_FULL = """\
-Act on Google Workspace.
-
-Operations: create, copy, move, rename, share, overwrite, prepend, append, replace_text, draft, reply_draft, archive, star, label, comment, comment_reply, suggest, trash, respond, create_event, update_event, delete_event, freebusy, setup_oauth.
-Create: content + title + doc_type (doc/sheet/file/folder/form). page_setup='pageless'; file_path= reads disk; form: YAML/JSON.
-Edit: overwrite (full replace), prepend/append, replace_text (find + content; a Gmail draft id too, count=N guard); append tab='T' adds a new doc tab (plain text). Sheets: overwrite=CSV, range='Tab'/'Tab!F9:F15'; [label](url)→link, @url→chip. Docs: suggest=True on prepend/append/replace_text proposes a tracked change; do(suggest, action=accept|reject, find='s2') folds one ([sN] from a markup fetch; tags RENUMBER after each fold).
-Calendar: create_event (title + time_min/time_max; attendees/optional_attendees ⇒ preview, confirm=True books; guests ⇒ Meet unless meet=False). update_event (event/invite-thread id; time/guests/Meet gated). delete_event (file_id(s): own guest-less events; confirm=True). freebusy (attendees+window). respond (RSVP). properties= tags. More: mise://docs/do.
-Email: draft (to + subject + content; file_id=draft_id rewrites all; to edit words use replace_text), reply_draft (file_id + content; refuses if thread has a draft, supersede=True discards), archive/star/label. Signature + quoted original auto-append (quote='none' skips) — no sign-off.
-Trash: file_id(s) — Drive→trash (recoverable); Gmail drafts (r+digits) go for good.
-Comments: comment (file_id + content = NEW thread; anchor='slide 3'/'Tab!B12'/quoted doc text anchors it, else panel-only; to= assigns), comment_reply (comment_id + content/action=resolve|reopen). '[agent] ' prefix.
-Share: file_id + to + role (reader/writer/commenter); confirm=True executes.
-Copy/Move: file_id(s) + folder_id.
-setup_oauth: bootstrap auth (force=true re-auths)."""
-
-DO_DESCRIPTION_REMOTE = """\
-Act on Google Workspace (remote mode — safe operations only).
-
-Args:
-    operation: What to do. One of: 'create', 'draft', 'reply_draft', 'archive', 'star', 'label'
-    content: Text content (required for create, draft, reply_draft).
-        Drafts auto-append the user's Gmail signature — don't write a sign-off.
-    title: Document title (for create)
-    doc_type: 'doc' | 'sheet' | 'file' | 'folder' | 'form' (for create). form: content is YAML/JSON spec
-    folder_id: Optional destination folder (for create)
-    file_id: Target thread ID (for reply_draft, archive, star, label)
-    to: Recipient email address(es), comma-separated (for draft)
-    subject: Email subject (for draft)
-    cc: CC address(es), comma-separated (for draft, reply_draft)
-    include: List of Drive file IDs to include as links in the email body (for draft, reply_draft)
-    reply_all: If True, infer Cc from all recipients on the last message (for reply_draft)
-    quote: 'none' leaves the reply bare; default quotes the message answered beneath the signature (for reply_draft)
-    label: Label name to add/remove (for label operation; resolved to ID automatically)
-    remove: If True, remove the label instead of adding it (for label operation)
-
-Returns:
-    file_id: File ID, draft ID, or thread ID
-    web_link: URL to view/edit"""
 
 
 # Ops that need a Gmail mailbox, a personal calendar, or an OAuth flow —

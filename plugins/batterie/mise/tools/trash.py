@@ -10,6 +10,9 @@ One op, two ID spaces, routed deterministically by shape:
 The asymmetry is Google's, not ours; the per-item cue names which fate
 applied. Batch supported (file_id as list), matching archive/star/label.
 
+With range= on a Google Sheet it deletes whole rows or columns instead
+(tools/sheet_structure.py) — previewed, and confirm-gated like share.
+
 Deliberately NOT in remote mode's allowed ops — destructive.
 """
 
@@ -17,11 +20,16 @@ import logging
 import re
 from typing import Any
 
+from mcp.server.elicitation import ElicitationResult
+
+from adapters.drive import GOOGLE_SHEET_MIME, get_file_metadata
 from adapters.gmail import delete_draft
 from adapters.http_client import get_sync_client
 from models import DoResult, MiseError
 from retry import with_retry
+from tools.elicit import ConfirmAnswer, GateQuestion
 from tools.gmail_ops import _batch_result
+from tools.sheet_delete import sheet_delete
 from validation import validate_drive_id
 
 logger = logging.getLogger(__name__)
@@ -69,19 +77,27 @@ _CUE_BY_KIND = {
 
 def do_trash(
     file_id: str | list[str] | None = None,
+    range_: str | None = None,
+    confirm: bool = False,
+    answer: ElicitationResult[ConfirmAnswer] | None = None,
+    question: GateQuestion | None = None,
     **_kwargs: Any,
 ) -> DoResult | dict[str, Any]:
     """
-    Trash Drive file(s) or discard Gmail draft(s).
+    Trash Drive file(s) or discard Gmail draft(s) — or, with range=, delete
+    whole rows/columns of one Google Sheet behind the confirm gate.
 
     Routes by ID shape: draft IDs (r + digits) are discarded permanently
     via drafts.delete; Drive IDs go to the recoverable Drive trash.
     When file_id is a list, processes each sequentially and returns a
-    batch summary with per-item results.
+    batch summary with per-item results. confirm= gates only range= deletes
+    (a Drive trash is recoverable; dispatch's HANDLER_TOLERANCES says so).
     """
     if not file_id:
         return {"error": True, "kind": "invalid_input",
                 "message": "trash requires 'file_id' (Drive file ID or Gmail draft ID)"}
+    if range_ is not None:
+        return _trash_sheet_range(file_id, range_, confirm, answer, question)
 
     # Batch path
     if isinstance(file_id, list):
@@ -105,6 +121,30 @@ def do_trash(
         operation="trash",
         cues={"action": _CUE_BY_KIND[kind]},
     )
+
+
+def _trash_sheet_range(
+    file_id: str | list[str], range_: str, confirm: bool,
+    answer: ElicitationResult[ConfirmAnswer] | None, question: GateQuestion | None,
+) -> DoResult | dict[str, Any]:
+    """range= deletes rows/columns of ONE Sheet; never trashes the file."""
+    if not isinstance(file_id, str) or _is_draft_id(file_id):
+        return {"error": True, "kind": "invalid_input",
+                "message": "range= on trash deletes rows or columns of ONE Google Sheet: "
+                           "pass a single spreadsheet id. Nothing was trashed."}
+    try:
+        validate_drive_id(file_id, "file_id")
+        mime = get_file_metadata(file_id).get("mimeType")
+    except ValueError as e:
+        return {"error": True, "kind": "invalid_input", "message": str(e)}
+    except MiseError as e:
+        return {"error": True, "kind": e.kind.value, "message": e.message}
+    if mime != GOOGLE_SHEET_MIME:
+        return {"error": True, "kind": "invalid_input",
+                "message": f"range= on trash deletes rows or columns of a Google Sheet; "
+                           f"this file is {mime}. Nothing was trashed — drop range= to "
+                           "trash the whole file."}
+    return sheet_delete(file_id, range_, confirm, answer, question)
 
 
 def _validate_trash_id(file_id: str, param_name: str) -> None:

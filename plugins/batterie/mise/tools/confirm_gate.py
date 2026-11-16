@@ -23,6 +23,8 @@ Gated ops, and what makes a call gated (the same test the op's body applies):
 - share: always, until confirmed.
 - create_event: attendees present — other people's diaries and inboxes.
 - update_event: a structural change (time, recurrence, attendees, Meet).
+- trash: only with range= — deleting rows or columns of a Sheet (other
+  people's rows, no Drive trash). A whole-file trash asks nothing.
 
 A pre-supplied confirm=True skips the dialog (Sameer's policy A, 2026-09-06):
 headless and interactive Claude Code declare the identical capability, so a
@@ -51,9 +53,10 @@ from tools.elicit import (
     fits_dialog,
 )
 from tools.share import share_confirm_message
+from tools.sheet_delete import sheet_delete_confirm_message
 from tools.update_event import update_event_confirm_message
 
-CONFIRM_GATED_OPS = frozenset({"share", "create_event", "update_event"})
+CONFIRM_GATED_OPS = frozenset({"share", "create_event", "update_event", "trash"})
 
 
 @dataclass(frozen=True)
@@ -74,6 +77,7 @@ def gate_question(
     properties: dict[str, str] | None = None, color: str | None = None,
     visibility: str | None = None, transparency: str | None = None,
     optional_attendees: list[str] | str | None = None,
+    range: str | None = None,  # noqa: A002 — bound by name from do()'s own param
 ) -> GateQuestion:
     """Resolver: the confirmation question for this call, or why there is none.
 
@@ -88,6 +92,9 @@ def gate_question(
     try:
         if operation == "share":
             message = share_confirm_message(file_id=file_id, to=to, role=role)
+        elif operation == "trash":
+            message = (sheet_delete_confirm_message(file_id, range, record=not ctx.input_responses)
+                       if range is not None else None)
         elif operation == "create_event":
             message = create_event_confirm_message(
                 title=title, time_min=time_min, time_max=time_max,

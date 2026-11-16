@@ -27,6 +27,7 @@ from tools.suggestions import (
 from models import DoResult, MiseError, ErrorKind
 from retry import with_retry
 from tools.common import NO_MATCH_WARNING, markdown_marker_hint
+from tools.sheet_structure import sheet_rows_route
 from tools.doc_control_chars import (
     apply_sanitise_cues,
     find_string_warning,
@@ -109,11 +110,16 @@ def do_prepend(
     content: str | None = None,
     metadata: dict[str, Any] | None = None,
     suggest: bool = False,
+    range_: str | None = None,
+    count: int | None = None,
 ) -> DoResult | dict[str, Any]:
-    """Insert text at the beginning of a document or plain file."""
+    """Insert text at the start of a doc or plain file; on a Sheet, rows (sheet_structure)."""
     if not file_id:
         return {"error": True, "kind": "invalid_input",
                 "message": "prepend requires 'file_id'"}
+    routed = sheet_rows_route(file_id, content, metadata, range_, count, suggest, "prepend")
+    if routed is not None:
+        return routed
     if not content:
         return {"error": True, "kind": "invalid_input",
                 "message": "prepend requires 'content'"}
@@ -144,8 +150,10 @@ def do_append(
     metadata: dict[str, Any] | None = None,
     suggest: bool = False,
     tab: str | None = None,
+    range_: str | None = None,
+    count: int | None = None,
 ) -> DoResult | dict[str, Any]:
-    """Insert text at the end of a document or plain file.
+    """Insert text at the end of a doc or plain file; on a Sheet, rows (sheet_structure).
 
     With tab= (Google Docs only): the content becomes a NEW tab of that
     title instead — the non-destructive parallel-version placement
@@ -154,6 +162,9 @@ def do_append(
     if not file_id:
         return {"error": True, "kind": "invalid_input",
                 "message": "append requires 'file_id'"}
+    routed = sheet_rows_route(file_id, content, metadata, range_, count, suggest, "append", tab)
+    if routed is not None:
+        return routed
     if not content:
         return {"error": True, "kind": "invalid_input",
                 "message": "append requires 'content'"}
@@ -223,15 +234,7 @@ def _append_as_tab(
         return {"error": True, "kind": "invalid_input",
                 "message": "tab= requires a non-empty tab title"}
     mime = metadata.get("mimeType") if metadata else None
-    if mime == GOOGLE_SHEET_MIME:
-        return {
-            "error": True, "kind": "invalid_input",
-            "message": "tab= creates a Google DOC tab; this file is a "
-                       "spreadsheet. Creating spreadsheet tabs isn't "
-                       "supported yet — overwrite with range= writes to "
-                       "existing sheet tabs only.",
-        }
-    if metadata and mime != GOOGLE_DOC_MIME:
+    if metadata and mime != GOOGLE_DOC_MIME:  # a Sheet's tab= routed off earlier (sheet_structure)
         return {
             "error": True, "kind": "invalid_input",
             "message": f"tab= applies only to Google Docs — this file is "

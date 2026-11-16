@@ -371,6 +371,7 @@ Data models have `warnings: list[str]` fields. Extractors populate them during p
 - **`do(replace_text)` on a Gmail draft id edits just the matched text in place** — exact-count guarded (`count=`), every byte outside the edited text bodies kept
 - **Doc tabs**
 - **Sheets editing**
+- **Sheets structure** — append/prepend `range=` insert rows/columns, `append tab=` adds a Sheet tab, `trash range=` deletes rows/columns (confirm-gated)
 - **Pre-edit restore point**
 - **Comments included automatically** — open comments deposited as `comments.md`
 - **Cues in every response** — `cues` block surfaces files, comment count, warnings, email context

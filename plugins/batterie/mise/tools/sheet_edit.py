@@ -161,7 +161,7 @@ def _overlay_requests(
     return requests
 
 
-def _sheet_result(
+def sheet_result(
     file_id: str, metadata: dict[str, Any], operation: str, cues: dict[str, Any],
 ) -> DoResult:
     return DoResult(
@@ -175,32 +175,34 @@ def _sheet_result(
     )
 
 
-def sheet_overwrite(
-    file_id: str,
-    content: str | None,
-    metadata: dict[str, Any],
-    range_: str | None = None,
-) -> DoResult | dict[str, Any]:
-    """Write CSV-parsed content to a tab or range (whole-tab when unranged)."""
+Decorations = dict[tuple[int, int], tuple[list[dict[str, Any]] | None, str | None]]
+
+
+def parse_csv_grid(
+    content: str | None, op: str = "overwrite",
+) -> tuple[list[list[str]], Decorations] | dict[str, Any]:
+    """CSV text → (plain grid, link/chip decorations), or the error dict.
+
+    Shared by overwrite and the row/column inserts (tools/sheet_structure.py),
+    so every Sheets write parses CSV and link syntax the same way.
+    """
     if not content:
         return {
             "error": True, "kind": "invalid_input",
-            "message": "overwrite on a Spreadsheet takes CSV text via 'content' "
+            "message": f"{op} on a Spreadsheet takes CSV text via 'content' "
                        "or 'file_path' (a deposit 'source' isn't CSV — read it "
                        "and pass CSV as content=).",
         }
-
     rows = [r for r in csv.reader(io.StringIO(content))]
     if not rows or not any(any(cell != "" for cell in r) for r in rows):
         return {
             "error": True, "kind": "invalid_input",
-            "message": "overwrite on a Spreadsheet: content parsed to zero CSV cells.",
+            "message": f"{op} on a Spreadsheet: content parsed to zero CSV cells.",
         }
-
     # Strip link decorations (mise-bazuvo): the plain grid rides values.update
     # so numbers/formulas keep USER_ENTERED parsing; links/chips overlay after.
     plain_rows: list[list[str]] = []
-    decorations: dict[tuple[int, int], tuple[list[dict[str, Any]] | None, str | None]] = {}
+    decorations: Decorations = {}
     for r, row in enumerate(rows):
         prow = []
         for c, cell in enumerate(row):
@@ -209,6 +211,43 @@ def sheet_overwrite(
             if runs or chip_uri:
                 decorations[(r, c)] = (runs, chip_uri)
         plain_rows.append(prow)
+    return plain_rows, decorations
+
+
+def write_grid(
+    file_id: str, target: dict[str, Any], cell_part: str | None,
+    plain_rows: list[list[str]], decorations: Decorations, cues: dict[str, Any],
+) -> None:
+    """Write a parsed grid at cell_part (A1 of the tab when None), then overlay
+    links/chips. Fills cues; raises MiseError. Clears nothing."""
+    tab_ref = _quote_tab(target.get("title", ""))
+    write_range = f"{tab_ref}!{cell_part}" if cell_part else f"{tab_ref}!A1"
+    updated = update_sheet_values(file_id, write_range, plain_rows)
+    cues.update({"rows_written": len(plain_rows), "cells_updated": updated})
+    if decorations:
+        row0, col0 = _a1_anchor(cell_part)
+        batch_update(file_id, _overlay_requests(
+            int(target.get("sheetId", 0)), row0, col0, decorations,
+        ))
+        links = sum(1 for runs, _ in decorations.values() if runs)
+        chips = len(decorations) - links
+        if links:
+            cues["links_written"] = links
+        if chips:
+            cues["chips_written"] = chips
+
+
+def sheet_overwrite(
+    file_id: str,
+    content: str | None,
+    metadata: dict[str, Any],
+    range_: str | None = None,
+) -> DoResult | dict[str, Any]:
+    """Write CSV-parsed content to a tab or range (whole-tab when unranged)."""
+    parsed = parse_csv_grid(content)
+    if isinstance(parsed, dict):
+        return parsed
+    plain_rows, decorations = parsed
 
     try:
         tabs = get_sheet_properties(file_id)
@@ -237,12 +276,7 @@ def sheet_overwrite(
             cues: dict[str, Any] = {"tab": target.get("title", "")}
         else:
             tab_name, cell_part = _split_range(range_)
-            target = next((t for t in tabs if t.get("title") == tab_name), None)
-            if target is None:  # Sheets' own range parsing is case-insensitive
-                target = next(
-                    (t for t in tabs if t.get("title", "").lower() == tab_name.lower()),
-                    None,
-                )
+            target = find_tab(tabs, tab_name)
             if target is None:
                 quoted = ", ".join(f"'{t}'" for t in titles)
                 return {
@@ -254,28 +288,22 @@ def sheet_overwrite(
             cues = ({"tab": title, "tab_replaced": True} if cell_part is None
                     else {"tab": title, "range": f"{title}!{cell_part}"})
 
-        tab_ref = _quote_tab(target.get("title", ""))
         if cell_part is None:
-            clear_sheet_values(file_id, tab_ref)  # whole-tab replace grain
-        write_range = f"{tab_ref}!{cell_part}" if cell_part else f"{tab_ref}!A1"
-        updated = update_sheet_values(file_id, write_range, plain_rows)
-        cues.update({"rows_written": len(rows), "cells_updated": updated})
-
-        if decorations:
-            row0, col0 = _a1_anchor(cell_part)
-            batch_update(file_id, _overlay_requests(
-                int(target.get("sheetId", 0)), row0, col0, decorations,
-            ))
-            links = sum(1 for runs, _ in decorations.values() if runs)
-            chips = len(decorations) - links
-            if links:
-                cues["links_written"] = links
-            if chips:
-                cues["chips_written"] = chips
+            clear_sheet_values(file_id, _quote_tab(target.get("title", "")))  # whole-tab replace grain
+        write_grid(file_id, target, cell_part, plain_rows, decorations, cues)
     except MiseError as e:
         return {"error": True, "kind": e.kind.value, "message": e.message}
 
-    return _sheet_result(file_id, metadata, "overwrite", cues)
+    return sheet_result(file_id, metadata, "overwrite", cues)
+
+
+def find_tab(tabs: list[dict[str, Any]], name: str) -> dict[str, Any] | None:
+    """The tab titled `name` — exact first, then case-insensitive, as Sheets'
+    own range parsing is."""
+    exact = next((t for t in tabs if t.get("title") == name), None)
+    if exact is not None:
+        return exact
+    return next((t for t in tabs if t.get("title", "").lower() == name.lower()), None)
 
 
 def sheet_replace_text(
@@ -297,4 +325,4 @@ def sheet_replace_text(
     }
     if count == 0:
         cues["warning"] = NO_MATCH_WARNING
-    return _sheet_result(file_id, metadata, "replace_text", cues)
+    return sheet_result(file_id, metadata, "replace_text", cues)

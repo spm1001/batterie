@@ -342,9 +342,11 @@ def update_sheet_values(
     return int(orjson.loads(response.content).get("updatedCells", 0))
 
 
-# Idempotent only while its one caller, tools/sheet_edit.py _overlay_requests,
-# sends updateCells alone (named fields replaced wholesale); an add/insert
-# request here would duplicate on retry and need idempotent=False
+# Idempotent only while its callers send requests that SET state (updateCells,
+# repeatCell, updateBorders, updateSheetProperties, setBasicFilter, clearBasicFilter,
+# autoResizeDimensions, updateDimensionProperties, updateTable): tools/sheet_edit.py's
+# overlay and tools/sheet_format.py. An add/insert/delete request duplicates on retry
+# and belongs in adapters/sheets_structure.py with idempotent=False.
 @with_retry(max_attempts=3, delay_ms=1000, idempotent=True)
 def batch_update(spreadsheet_id: str, requests: list[dict[str, Any]]) -> dict[str, Any]:
     """

@@ -501,6 +501,7 @@ fetch("spaces/AAAA…/threads/…", base_path="...")
 | `comment` | Open a NEW comment thread on a doc | `file_id`, `content` |
 | `comment_reply` | Reply to / resolve / reopen a doc comment | `file_id`, `comment_id`, `content` and/or `action` |
 | `trash` | Trash Drive file(s) / discard Gmail draft(s) — routed by ID shape. With `range=` on a Sheet: delete whole rows/columns (preview, then the client's dialog OR `confirm=True`) | `file_id` (str or list); Sheets: one id + `range=` |
+| `format` | Give a Sheet tab or block a finished look: `tidy` (header styled, frozen, filtered, columns sized), `table` (a native Sheets table) or `plain` (undo tidy). ITV colours on an @itv.com account, neutral otherwise | `file_id`, `action`; `range=` the tab or `'Tab!A1:H20'` |
 
 ### Choosing the Right Edit Operation
 
@@ -756,6 +757,27 @@ do(operation="trash", file_id="1abc...", range="Events!34:36", base_path="...")
 - **Name the tab.** A bare `range="33"` works only on a one-tab sheet. Otherwise the refusal lists the tabs. A cell range (`'A2:C3'`) refuses on `trash`, so clear cells with `overwrite` instead.
 
 Measured live 2026-11-15 on a scratch sheet (one run): a row appended after the last bold data row came out bold, the italic footer below it stayed italic, and a delete with `confirm=True` moved the rows below up by the right count. Formatting cells (colours, widths, freezing) is still outside mise.
+
+### Sheets: make it look finished (`format`)
+
+A Sheet that arrives as a bare CSV import reads as machine output to people who live in Sheets. So **sheets mise creates come out tidy by default**: header row bold, filled, wrapped and frozen, a filter on it, and columns sized to their content (capped at 320 px, so a column holding one long note stays a sensible width). `page_setup='plain'` on `create` skips that, and `cues.look` says what was applied.
+
+For an existing tab, apply the same look, or another, by name:
+
+```python
+do(operation="format", file_id="1abc...", range="Events", action="tidy", base_path="...")          # the whole tab's data
+do(operation="format", file_id="1abc...", range="Events!A1:H20", action="tidy", base_path="...")   # a block; its first row is the header
+do(operation="format", file_id="1abc...", range="Events", action="table", base_path="...")         # a native Sheets table: banded, typed, filterable
+do(operation="format", file_id="1abc...", range="Events", action="plain", base_path="...")         # undo tidy: header style, freeze and filter come off
+```
+
+- **Colours follow the signed-in account.** An @itv.com account gets ITV colours (dark green header, white text, a Spark Yellow rule under it); any other account gets a neutral grey header. `cues.look` says which and why.
+- **A footer row belongs outside the block.** The filter covers the range you give, and a human sorting the sheet moves every row inside it. On a sheet with a total or "end of list" line, pass a bounded range that stops above it (`'Events!A1:H33'`).
+- **What's already there stays.** An existing freeze or filter is kept and named in `cues.left_alone`. `tidy` refuses on a native table, which styles itself. `table` refuses over an existing table or filter (`plain` first). `plain` never removes a native table: that's done from the Table menu in Sheets.
+- **Values never change**, so there's no confirm step. Every result says what changed (`cues.applied`) and how to undo it (`cues.undo`).
+- **A native table restyles the whole block**: Google sets its own font and row height, and bands the rows. It's the most "made in Sheets" look. Use `tidy` where the existing typography should stay.
+
+Making a Sheet idiomatic is more than formatting: named tabs in reading order (`append tab=`), a front tab saying what each tab holds, and the header frozen. Measured 2026-11-16 on a scratch sheet, rendered to PDF: the ITV and neutral tidy looks, and an ITV-coloured native table (sent bare, then coloured; a single full `addTable` answered a bare 500 on 14 Oct 2026). Number formats, borders, conditional formats and charts stay outside mise.
 
 ### Surgical Edits
 

@@ -48,6 +48,7 @@ from tools import (
     do_update_event,
     do_delete_event,
     do_freebusy,
+    do_format,
 )
 
 # Required params per operation — validated before dispatch.
@@ -78,6 +79,7 @@ REQUIRED_PARAMS: dict[str, set[str]] = {
     "delete_event": {"file_id"},
     "freebusy": {"attendees", "time_min", "time_max"},
     "suggest": {"file_id", "action", "find"},  # fold a tracked change in or out
+    "format": {"file_id", "action"},  # range= optional on a one-tab sheet
 }
 
 # Content operations that need mime-type routing (metadata pre-fetched at dispatch)
@@ -162,6 +164,7 @@ OP_PARAMS: dict[str, frozenset[str]] = {
     "delete_event": frozenset({"file_id", "confirm"}),
     "freebusy": frozenset({"attendees", "time_min", "time_max", "duration"}),
     "suggest": frozenset({"file_id", "action", "find"}),
+    "format": frozenset({"file_id", "range", "action"}),
 }
 
 # param -> the ops that consume it. Inverted rather than written out twice.
@@ -221,7 +224,7 @@ PARAM_HINTS: dict[str, str] = {
                  "new body; the surgical edits take the text itself as content=.",
     "source": "source= replays a previously fetched .mise deposit as the whole "
               "new body; the surgical edits take the text itself as content=.",
-    "range": "range= is Sheets A1 notation. overwrite: 'Tab' or 'Tab!F9:F15' scopes "
+    "range": "range= is Sheets A1 notation. format: 'Tab' or 'Tab!A1:H20'. overwrite: 'Tab' or 'Tab!F9:F15' scopes "
              "what a replace writes. append/prepend: 'Tab!33' inserts rows after/"
              "before row 33. trash: 'Tab!34:36' deletes rows (previews first; confirm=True on the user's yes).",
     "count": "count= is how many times find must match in EACH part of a Gmail draft "
@@ -302,6 +305,9 @@ DISPATCH: dict[str, Any] = {
     ),
     "suggest": lambda p: do_suggest(
         file_id=p["file_id"], action=p.get("action"), find=p.get("find"),
+    ),
+    "format": lambda p: do_format(
+        file_id=p["file_id"], range_=p.get("range"), action=p.get("action"),
     ),
     "setup_oauth": lambda p: do_setup_oauth(force=p.get("force", False)),
     "trash": lambda p: do_trash(

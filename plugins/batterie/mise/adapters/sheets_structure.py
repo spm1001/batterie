@@ -78,3 +78,55 @@ def delete_dimension(
                       "startIndex": start, "endIndex": end},
         }}]},
     )
+
+
+@with_retry(max_attempts=3, delay_ms=1000, idempotent=True)
+def get_sheet_layout(spreadsheet_id: str) -> tuple[str, list[dict[str, Any]]]:
+    """The spreadsheet's title and each GRID tab's properties, freeze, basic
+    filter and native tables — what do(format) must leave alone or refuse on."""
+    client = get_sync_client()
+    response = client.get_json(
+        f"{_SHEETS_API}/{spreadsheet_id}",
+        params={"fields": "properties.title,sheets(properties(sheetId,title,index,sheetType,"
+                          "gridProperties(rowCount,columnCount,frozenRowCount)),"
+                          "basicFilter(range),tables(tableId,name,range))"},
+    )
+    tabs = []
+    for sheet in response.get("sheets", []):
+        props = dict(sheet.get("properties", {}))
+        if props.get("sheetType", "GRID") != "GRID":
+            continue
+        props["basicFilter"] = sheet.get("basicFilter")
+        props["tables"] = sheet.get("tables", [])
+        tabs.append(props)
+    return str(response.get("properties", {}).get("title", "")), tabs
+
+
+@with_retry(max_attempts=3, delay_ms=1000, idempotent=True)
+def get_column_widths(spreadsheet_id: str, tab_ref: str) -> list[int]:
+    """Pixel width of every column on a tab (tab_ref is the quoted A1 tab name)."""
+    client = get_sync_client()
+    response = client.get_json(
+        f"{_SHEETS_API}/{spreadsheet_id}",
+        params={"ranges": f"{tab_ref}!1:1", "fields": "sheets(data(columnMetadata(pixelSize)))"},
+    )
+    sheets = response.get("sheets") or [{}]
+    data = (sheets[0].get("data") or [{}])[0]
+    return [int(c.get("pixelSize", 100)) for c in data.get("columnMetadata", [])]
+
+
+@with_retry(max_attempts=3, delay_ms=1000, idempotent=False)
+def add_table(spreadsheet_id: str, sheet_id: int, name: str,
+              start_row: int, end_row: int, start_col: int, end_col: int) -> str:
+    """Convert a block to a native table, BARE: name and range only. A single
+    addTable carrying rowsProperties and columnProperties answered a bare 500
+    (measured 14 Oct 2026); colours go on with updateTable afterwards. Not
+    idempotent: a retried add after a landed one would make a second table."""
+    client = get_sync_client()
+    response = client.post_json(
+        f"{_SHEETS_API}/{spreadsheet_id}:batchUpdate",
+        json_body={"requests": [{"addTable": {"table": {"name": name, "range": {
+            "sheetId": sheet_id, "startRowIndex": start_row, "endRowIndex": end_row,
+            "startColumnIndex": start_col, "endColumnIndex": end_col}}}}]},
+    )
+    return str(response["replies"][0]["addTable"]["table"]["tableId"])

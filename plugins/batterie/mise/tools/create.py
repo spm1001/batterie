@@ -22,6 +22,7 @@ from typing import Any
 from adapters.http_client import get_sync_client
 from adapters.drive import GOOGLE_DOC_MIME, GOOGLE_SHEET_MIME, GOOGLE_FOLDER_MIME
 from tools.sheet_create import finish_multi_tab_sheet
+from tools.sheet_format import apply_create_look
 from extractors.sheets import csv_text_to_values, strip_sheet_header
 from markdown_import import convert_fenced_blocks
 from models import DoResult, MiseError, ErrorKind
@@ -278,10 +279,8 @@ def do_create(
                            source=source, base_path=base_path, page_setup=page_setup)
 
     # Validate page_setup
-    if page_setup and page_setup != "pageless":
-        return _create_error("invalid_input", f"Unsupported page_setup: {page_setup}. Supported: 'pageless'")
-    if page_setup and doc_type != "doc":
-        return _create_error("invalid_input", "page_setup is only valid for doc_type='doc'")
+    if page_setup and (page_setup, doc_type) not in (("pageless", "doc"), ("plain", "sheet")):
+        return _create_error("invalid_input", f"Unsupported page_setup={page_setup!r} for doc_type={doc_type!r}: 'pageless' is for docs; 'plain' is for sheets (skips the tidy look).")
     # Resolve source path
     try:
         resolved_source = _resolve_source(source, base_path)
@@ -455,6 +454,8 @@ def _do_create_internal(
             except Exception as e:
                 result.cues["page_setup_error"] = str(e)
 
+        if doc_type == "sheet" and page_setup != "plain" and isinstance(result, DoResult):
+            apply_create_look(result)  # tidy by default (tools/sheet_format.py); fail-open with a cue
         # Post-creation: embed local images if any were found
         if image_refs and isinstance(result, DoResult):
             embed_result = _embed_images_in_doc(result.file_id, image_refs, image_base_path)

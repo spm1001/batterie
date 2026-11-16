@@ -198,9 +198,20 @@ def _table(file_id: str, tab: dict[str, Any], b: Block, look: dict[str, str],
     clash = next((t for t in tab.get("tables", []) if _overlaps(b, t.get("range"))), None)
     if clash is not None:
         return _err(f"Tab '{title}' already has a native table ('{clash.get('name', '')}') over that range.")
-    if tab.get("basicFilter") and _overlaps(b, tab["basicFilter"].get("range")):
-        return _err(f"Tab '{title}' has a filter over that range; a table brings its own. Remove it "
-                    f"first: do(format, range=\"{title}\", action='plain').")
+    flt = tab.get("basicFilter")
+    if flt and _same_block(b, flt.get("range")):
+        # tidy's own footprint (create applies tidy): the table replaces it rather than
+        # refusing, or "make a sheet, then table it" takes a pointless plain in between
+        batch_update(file_id, [{"clearBasicFilter": {"sheetId": sid}},
+                               {"repeatCell": {"range": _grid(sid, b, header_only=True), "cell": {},
+                                               "fields": _HEADER_FIELDS}},
+                               {"updateBorders": {"range": _grid(sid, b, header_only=True),
+                                                  "bottom": {"style": "NONE"}}}])
+        applied.append("tidy's filter and header style replaced by the table")
+    elif flt and _overlaps(b, flt.get("range")):
+        return _err(f"Tab '{title}' has a filter over a different range from this one; a table brings "
+                    f"its own. Remove it first (do(format, range=\"{title}\", action='plain') removes "
+                    "a filter on exactly that block), or give the filter's own range.")
     names = set(taken) | {t.get("name", "") for t in tab.get("tables", [])}
     base = re.sub(r"\W+", "_", title).strip("_") or "Table"
     base = f"T_{base}" if base[0].isdigit() else base

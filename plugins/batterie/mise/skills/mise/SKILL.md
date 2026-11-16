@@ -773,7 +773,7 @@ do(operation="format", file_id="1abc...", range="Events", action="plain", base_p
 
 - **Colours follow the signed-in account.** An @itv.com account gets ITV colours (dark green header, white text, a Spark Yellow rule under it); any other account gets a neutral grey header. `cues.look` says which and why.
 - **A footer row belongs outside the block.** The filter covers the range you give, and a human sorting the sheet moves every row inside it. On a sheet with a total or "end of list" line, pass a bounded range that stops above it (`'Events!A1:H33'`).
-- **What's already there stays.** An existing freeze or filter is kept and named in `cues.left_alone`. `tidy` refuses on a native table, which styles itself. `table` refuses over an existing table or filter (`plain` first). `plain` never removes a native table: that's done from the Table menu in Sheets.
+- **What's already there stays.** An existing freeze or filter is kept and named in `cues.left_alone`. `tidy` refuses on a native table, which styles itself. `table` replaces `tidy`'s own filter and header style (so `table` straight after `create` works), and refuses over an existing table or a filter on a different range. `plain` never removes a native table: that's done from the Table menu in Sheets.
 - **Values never change**, so there's no confirm step. Every result says what changed (`cues.applied`) and how to undo it (`cues.undo`).
 - **A native table restyles the whole block**: Google sets its own font and row height, and bands the rows. It's the most "made in Sheets" look. Use `tidy` where the existing typography should stay.
 

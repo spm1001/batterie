@@ -9,6 +9,9 @@ export type KgIndexSection = { id: string; text: string; bytes: number; isRefuse
 /** The top-index sections, read once per thread so the system prompt stays byte-identical. */
 export type KgIndexTop = { isTaken: boolean; sections: KgIndexSection[] }
 
+/** The message route's top-index row: its id once appended, null before (or once forgotten). */
+export type KgIndexTopRow = { uuid: string | null }
+
 /** One topic index appended to a loop: which loop, which topic, what happened. */
 export type KgIndexEntry = {
   loop: string
@@ -23,6 +26,7 @@ declare module 'claude-code' {
     batterie: {
       kgIndexTop: Shaped<KgIndexTop>
       kgIndexEntered: Shaped<KgIndexEntry[]>
+      kgIndexTopRow: Shaped<KgIndexTopRow>
     }
   }
 }

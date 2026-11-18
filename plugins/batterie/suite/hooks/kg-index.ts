@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
-import type { EngineInterface, Register } from 'claude-code'
+import type { ApiMessage, EngineInterface, Register } from 'claude-code'
 
-import type { KgIndexEntry, KgIndexSection, KgIndexTop } from '../types'
+import type { KgIndexEntry, KgIndexSection, KgIndexTop, KgIndexTopRow } from '../types'
 
 // kg-index: a knowledge graph's top index rides the system prompt from the
 // thread's first request; a topic's index arrives as a new user row the first
@@ -60,6 +60,10 @@ const top = atom({ plugin: 'batterie', key: 'kgIndexTop' } as const, { isTaken: 
 })
 const entered = atom({ plugin: 'batterie', key: 'kgIndexEntered' } as const, [] as KgIndexEntry[], {
   shape: 'entered-1',
+})
+// The message route's own row: its id while this process knows it.
+const topRow = atom({ plugin: 'batterie', key: 'kgIndexTopRow' } as const, { uuid: null } as KgIndexTopRow, {
+  shape: 'top-row-1',
 })
 
 const bytesOf = (text: string) => new TextEncoder().encode(text).length
@@ -165,18 +169,59 @@ async function topOf($: EngineInterface, roots: string[]): Promise<KgIndexTop> {
 const reminder = (text: string) =>
   `<system-reminder>\n${text.replaceAll('</system-reminder>', '<\\/system-reminder>')}\n</system-reminder>`
 
-// Read in the Messages API form, what the model is sent: the engine stores a
-// plugin's row as a hidden user row, which the plain form of
-// $.session.messages() leaves out (seen live on 2.1.319, 8 Nov 2026: reading
-// the plain form, the row went again with every prompt).
-const TOP_ROW_MARK = `<system-reminder>\n# ${TOP_TITLE}`
+// Is this thread's top-index row still in the conversation? Two witnesses.
+//
+// The row's id, kept when we append it: `$.session.messages({ after: id })`
+// reads on from it while it is in the conversation and is refused once a
+// compaction, /clear or rewind has taken it. That holds however the engine
+// words the row, but the id is forgotten across a restart or a resume.
+//
+// The row's text, in the Messages API form, what the model is sent (the plain
+// form leaves a plugin's row out: seen live on 2.1.319, 8 Nov 2026). The engine
+// rewrites the row on the way: on 2.1.327 a line naming the plugin sits under
+// the reminder tag ("<system-reminder>\nNote from the batterie plugin, not from
+// the user:\n# Knowledge graph index…"), where 2.1.319 sent it as written. A
+// mark that pinned the tag and heading together missed every row 2.1.327 sent,
+// so the index went with every prompt (batterie-de-savoir-gibija, 18 Nov 2026).
+// The pattern allows one line between the tag and the heading, no more, so the
+// person typing the heading never counts.
+//
+// When the id says present and the text says absent, the engine has reworded
+// the row again: trust the id, and say so in the log so the next change is
+// caught the day it ships instead of by someone counting copies.
+const TOP_ROW_PATTERN = new RegExp(`<system-reminder>\\n(?:[^\\n]*\\n)?# ${TOP_TITLE}\\b`)
+
+/** Every text the model reads in a user message: its text blocks, and text folded into a tool result. */
+function userTexts(sent: ApiMessage[]): string[] {
+  const texts: string[] = []
+  for (const message of sent) {
+    if (message.role !== 'user') continue
+    for (const block of message.content) {
+      if (block.type === 'text' && typeof block.text === 'string') texts.push(block.text)
+      if (block.type !== 'tool_result') continue
+      if (typeof block.content === 'string') texts.push(block.content)
+      if (!Array.isArray(block.content)) continue
+      for (const inner of block.content as unknown[]) {
+        if (typeof inner === 'object' && inner !== null && 'text' in inner && typeof inner.text === 'string') texts.push(inner.text)
+      }
+    }
+  }
+  return texts
+}
+
 async function holdsTopRow($: EngineInterface): Promise<boolean> {
   const sent = await $.session.messages({ as: 'api' })
-  return sent.some(
-    message =>
-      message.role === 'user' &&
-      message.content.some(block => block.type === 'text' && typeof block.text === 'string' && block.text.includes(TOP_ROW_MARK)),
-  )
+  const isInText = userTexts(sent).some(text => TOP_ROW_PATTERN.test(text))
+  const { uuid } = await read($, topRow)
+  if (uuid === null) return isInText
+  const after = await $.session.messages({ after: uuid })
+  const isAnchored = Array.isArray(after)
+  if (isAnchored && !isInText) {
+    $.ui.log(
+      `kg-index no longer recognises its top-index row ${uuid} in the conversation the model is sent, though the row is still there: Claude Code has changed how it words a plugin's row. Keeping to one copy by the row's id; a resumed thread may get a second copy until TOP_ROW_PATTERN in hooks/kg-index.ts is updated.`,
+    )
+  }
+  return isAnchored || isInText
 }
 
 export const register: Register = (on, options) => {
@@ -219,9 +264,14 @@ export const register: Register = (on, options) => {
       }
       const { sections } = await topOf($, await expandRoots($, written))
       if (sections.length === 0) return next(e)
-      await $.session.append({
+      const appended = await $.session.append({
         message: { type: 'user', content: [{ type: 'text', text: reminder(sections.map(s => s.text).join('\n\n')) }] },
       })
+      if (appended.deny !== undefined) {
+        $.ui.log(`kg-index's top-index row was refused (${appended.deny}); the prompt goes on without it`)
+        return next(e)
+      }
+      await update($, topRow, () => ({ uuid: appended.uuid }))
       return next(e)
     }).catch(($, e, next) => {
       $.ui.log(`kg-index could not add the top index before this prompt (${next.error.kind}: ${next.error.message ?? 'no message'}); the prompt goes on without it`)
@@ -330,6 +380,7 @@ export const register: Register = (on, options) => {
     if (e.reason === 'clear' && (await read($, top)).isTaken) {
       await update($, top, () => ({ isTaken: false, sections: [] }))
       await update($, entered, () => [])
+      await update($, topRow, () => ({ uuid: null }))
     }
     return next(e)
   })

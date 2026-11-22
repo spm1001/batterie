@@ -1,7 +1,7 @@
 # Changelog
 
 This plugin ships as part of the **Batterie de Savoir** suite and carries the
-single suite version — currently **2.30.1**.
+single suite version — currently **2.30.2**.
 
 What each plugin does and needs is in the marketplace README:
 

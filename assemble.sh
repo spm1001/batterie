@@ -397,6 +397,10 @@ print('yes' if d.get('mcpServers') else 'no')
     # Sync the .claude-plugin directory (marketplace.json excluded: a source
     # repo's own marketplace manifest is not plugin content)
     # --checksum: defeat the size+mtime skip on same-size bumps (see MCP branch)
+    # The previous run's vendor-include list (read before the rsync below replaces it),
+    # so a path dropped from the list is removed from the package rather than lingering.
+    old_includes=""
+    [ -f "$dest/.claude-plugin/vendor-include" ] && old_includes=$(cat "$dest/.claude-plugin/vendor-include")
     rsync -a --checksum --delete --exclude marketplace.json "$src/.claude-plugin/" "$dest/.claude-plugin/"
 
     # Copy plugin-level files that skills/agents/hooks might reference.
@@ -427,6 +431,34 @@ print('yes' if d.get('mcpServers') else 'no')
         fi
       else
         rm -rf "$dest/$item" 2>/dev/null || true
+      fi
+    done
+
+    # Opt-in extra paths: a component may list top-level files or dirs in
+    # .claude-plugin/vendor-include, one per line (# comments allowed). dragram
+    # needs it: its workbench (drag.js, serve.py, shot.py…) lives at the repo
+    # root, where its diagrams load drag.js by relative path, and the copy-list
+    # above would leave the tool out of its own plugin (dragram-sicene, 22 Nov 2026).
+    # Components without the file are untouched. A listed path that's missing,
+    # absolute, or climbing out with .. is a structural fault.
+    vendor_include_paths() { sed -e 's/#.*//' -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' | grep -v '^$' || true; }
+    new_includes=""
+    [ -f "$src/.claude-plugin/vendor-include" ] && new_includes=$(vendor_include_paths < "$src/.claude-plugin/vendor-include")
+    for inc in $(echo "$old_includes" | vendor_include_paths); do
+      echo "$new_includes" | grep -qxF "$inc" || rm -rf "${dest:?}/$inc"
+    done
+    for inc in $new_includes; do
+      case "$inc" in
+        /*|*..*|.claude-plugin*) echo "FAIL: $plugin vendor-include: '$inc' must be a relative path inside the repo, outside .claude-plugin" >&2; exit 1;;
+      esac
+      if [ ! -e "$src/$inc" ]; then
+        echo "FAIL: $plugin vendor-include names '$inc', which isn't in $src — the component promised it" >&2; exit 1
+      fi
+      if [ -d "$src/$inc" ]; then
+        rsync -a --checksum --delete --delete-excluded --exclude __pycache__ --exclude '*.pyc' \
+          --exclude token.json --exclude .env --exclude node_modules "$src/$inc/" "$dest/$inc/"
+      else
+        mkdir -p "$dest/$(dirname "$inc")"; cp "$src/$inc" "$dest/$inc"
       fi
     done
   fi

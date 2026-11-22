@@ -1,14 +1,14 @@
 # Synthesis Patterns
 
-How to merge three reviewer outputs into actionable guidance.
+How to merge the three lens reviews into actionable guidance.
 
 ---
 
 ## The Synthesis Job
 
-You have three outputs. Your job:
-1. **Identify convergence** — Where multiple reviewers agree, confidence is high
-2. **Surface divergence** — Where reviewers disagree, there's a trade-off worth discussing
+You have three lens reviews. Your job:
+1. **Identify convergence** — Where multiple lenses agree, confidence is high
+2. **Surface divergence** — Where lenses disagree, there's a trade-off worth discussing
 3. **Extract meta-signal** — "Could not assess" patterns reveal documentation debt
 4. **Prioritize for action** — What blocks shipping vs what to track
 
@@ -16,7 +16,7 @@ You have three outputs. Your job:
 
 ## Convergence: High-Priority Findings
 
-When multiple reviewers flag the same issue, it's almost certainly real.
+When multiple lenses flag the same issue, it's almost certainly real.
 
 ### Building the Table
 
@@ -29,22 +29,22 @@ When multiple reviewers flag the same issue, it's almost certainly real.
 **Reading the pattern:**
 - **Three checks** — Highest confidence, fix immediately
 - **Two checks** — High confidence, likely real
-- **One check** — May still be valid; use reviewer's severity as guide
+- **One check** — May still be valid; use lens's severity as guide
 
 ### Interpreting Silence
 
 A missing check doesn't mean disagreement. It could mean:
-- Not in that reviewer's lens (Metis doesn't hunt bugs)
+- Not in that lens's lens (Metis doesn't hunt bugs)
 - Didn't encounter it (different exploration path)
 - Assessed and found acceptable
 
-**Only flag as conflict when reviewers explicitly disagree**, not when one is silent.
+**Only flag as conflict when lenses explicitly disagree**, not when one is silent.
 
 ---
 
 ## Divergence: Conflicts Reveal Trade-offs
 
-When reviewers disagree, you've found a genuine design tension.
+When lenses disagree, you've found a genuine design tension.
 
 ### Building the Table
 
@@ -78,7 +78,7 @@ Both are true. The resolution might be: split the function (satisfies both).
 
 ## Meta-Signal: Documentation Debt
 
-When multiple reviewers say "could not assess," you've found a documentation gap.
+When multiple lenses say "could not assess," you've found a documentation gap.
 
 ### Common Patterns
 
@@ -91,13 +91,13 @@ When multiple reviewers say "could not assess," you've found a documentation gap
 
 ### The Forcing Function
 
-A reviewer asking "what's the roadmap?" isn't failing — they're revealing that the roadmap isn't accessible. This is valuable signal.
+A lens asking "what's the roadmap?" isn't failing — they're revealing that the roadmap isn't accessible. This is valuable signal.
 
 **Repeated gaps become their own section:**
 
 ```markdown
 ### "Could Not Assess" → Documentation Debt
-Repeated across reviewers:
+Repeated across lenses:
 - Token refresh flow — Document in auth.md
 - Test coverage baseline — Run pytest --cov, capture in CI
 - mypy exclusion rationale — Add comment explaining why
@@ -144,7 +144,7 @@ Not everything needs to block shipping. Categorize:
 
 ## Questions to Surface
 
-Some reviewer questions deserve answers before shipping. Others are nice-to-know.
+Some questions the lenses raise deserve answers before shipping. Others are nice-to-know.
 
 ### Must Answer
 
@@ -177,7 +177,7 @@ Good hygiene, but absence of answer doesn't block shipping.
 ```markdown
 ## Review Triad Synthesis
 
-### High-Priority Findings (Multiple Reviewers)
+### High-Priority Findings (Multiple Lenses)
 | Finding | Mn | M | P | Action |
 |---------|----|---|---|--------|
 | [issue] | ✓/— | ✓/— | ✓/— | [fix] |
@@ -188,7 +188,7 @@ Good hygiene, but absence of answer doesn't block shipping.
 | [tension] | [position] | [position] | [decision/defer/escalate] |
 
 ### "Could Not Assess" → Documentation Debt
-Repeated across reviewers:
+Repeated across lenses:
 - [gap] — [action needed]
 
 ### Critical Path Before Shipping
@@ -208,7 +208,7 @@ Repeated across reviewers:
 ## Anti-Patterns
 
 **Don't:**
-- List every finding from every reviewer verbatim (that's what the raw outputs are for)
+- List every finding from every lens verbatim (that's what the raw outputs are for)
 - Treat all findings as equal priority
 - Resolve all conflicts yourself without surfacing them
 - Ignore "could not assess" — it's signal, not noise

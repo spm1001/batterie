@@ -1,6 +1,6 @@
 # Reviewer Briefs
 
-Detailed instructions for each Titan. These are injected into subagent context when dispatching.
+Detailed instructions for each Titan. All three go into the one reviewer's prompt, with "Holding three lenses" at the end.
 
 ---
 
@@ -24,7 +24,7 @@ A defect in the change's *new* behaviour that a real user will hit is worth repo
 
 ### Your anti-focus
 
-Style, naming, debt and future extensibility belong to the other reviewers. Hypothetical risks with no reachable path are not findings.
+Style, naming, debt and future extensibility belong to the other lenses. Hypothetical risks with no reachable path are not findings.
 
 ### Burden of proof
 
@@ -195,10 +195,10 @@ Use the standard output structure. Prioritize by:
 
 ---
 
-## Awareness of Other Reviewers
+## Holding three lenses
 
-Each reviewer should know the others exist:
+The reviewer holds all three briefs itself:
 
-> "You are one of three reviewers. Mnemosyne reviews memory (what this change broke that used to work). Metis reviews craft (clarity, idiom, structure, fragility, debt). Prometheus reviews foresight (vision, extensibility, future-Claude). Focus on your lens — small overlaps with others are fine, but don't duplicate their work."
+> "You hold three lenses. Work through the change once per lens, Mnemosyne first: memory (what this change broke that used to work), then Metis (craft: clarity, idiom, structure, fragility, debt), then Prometheus (foresight: vision, extensibility, future-Claude). Write each lens's review in its own template before you synthesise. Keep each lens's anti-focus while you are in it, so the passes stay distinct. A finding that belongs to two lenses is fine: raise it once and name both."
 
-This reduces redundancy while allowing natural overlap on genuinely cross-cutting issues.
+Running the passes in order, each in its own template, keeps the lenses from blurring into one generic review. In the Nov 2026 test this form matched three separate agents on regressions at a third of the cost.

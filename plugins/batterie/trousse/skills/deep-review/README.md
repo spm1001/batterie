@@ -1,6 +1,6 @@
 # Titans — Code Review Triad
 
-Three-lens code review using parallel subagents, named for the Greek Titans:
+Three-lens code review by one fresh reviewer, the lenses named for the Greek Titans (until Nov 2026 each lens was its own subagent; one reviewer holding all three did as well at a third of the cost):
 
 - **Mnemosyne** (memory) — What did this change break that used to work?
 - **Metis** (craft) — Is this well-made, and is it fragile or accruing debt?

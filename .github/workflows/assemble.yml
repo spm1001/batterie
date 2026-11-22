@@ -62,6 +62,7 @@ jobs:
           DEPLOY_KEY_JETON: ${{ secrets.JETON_DEPLOY_KEY }}   # bds-sipaba
           DEPLOY_KEY_COURSIER: ${{ secrets.COURSIER_DEPLOY_KEY }}   # family-only component (Apple Mail)
           DEPLOY_KEY_MISE_EN_SPACE: ${{ secrets.MISE_EN_SPACE_DEPLOY_KEY }}   # mise-ribife: read-only key, ready before the private flip
+          DEPLOY_KEY_DRAGRAM: ${{ secrets.DRAGRAM_DEPLOY_KEY }}   # dragram-sicene: read-only deploy key on spm1001/dragram (private)
         run: |
           repos=$(grep -E '^[a-z-]+:[a-z-]+$' batterie/assemble.sh | cut -d: -f2 | sort -u)
           test -n "$repos"

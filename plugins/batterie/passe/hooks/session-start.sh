@@ -14,7 +14,10 @@ if [ -z "${CLAUDE_SUBAGENT:-}" ]; then
     if command -v passe &>/dev/null; then
         # passe status writes its key=value lines to stderr (6dcfccd), so merge it:
         # discarding stderr here made every probe read as unreachable (Apr-Nov 2026).
-        CONN_STATUS=$(timeout 2 passe status 2>&1 || true)
+        # macOS has no GNU timeout unless coreutils is installed (as gtimeout).
+        TO=""; command -v timeout >/dev/null && TO="timeout 2"
+        [ -z "$TO" ] && command -v gtimeout >/dev/null && TO="gtimeout 2"
+        CONN_STATUS=$($TO passe status 2>&1 || true)
     fi
     if echo "$CONN_STATUS" | grep -q "reachable=True"; then STATE="reachable"; else STATE="unreachable"; fi
 fi

@@ -133,6 +133,7 @@ passe run tests/checkout-flow.passe
 
 **Interaction:**
 - `click <selector-or-text-or-ref>` — smart dispatch: CSS selector (contains `. # [ : > ~ +`) → `querySelector`; an `e<N>` ref from `ax-tree --flat-refs` → cached-element click; plain text → find by text content and click. `click "Reject"` works for cookie banners, `click ".btn"` for selectors, `click e1` after a flat-refs snapshot. Plain `click` is an untrusted JS `el.click()`; `click --trusted` dispatches real `Input.dispatchMouseEvent` at the centre after `Emulation.setFocusEmulationEnabled` (a background tab is not hit-tested without it: events accepted, nothing happens; measured Chrome 158, 22 Nov 2026), so popups, clipboard and file pickers see a user gesture.
+- `upload <sel-or-ref> <path>...` — `DOM.setFileInputFiles` by objectId, then reads one byte of each chosen file in the page: a path the browser cannot open still lands in `input.files` (size 0) and fails only at submit, so the read-back is what catches it. `PASSE_BROWSER_FILES=<local>:<browser>` maps a shared folder for a containerised or remote browser (the atelier writes it); files outside it are copied in, 0644.
 - `type <selector> <text>` — character-by-character via `Input.insertText`. Works with React, Vue, and plain HTML. Auto-detects controlled inputs and falls back to `nativeInputValueSetter` if needed.
 - `fill <selector> <value>` — set value directly. Faster but may not trigger framework reactivity. Use `type` if unsure.
 - `select <selector> <value>` — dropdown

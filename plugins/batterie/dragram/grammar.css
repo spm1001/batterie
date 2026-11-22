@@ -1,0 +1,163 @@
+/* dragram data-flow grammar — shared visual grammar (the (question → visual primitive) bindings).
+   ONE source of truth for the whole scenario family: edit here, re-skin every diagram.
+   The grammar is renderer-independent in spirit but expressed here as the HTML/CSS subset
+   we settled on (see ../grammar.md). Six semantic classes:
+     .keyline                      — a light dashed perimeter per org (identity as boundary)
+     .block.{identified,pseudonymous,aggregate}  — a data block; border = sensitivity
+     .onine.{xfer,transform}       — an on-the-line block where a flow crosses a keyline
+     .report                       — an aggregate deliverable leaving the system
+     .legend                       — how-to-read panel
+   Placement lives in each element's inline style="left/top/width/height" (draggable).
+   Topology lives in the <script type="application/json" id="edges"> block (declarative).
+*/
+:root {
+  --red:#c0392b; --amber:#b9770e; --green:#229954;
+  --ink:#1f2937; --muted:#64748b; --line:#cbd5e1;
+  --xfer-bg:#eef2f7; --xfer-st:#475569;
+  --tf-bg:#fef9e7; --tf-st:#b9770e;
+  --key-st:#94a3b8;
+  --font:"Inter","Helvetica Neue",Arial,"Liberation Sans",sans-serif;
+  --mono:"SFMono-Regular","DejaVu Sans Mono","Liberation Mono",monospace;
+}
+* { box-sizing:border-box; }
+body { margin:0; background:#fff; font-family:var(--font); color:var(--ink);
+       -webkit-font-smoothing:antialiased; }
+.stage { position:relative; width:1720px; height:1080px; background:#fff; overflow:hidden; }
+
+h1 { margin:0; font-size:30px; font-weight:800; letter-spacing:-.3px; }
+.sub { font-size:16px; font-style:italic; color:var(--muted); margin-top:4px; }
+.title { position:absolute; left:0; right:0; top:22px; text-align:center; }
+
+/* keylines */
+.keyline { position:absolute; border:1.6px dashed var(--key-st); border-radius:16px;
+           background:#fcfcfd; z-index:0; }
+/* dormant: an org that is an INTENDED recipient but not yet receiving (pending legals). */
+.keyline.dormant { border-style:dotted; border-color:#d8c2c6; background:#fdf8f8; }
+.keyline.dormant > .lbl { color:#b08a90; }
+.block, .onine, .report, .legend, .title { z-index:2; }
+.keyline > .lbl { position:absolute; top:12px; left:18px; font-size:18px; font-weight:600;
+                  color:var(--muted); letter-spacing:.2px; }
+
+/* data blocks */
+.block { position:absolute; background:#fff; border:3px solid var(--line); border-radius:11px;
+         box-shadow:0 3px 10px rgba(15,23,42,.07); overflow:hidden; }
+.block.identified  { border-color:var(--red); }
+.block.aggregate   { border-color:var(--green); }
+.block.pseudonymous{ border-color:var(--amber); }
+/* dormant: data that is stored but not in use (e.g. BVOD ingested, not yet matched).
+   A faint diagonal hatch reads as "held / inactive"; the border still encodes sensitivity. */
+.block.dormant { background:
+  repeating-linear-gradient(45deg, #fff, #fff 9px, #f4f6f8 9px, #f4f6f8 18px); }
+.block .hd { display:flex; align-items:center; gap:9px; padding:11px 15px;
+             font-size:19px; font-weight:700; border-bottom:1px solid #eef1f5; }
+.dot { width:11px; height:11px; border-radius:50%; flex:0 0 auto; }
+.identified  .dot{ background:var(--red); }
+.aggregate   .dot{ background:var(--green); }
+.pseudonymous .dot{ background:var(--amber); }
+
+table { width:calc(100% - 30px); margin:12px 15px 4px; border-collapse:collapse;
+        font-family:var(--mono); font-size:12px; }
+th,td { border:1px solid var(--line); padding:4px 7px; text-align:left; white-space:nowrap; }
+th { background:#f1f5f9; font-family:var(--font); font-size:11px; font-weight:600;
+     text-transform:uppercase; letter-spacing:.3px; color:#475569; }
+
+ul.fields { margin:8px 15px 14px; padding:0; list-style:none; }
+ul.fields li { font-size:15px; line-height:1.5; margin:3px 0; padding-left:0; }
+ul.fields b { font-weight:700; }
+ul.fields i { color:var(--muted); font-style:italic; }
+
+/* mini "shrinky-dink": a faithful scaled replica of a full block, living inside a small
+   host. The host is the connector anchor (its offsetWidth = the small footprint); the
+   inner .block is a real block scaled down via transform, so it's literally the big one,
+   shrunk. Set transform:scale() + width inline on the inner block. */
+.minihost { position:absolute; overflow:hidden; }
+.minihost > .block { left:0; top:0; transform-origin:top left; }
+
+/* "deck of cards" — implies ×many (e.g. many advertisers). Layered box-shadows draw two
+   offset card backings behind the block; box-shadow ignores the block's overflow:hidden. */
+.block.stacked {
+  box-shadow:
+    9px 9px 0 0 #fff, 9px 9px 0 2px var(--line),
+    18px 18px 0 0 #fff, 18px 18px 0 2px var(--line),
+    0 3px 10px rgba(15,23,42,.07);
+}
+.block.identified.stacked   { box-shadow:9px 9px 0 0 #fff, 9px 9px 0 2px var(--red),
+                                         18px 18px 0 0 #fff, 18px 18px 0 2px var(--red),
+                                         0 3px 10px rgba(15,23,42,.07); }
+.block.aggregate.stacked    { box-shadow:9px 9px 0 0 #fff, 9px 9px 0 2px var(--green),
+                                         18px 18px 0 0 #fff, 18px 18px 0 2px var(--green),
+                                         0 3px 10px rgba(15,23,42,.07); }
+
+/* on-the-line blocks */
+.onine { position:absolute; border-radius:10px; padding:11px 14px; }
+.xfer { background:var(--xfer-bg); border:2px solid var(--xfer-st); }
+.transform { background:var(--tf-bg); border:2px solid var(--tf-st); }
+.onine .ohd { font-size:17px; font-weight:700; color:#334155; margin-bottom:6px; }
+.transform .ohd { color:#7d5a0b; }
+.onine ul { margin:0; padding:0; list-style:none; }
+.onine li { font-size:14px; line-height:1.45; margin:3px 0; }
+.onine b { font-weight:700; }
+.onine i { color:var(--muted); font-style:italic; }
+/* gated: a transfer that is INTENDED but legally blocked (pending legals). Red, dashed. */
+.onine.gated { background:#fdecea; border:2px dashed var(--red); }
+.onine.gated .ohd { color:#a93226; }
+/* clean room: a transformation in a neutral/joint environment — nothing raw crosses. Green,
+   to signal the privacy-preserving join (vs the amber transform in a single party's env).
+   Marked ⬢ (filled hexagon) not 🔒 — no emoji font in headless chromium, so 🔒 renders tofu. */
+.onine.cleanroom { background:#eafaf1; border:2px solid var(--green); }
+.onine.cleanroom .ohd { color:#1e8449; }
+
+/* report */
+.report { position:absolute; background:#f3faf6; border:3px solid var(--green);
+          border-radius:11px; padding:12px 15px; box-shadow:0 3px 10px rgba(15,23,42,.07); }
+.report .rhd { font-size:17px; font-weight:700; }
+.report .rsub { font-size:13.5px; color:var(--muted); margin-top:3px; }
+
+/* recipient: an intended-but-dormant destination block (lives inside a .dormant keyline). */
+.recip { position:absolute; background:#fff; border:2.4px dashed #d8c2c6; border-radius:11px;
+         padding:13px 16px; }
+.recip .rhd { font-size:18px; font-weight:700; color:#8a626a; }
+.recip .rsub { font-size:14px; color:var(--muted); margin-top:4px; }
+
+/* legend */
+.legend { position:absolute; border:1px solid #e2e8f0; border-radius:10px; background:#fbfcfe;
+          padding:13px 18px; }
+.legend h2 { margin:0 0 6px; font-size:15px; font-weight:700; }
+.legend ul { margin:0; padding-left:18px; }
+.legend li { font-size:13.5px; line-height:1.6; }
+.sw { display:inline-block; width:12px; height:12px; border-radius:3px; vertical-align:-1px;
+      margin:0 1px; }
+
+/* ── viewport: pan/zoom shell. Edit mode only — render mode leaves .viewport as a plain
+      block so the stage screenshots at native 1720×1080 with no transform/grey margin. ── */
+.viewport { position:relative; }
+.edit .viewport { position:fixed; inset:0; overflow:hidden; background:#e9edf2; }
+.edit .viewport.panning { cursor:grabbing; }
+.edit .stage { transform-origin:0 0;
+               box-shadow:0 0 0 1px #cbd5e1, 0 12px 48px rgba(15,23,42,.18);
+               /* 20px snap grid (divisor of 1720×1080 → 86×54 chunks). Edit-only; keep
+                  in sync with GRID in drag.js. Toggle with 'g' (adds .nogrid). */
+               background-image:
+                 linear-gradient(to right, rgba(100,116,139,.09) 1px, transparent 1px),
+                 linear-gradient(to bottom, rgba(100,116,139,.09) 1px, transparent 1px);
+               background-size:20px 20px; }
+.edit .stage.nogrid { background-image:none; }
+.edit .zoomhud { position:fixed; left:14px; bottom:14px; z-index:99; display:flex; gap:6px;
+                 align-items:center; font:600 12px/1 var(--font); color:#475569; background:#fff;
+                 border:1px solid #d7dee7; border-radius:9px; padding:6px 8px;
+                 box-shadow:0 3px 12px rgba(15,23,42,.1); user-select:none; }
+.edit .zoomhud button { font:inherit; color:#334155; background:#f1f5f9; border:1px solid #d7dee7;
+                        border-radius:6px; width:24px; height:24px; cursor:pointer; line-height:1; }
+.edit .zoomhud button:hover { background:#e2e8f0; }
+.edit .zoomhud .pct { min-width:44px; text-align:center; }
+.edit .zoomhud .hint { color:#94a3b8; font-weight:500; margin-left:4px; }
+
+/* ── edit-mode affordances (only present when drag.js is active, i.e. ?edit) ── */
+.edit .node { cursor:grab; }
+.edit .node:hover { outline:2px solid rgba(37,99,235,.45); outline-offset:2px; }
+.edit .node.dragging { cursor:grabbing; outline:2px solid rgba(37,99,235,.9);
+                       box-shadow:0 8px 24px rgba(15,23,42,.18); }
+.edit .saveflash { position:fixed; right:14px; bottom:14px; background:#16a34a; color:#fff;
+                   font:600 13px/1 var(--font); padding:8px 12px; border-radius:8px;
+                   opacity:0; transition:opacity .15s; pointer-events:none; z-index:99; }
+.edit .saveflash.show { opacity:.95; }

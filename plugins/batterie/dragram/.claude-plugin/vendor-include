@@ -1,0 +1,7 @@
+# Read by batterie's assemble.sh: top-level paths that ship in the plugin besides skills/.
+# The workbench lives at the repo root because the diagrams load drag.js by relative path.
+drag.js
+grammar.css
+serve.py
+shot.py
+example.html

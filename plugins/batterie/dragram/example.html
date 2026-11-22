@@ -1,0 +1,73 @@
+<!doctype html>
+<!--
+  The kit's own example (copied from mcp-app/demo.html, 2026-11-22). Content-free on purpose: it
+  ships in the public plugin, so it draws dragram's own loop.
+  Open it under serve.py with ?edit and drag.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>dragram — the loop</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; background:#fff; }
+  .viewport { position:relative; }
+  .stage { position:relative; width:1280px; height:720px; background:#fff; overflow:hidden; }
+  h1 { position:absolute; left:60px; top:36px; font-size:36px; color:#212529; font-weight:700; }
+  .sub { position:absolute; left:60px; top:86px; font-size:19px; color:#6c757d; }
+  .block { position:absolute; border:2px solid #1d3557; border-radius:8px; background:#fff; padding:14px 18px; }
+  .block h3 { font-size:20px; color:#1d3557; margin-bottom:4px; }
+  .block p { font-size:15px; color:#495057; line-height:1.35; }
+  .person { border-color:#2d6a4f; background:#e9f6ef; }
+  .person h3 { color:#14532d; }
+  .hero { background:#1d3557; }
+  .hero h3 { color:#fff; }
+  .hero p { color:#cfd8e3; }
+  .foot { position:absolute; right:60px; top:680px; font-size:14px; color:#adb5bd; }
+</style>
+</head>
+<body>
+<div class="viewport">
+<div class="stage">
+  <h1>dragram — the loop</h1>
+  <div class="sub">Drag a box, the file changes, Claude reads the file. Now Claude can drag too.</div>
+
+  <div class="node block person" id="you" style="left:60px; top:200px; width:260px; height:110px;">
+    <h3>You, in a browser</h3>
+    <p>drag a box, grab an edge, point and comment</p>
+  </div>
+  <div class="node block" id="drag-js" style="left:420px; top:200px; width:260px; height:110px;">
+    <h3>drag.js</h3>
+    <p>wires drawn from live box geometry</p>
+  </div>
+  <div class="node block" id="file" style="left:780px; top:200px; width:260px; height:110px;" data-align-y="middle:drag-js.middle">
+    <h3>The .html file</h3>
+    <p>positions, ties and comments, in git</p>
+  </div>
+  <div class="node block person" id="claude" style="left:780px; top:440px; width:260px; height:110px;" data-align-x="center:file.center">
+    <h3>Claude</h3>
+    <p>reads the file, renders, checks the state</p>
+  </div>
+  <div class="node block hero" id="app-view" style="left:420px; top:440px; width:260px; height:110px;" data-align-x="center:drag-js.center" data-align-y="middle:claude.middle">
+    <h3>MCP App view</h3>
+    <p>the same diagram, inside a Claude chat</p>
+  </div>
+
+  <div class="foot">dragram · MCP Apps probe · 22 Nov 2026</div>
+
+  <svg id="wires" style="position:absolute; left:0; top:0; width:1280px; height:720px; z-index:1; pointer-events:none;"></svg>
+</div>
+</div><!-- /viewport -->
+
+<script type="application/json" id="edges">
+[
+  { "from": "you",      "to": "drag-js",  "cls": "personal" },
+  { "from": "drag-js",  "to": "file",     "cls": "personal" },
+  { "from": "file",     "to": "claude",   "cls": "personal", "bidir": true },
+  { "from": "claude",   "to": "app-view", "cls": "aggregate" },
+  { "from": "app-view", "to": "drag-js",  "cls": "aggregate" }
+]
+</script>
+<script src="drag.js"></script>
+</body>
+</html>

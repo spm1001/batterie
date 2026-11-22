@@ -1,0 +1,12 @@
+{
+  "name": "dragram",
+  "version": "2.29.0",
+  "description": "Diagrams you drag and Claude reads: an HTML workbench where boxes move in the browser and the positions persist to the .html file, connectors follow, and Claude renders and checks the result. Plus the diagram skill.",
+  "author": {
+    "name": "Sameer Modha",
+    "url": "https://github.com/spm1001"
+  },
+  "repository": "https://github.com/spm1001/batterie#readme",
+  "license": "MIT",
+  "keywords": ["diagram", "drag", "workbench", "render"]
+}

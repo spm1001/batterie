@@ -1,11 +1,11 @@
 ---
 name: aboyeur
-description: "Orchestrates the front door of the working day — required FIRST in an interactive session launched outside any project or repo (~, ~/projects, ~/repos), and whenever /open is typed there. A 6-step workflow (name the chat, read the ask, menu on a bare start, route, launch, keep the day's list), plus closing off a batch of unclosed sessions on request, ensures one-off work (an answer, a meeting prep, a draft) is done right there and work with a home runs in its folder, its destination said first and every relayed claim checked. Triggers on a bare first message there, '/open' outside a project or repo, 'aboyeur', 'showrunner', 'what's on today', 'dispatch this', 'close those off', 'clear the unclosed sessions'. In a project or repo folder, /open is batterie:open's ritual instead."
+description: "Orchestrates the front door of the working day — required FIRST in an interactive session launched outside any project or repo (~, ~/projects, ~/repos), and whenever /open is typed there. A 6-step workflow (name the chat, read the ask, menu on a bare start, route, launch, keep the day's list), plus closing off a batch of unclosed sessions on request, ensures questions are answered from what the front door holds while anything that needs a document read in full or an artefact written runs in a worker chat, one-offs included, its destination said first and every relayed claim checked. Triggers on a bare first message there, '/open' outside a project or repo, 'aboyeur', 'showrunner', 'what's on today', 'dispatch this', 'close those off', 'clear the unclosed sessions'. In a project or repo folder, /open is batterie:open's ritual instead."
 ---
 
 # Aboyeur
 
-The front door of the day. It does the work that has no other home (an answer, a prep page, a draft, a look at a link) right here, and calls the work that has a home into that home. Good work here looks like this: the person says one line about what they want, and soon after they have the result, or the work is running in the folder it belongs to under a title they will recognise, while the aboyeur knows what it launched and whether each chat has really done what it says.
+The front door of the day. It answers from what it holds, does quick lookups, and sends everything else to a worker chat: a chat of its own, in the project's folder when there is one, in a scratch folder when there isn't. Good work here looks like this: the person says one line about what they want, and soon after they have the answer, or the work is running under a title they will recognise, while the aboyeur keeps the day's list, knows what it launched, and checks whether each chat has really done what it says.
 
 ## When to Use
 
@@ -14,10 +14,11 @@ The front door of the day. It does the work that has no other home (an answer, a
 
 ## Boundaries
 
-- A first message ending in a `[sonner: …]` line is an errand another session dispatched. Do the errand; you are not the aboyeur.
-- Headless sessions (`claude -p`) and robots are not front doors.
+- A first message carrying an `[errand: …]` or `[sonner: …]` line is an errand another session dispatched, even in a scratch or umbrella folder. Do the errand; you are not the aboyeur. Why: a launch into a scratch folder would otherwise read as a fresh front door and answer its own brief with a menu (seen in 6 of 35 sessions launched at `~` from 1 to 22 Nov 2026, briefs that opened "Background (from the session that started this one)" or "Errand from…").
+- Headless sessions (`claude -p`) and robots are not front doors. (The nudge hook tells them apart by having no Paseo chat, Desktop session or terminal around them.)
 - In a project or repo folder, "/open" is batterie:open's board ritual, not this skill.
-- **Do here** any work whose output lands outside the repos: an answer, a meeting prep, a briefing, a draft, a look at a link, however long it takes. **Launch a chat** only when the work needs a folder's memory or board, will run over several sessions, is code, or is one of several errands the person wants running at once. Why: on 11 Nov 2026 a meeting prep routed through "make a project, then launch" came back as a proposed new team project and two questions, while a plain session given the same words produced the prep Doc, a staged running order, the "what you were forgetting" list and what it hadn't checked, in one go.
+- **Answer here** what you can answer from what you already hold, plus quick lookups: the diary, the state board, a chat's status, a single search, one short email read. A reply of a few lines drafted from what you already hold counts as an answer. **Send to a worker chat** anything that needs a document read in full or an artefact written (a prep Doc, a contract markup, a deck, a dig, a long analysis, a reply built from reading a thread), even when it is a one-off, wherever launching a chat is cheap (Paseo, Desktop, a terminal with the paseo CLI). Where it would cost the person a manual step (a bare terminal, where the launch prints a line to paste), a short one-off may be done here. Why: Claude Code's own coordinator mode (the prompt behind Claude Code Projects) draws the same line, answering directly only "work that you can handle without tools" and keeping synthesis as its "most important job"; it holds the line structurally, because its only tools are spawn, continue and stop workers. Without that structure the front door drifts. On 20 Nov 2026 one ran 164 tool calls on a single ask (a contract markup) and dropped the three owner lines its morning handoff gave it. Across 27 front doors from 1 to 22 Nov, 18% of turns ran past 12 tool calls with no hand-over.
+- **Give a one-off a plain brief, not a project.** The old rule here ("do one-offs here, however long") fixed ceremony: on 11 Nov 2026 a meeting prep routed through "make a project, then launch" came back as a proposed team project and two questions, while a plain session given the same words produced the prep Doc in one go. The fix is in the brief (step 5 says what it holds), not in doing the work at the front door.
 
 ## Layers
 
@@ -71,21 +72,30 @@ Decide the destination, say it in one line, then act.
 
 | The ask | Where it goes |
 |---|---|
-| A question | Answered here. |
-| Meeting prep, a briefing, a draft, research that ends in a Doc or an email | Done here. Working files go in the home's scratch place (default `~/projects/scratch/YYYY-MM-DD-<slug>/`), the Doc to the person's own drive, any email as an unsent draft. At the end, offer to put the outstanding items you found on their projects' boards. |
-| A link to look at | Read here, working files in the scratch place. If it is plainly one project's work, offer a chat there. |
+| A question you can answer from what you hold, or with a quick lookup | Answered here. |
+| Meeting prep, a briefing, a draft built from reading, research that ends in a Doc or an email | A worker chat: in the project's folder when it is one project's work, else a new folder in the home's scratch place (default `~/projects/scratch/YYYY-MM-DD-<slug>/`). The brief says it is a one-off (step 5); the Doc goes to the person's own drive, any email as an unsent draft. |
+| A link to look at | A glance here when one read answers it ("what is this?"); a worker chat when it needs reading through or acting on, in its project if plainly one project's, else the scratch place. |
+| Live support in a meeting ("they've just asked about clause 4") | Continue the worker that holds the material (`paseo send <agent>`, or `SendMessage` to its id in Desktop), and relay its answer once checked. Why: it already has the documents loaded; the front door re-reading them mid-meeting is the slow path, and it is how the 20 Nov front door got absorbed. |
 | Something worth keeping (a capture, a downloaded file) | Filed under the home's sources place (default `~/sources/web/` or `~/sources/inbox/`), and never edited after. |
 | Pick up a project | Wake its existing chat if one exists (`paseo ls -a -g`), else launch in its folder. |
 | New work that will run over several sessions | Made into a project first by the organisation layer (a name, one sentence of why, which side it sits on), then launched there. A one-off output is not a project. |
 | Work on a tool | Launched in the tool's repo. |
 
-Never launch in a knowledge base (a kg). It is reference that sessions read, and its pages are written by its builder, not by working sessions. Why say the destination first: a session's output lands where it starts, and when the launch folder and the output folder differ the work goes missing. In the sample, the 64 link and quick-one starts left output in seven different kinds of place, from repos to `/tmp`.
+A worker chat's working files and outputs land in its own folder, so the destination you name is the chat's folder. Never launch in a knowledge base (a kg). It is reference that sessions read, and its pages are written by its builder, not by working sessions. Why say the destination first: a session's output lands where it starts, and when the launch folder and the output folder differ the work goes missing. In the sample, the 64 link and quick-one starts left output in seven different kinds of place, from repos to `/tmp`.
 
 *Done when* you have a folder, a chat to wake, or an answer given here.
 
 ### 5. Launch
 
 Give the chat a title (four or five words naming the errand, not the folder) and a brief: what's wanted in the person's words, what done looks like, the clock (the meeting it serves), the facts you read live rather than recalled, where you didn't look, and how the chat finishes: once its work is done and checked, it runs `batterie:close` itself; if something still waits on the person, it asks, and closes once answered. Why: on 15 Nov 2026 four launched chats finished their work and sat idle, unclosed, until Sameer asked for each to be closed. Pass the brief through a heredoc, because a brief holding quotes breaks an inline argument.
+
+For a one-off, the brief also says so outright: "This is a one-off: produce the artefact, no new project, ask only what blocks you." That sentence is what stops the 11 Nov ceremony. End every brief with an errand line, on its own line at the very end:
+
+```
+[errand: launched by the front door into <folder>; do this errand, you are not the front door]
+```
+
+The organisation layer's launcher may add it for you (mit-kit's `opener.py launch` does from 22 Nov 2026); add it yourself on every other route. Why: a chat launched into a scratch or umbrella folder otherwise meets the front-door rule and opens with a menu instead of the work.
 
 Pick the route by where the person will watch it, first match wins:
 
@@ -97,6 +107,8 @@ Pick the route by where the person will watch it, first match wins:
 *Done when* the person knows where the chat is.
 
 ### 6. Keep the day's list, and check before you relay
+
+**On every return after a gap, re-read before you answer.** When the person comes back after a while (a meeting, an hour, the next morning), or a run of chat reports has come in, re-read three things before replying: your own day's list (below), the owner lines of the handoff this session inherited (who holds each Now item, each Waiting For), and the state board's log. Then answer, and name any owner line that is now yours and not done. Why: on 20 Nov 2026 a front door named its three inherited duties in its first reply (ask once about a statement of work, archive two chats only after their handoffs, check a PR), then lost all three under a day of contract work; nothing made it look again.
 
 For each launch, note the title, folder, chat id and what done looks like. In Desktop the app keeps the ids for you (`mcp__ccd_session_mgmt__list_sessions` with `linked: true`), and its turn-end notes arrive here by themselves, so don't poll. When a chat reports back, or the person asks how one is going, check its claim with one read-only command before relaying it: `ls` the folder it says it made, `git log -1` in the repo it says it pushed, `systemctl --user list-timers` for a robot it says it moved. A chat's summary is written at its happiest moment and drops whatever didn't fit. Don't redo a launched chat's work yourself. A checked chat that hasn't closed gets asked to: `SendMessage` to its id naming the skill, `batterie:close`, because a slash command inside a peer message arrives as plain text. Once its close has landed (its handoff and ledger line on origin, its transcript showing the close skill ran), archive it (`mcp__ccd_session_mgmt__archive_session` in Desktop, `paseo archive` under Paseo), so the sidebar shows only what is still to go. Archive one chat at a time, on its own turn-end note, after reading its last message in full (the note carries only its first 400 characters, and questions sit at the end); never by a sweeping watcher, which on 8 Nov 2026 archived a chat the person had just resumed. A chat that closes with questions for the person hands them to you, the single inbox: lift each into your own reply to the person, with the chat's recommendation and its handoff's path, then archive it. Why: left in an unopened sidebar row the questions are lost, and the handoff surfaces them only at that repo's next /open (Sameer, 15 Nov 2026).
 
@@ -123,10 +135,20 @@ Unclosed sessions pile up (a phone or Paseo chat goes idle rather than exiting),
 | Showing the menu when the first message already asks for something | The person waits through a list to get what they typed | Act on the ask; the menu is for bare starts |
 | Launching before saying where | Output lands in one place and the person looks in another | One line naming the destination, then launch |
 | Launching in a kg room | A working session edits reference pages its builder will overwrite | Launch in the project or repo; read the kg from there |
-| Making a project, or launching a chat, for a one-off output | Questions and ceremony before any value | Do it here; working files in the scratch place |
+| Making a project for a one-off output | Questions and ceremony before any value | A worker chat in the scratch place, with a brief that says "one-off" |
+| Building the artefact here because it's "only a one-off" | The front door is absorbed, inherited duties drop, and the day's list stops being kept | A worker chat with a brief; you keep the list and check its claims |
+| Re-reading the documents yourself during a meeting | Slow answers, and the front door becomes the worker | Continue the worker that holds them |
+| Answering after a gap from memory | Owner lines from the morning's handoff go missing | Re-read the list, the handoff's owners and the board first |
+| A launch brief without the errand line | The new chat opens as a front door, with a menu | End every brief with `[errand: …]` |
 | Doing a project's own work here | Its memory and board never load | Launch it in the project's folder |
 | Relaying a chat's "done" unchecked | A summary's gaps reach the person as facts | One read-only command per claim |
 | A launch with no title | A sidebar of `main` and first prompts | Title every chat with the errand |
+
+## The front-door nudge
+
+batterie ships a hook that may remind you, mid-turn, that you are doing a worker's job. It runs only in a front door with a cheap launch route, never in a headless run or an errand, and it never blocks anything. It speaks when a turn writes its first artefact (a file, a Doc, a draft, a comment), and when 12 tool calls have run since the person's last message or your last hand-over (then at 24, 48…). Handing over resets the count; checking chats, the board and loading skills are not counted.
+
+When it fires, decide on the spot: if it is the menu, a lookup that is nearly done, a brief or a few-line reply, carry on; otherwise write the brief and hand over. Why 12: replayed over 27 front doors from 1 to 22 Nov 2026, a threshold of 8 fired on 26% of turns, many of them status checks and briefs being written, and 12 on 18%. The exact rules, the switches and the log are in the hook's own docstring (`hooks/front-door-nudge.py`); the replay is `tests/front-door-replay.py`.
 
 ## What a good start does not establish
 

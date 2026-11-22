@@ -87,6 +87,16 @@ Moved here from Sameer's hand-placed `~/.claude/scripts/gouteur.py` on 2026-11-0
 - **Personal renders never go in this file** (the marketplace is public). They live in the user's own `~/.claude/gouteur.d/*.py`, which the engine loads; the module docstring has the contract. Sameer's are in `~/.claude/gouteur.d/estate.py` (repo `spm1001/.claude`).
 - Editing it is vendored content (`hooks/`), so it rides a suite bump: ship with `/ship`.
 
+## The front-door nudge (`hooks/front-door-nudge.py`)
+
+Added 2026-11-22 (card batterie-de-savoir-pojaju). A second Python hook beside goûteur, with the **opposite failure mode: it fails OPEN.** It never blocks a call; a crash is logged to `~/.local/state/batterie/front-door/nudges.log` and the call goes ahead. Wired through `hooks/front-door-nudge.sh` on SessionStart, UserPromptSubmit and PreToolUse (matcher `*`).
+
+- It decides once, at a fresh start, whether the session is a front door: launched outside a work home (the docstring has the exact rule) with a cheap launch route (`PASEO_AGENT_ID`, a Desktop entrypoint, or `cli` with paseo on PATH). An `[errand:`/`[sonner:` line in the first prompt switches it off. Then it counts tool calls per prompt and adds one line of `additionalContext` at 12 (doubling) and on the turn's first artefact write.
+- **The launcher's fast path matters:** PreToolUse fires on every tool call of every session, so the shell greps `session_id` and starts Python only when `<state dir>/<session>.on` exists (3 ms vs ~30 ms per call, measured on the atelier). Change the flag file's name in one half and you must change the other; `tests/front-door-nudge-launcher.sh` checks they agree.
+- Run `python3 hooks/front-door-nudge.py --self-test < /dev/null` before and after an edit (CI runs it under python3 and 3.9, plus the launcher test). `tests/front-door-replay.py` replays past transcripts through the real handlers: it is how the threshold was chosen and how to judge it a week on.
+- **Why a command hook and not the hooks module (`kg-index.ts`):** it matches goûteur, it runs on older Claude Code, and command hooks are known to run under Paseo's bypassPermissions. Revisit when the module route is proven under Paseo and Desktop on teammates' versions; retire it if Claude Code ships a coordinator mode that can launch Paseo-style chats (today's `CLAUDE_CODE_COORDINATOR_MODE` keeps only Agent/SendMessage/TaskStop-type tools, so it can't run `paseo`).
+- Editing it is vendored content (`hooks/`), so it rides a suite bump: ship with `/ship`.
+
 ## Local Jekyll preview
 
 Test rendering before pushing: `docker run --rm -v "$PWD/docs:/srv/jekyll" -p 4000:4000 jekyll/jekyll jekyll serve`. Saves deploy-wait-screenshot cycles — kramdown quirks (HTML comment blocks, SmartyPants em-dash conversion) only show up in the real Jekyll pipeline, not in GitHub's GFM preview.

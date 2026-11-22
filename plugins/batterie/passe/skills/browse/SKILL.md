@@ -217,6 +217,8 @@ EOF
 
 **`click` smart dispatch:** CSS selectors (`. # [ : > ~ +`) → querySelector. Plain text → find by visible text. `click "Submit"` for text, `click ".btn-primary"` for CSS.
 
+**A click that should open a popup, write the clipboard or open a file picker: add `--trusted`.** Plain `click` is a JavaScript `el.click()`, which the page sees as untrusted, so `target=_blank` links, `window.open`, most "Sign in with …" buttons, clipboard writes and fullscreen silently do nothing while the step reports success. `click --trusted "Sign in with Google"` sends real CDP mouse events at the element's centre, with focus emulation on so passe's background tab is hit-tested without stealing the human's foreground tab. Real input lands on whatever is topmost at that point (an overlay eats it, and stderr says what was hit). Popups it opens outlive the run: tidy with `passe tabs close --matching …`. Measured on the atelier, 22 Nov 2026: without `--trusted` a `target=_blank` link opened nothing and `navigator.userActivation.hasBeenActive` stayed false.
+
 ### 6. Reverse-engineer an API
 
 ```bash

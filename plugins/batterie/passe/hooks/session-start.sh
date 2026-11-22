@@ -12,7 +12,9 @@ STATE="unknown"
 CONN_STATUS=""
 if [ -z "${CLAUDE_SUBAGENT:-}" ]; then
     if command -v passe &>/dev/null; then
-        CONN_STATUS=$(timeout 2 passe status 2>/dev/null || true)
+        # passe status writes its key=value lines to stderr (6dcfccd), so merge it:
+        # discarding stderr here made every probe read as unreachable (Apr-Nov 2026).
+        CONN_STATUS=$(timeout 2 passe status 2>&1 || true)
     fi
     if echo "$CONN_STATUS" | grep -q "reachable=True"; then STATE="reachable"; else STATE="unreachable"; fi
 fi

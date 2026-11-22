@@ -7,7 +7,7 @@
 `goto <url>`, `back`, `forward`, `reload [--hard]`, `scroll <x> <y>`. `reload` counts as navigation, so the next `extract` auto-waits; use it after accepting consent, since consent-gated tags often fire only on the next page view.
 
 **Interaction:**
-`click <sel-or-text-or-ref>`, `type <sel-or-ref> <text>`, `fill <sel> <val>`, `select <sel> <val>`, `press <key>`, `hover <sel-or-ref>`, `tap <sel>`, `swipe <sel> <dir> [dist]`. Refs (`e1`, `e3`...) come from `ax-tree --flat-refs`, work across invocations (scout with `--keep-tab`, act with `--reuse-tab`), and clear on navigation.
+`click <sel-or-text-or-ref>`, `type <sel-or-ref> <text>`, `fill <sel> <val>`, `select <sel> <val>`, `press <key>`, `hover <sel-or-ref>`, `tap <sel>`, `swipe <sel> <dir> [dist]`. Refs (`e1`, `e3`...) come from `ax-tree --flat-refs`, work across invocations (scout with `--keep-tab`, act with `--reuse-tab`), and clear on navigation. `click --trusted <target>` clicks with real mouse events (focus emulation on, so it works in a background tab) for anything gated on a user gesture: popups, clipboard, file pickers, fullscreen; plain `click` is an untrusted `el.click()`.
 
 **Observation:**
 `screenshot [--fast] [--viewport] [--format F] [--quality N] [path]`, `snapshot [path]`, `eval <expr>`, `eval-to <path> <expr>`, `eval-file <js>`, `eval-file-to <out> <js>`, `ax-tree [--depth N] [--compact] [--flat-refs]`, `ax-find [--role R] [--name N]`, `ax-node <selector>`, `exists <sel>`, `count <sel>`, `visible <sel>`, `pdf [--no-background] [path]`. Eval results are JSON (`true`, not `True`), echoed into the summary's `results` on stdout; an awaited Promise is capped at 15 s (see `internals.md`).

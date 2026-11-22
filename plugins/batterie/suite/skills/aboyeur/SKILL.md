@@ -36,14 +36,12 @@ name="Aboyeur · $(hostname -s) · $(date '+%a %-d %b')"
 if [ "$own" = "$PWD" ]; then
   paseo agent update "$PASEO_AGENT_ID" --name "$name"
   # The sidebar row shows the WORKSPACE title, not the chat's name, so rename that too.
-  # No CLI maps a chat to its workspace; the chat's own record holds it.
-  rec=$(ls "${PASEO_HOME:-$HOME/.paseo}"/agents/*/"$PASEO_AGENT_ID"*.json 2>/dev/null | head -1)
-  wks=$([ -n "$rec" ] && python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("workspaceId",""))' "$rec")
-  [ -n "$wks" ] && paseo workspace rename "$wks" "$name"
+  # Paseo gives every chat its row's id in PASEO_WORKSPACE_ID (since 0.16.0).
+  [ -n "$PASEO_WORKSPACE_ID" ] && paseo workspace rename "$PASEO_WORKSPACE_ID" "$name"
 fi
 ```
 
-The check matters: `PASEO_AGENT_ID` is inherited by anything started from a Paseo chat's shell, so a session launched from inside another chat (a tmux probe, a terminal opened from it) carries that chat's id, and renaming without checking renames the wrong chat (it happened on the first test, 11 Nov 2026). Only a chat whose own folder is this session's launch folder (`$PWD` before any `cd`) is yours to name. Keep `--thinking` out of the update call: paseo refuses `--name` and `--thinking` together. Why: a chat named after its first prompt reads "/open" or "hi" in the sidebar, and a day of those can't be told apart.
+The check matters: `PASEO_AGENT_ID` and `PASEO_WORKSPACE_ID` are inherited by anything started from a Paseo chat's shell, so a session launched from inside another chat (a tmux probe, a terminal opened from it) carries that chat's id, and renaming without checking renames the wrong chat (it happened on the first test, 11 Nov 2026). Only a chat whose own folder is this session's launch folder (`$PWD` before any `cd`) is yours to name. Keep `--thinking` out of the update call: paseo refuses `--name` and `--thinking` together. Why: a chat named after its first prompt reads "/open" or "hi" in the sidebar, and a day of those can't be told apart.
 
 *Done when* the sidebar row shows the dated name (renaming only the chat leaves the row on its first prompt: seen 11 Nov 2026), or there is no Paseo to name it in.
 
@@ -101,7 +99,7 @@ Pick the route by where the person will watch it, first match wins:
 
 - **In a Claude Desktop session** (`mcp__ccd_session__start_session` is in your tool list): use it, even when a launcher exists. Call it with `initiation: "user_asked"`, `context: "fresh"`, `cwd` set to the folder, the title, a short `name`, the brief as `prompt` and a sentence of `background`. Why: the chat nests under this one in Desktop's sidebar, the app lists it in this session's linked sessions and sends a note here when each of its turns ends, and `SendMessage` to its `local_…` id reaches it (seen 15 Nov 2026, three launches from an atelier front door). The launcher and `paseo run` can't do any of that from Desktop. Three limits send work elsewhere instead. It starts sessions only on the machine this session runs on. It doesn't show on the phone, because Remote Control is unavailable over Desktop's SSH connections. And the session leans on the Mac: Desktop mints its model credentials there and the person's turns arrive through it. So work that must show on the phone, or run on with the laptop shut, goes to Paseo below, and work for another machine goes to `sonner --host` (batterie:ping). A folder Desktop has never opened may stop at a prompt the person answers in the app, so say that when you launch.
 - With the organisation layer's launcher: use it. It titles the chat and files it under its group in the sidebar.
-- With Paseo and no launcher: `paseo run --workspace <the folder's row> --cwd <folder> --title "<title>" --no-wait "$BRIEF"` (create the row with `paseo workspace create --isolation local --path <folder> --title "<title>"` when the folder has none). Without `--workspace` paseo titles a fresh row after the git branch, so every chat reads `main`.
+- With Paseo and no launcher: make a titled row first, then run in it: `wks=$(paseo workspace create --isolation local --path <folder> --title "<title>" --project <id> --json | jq -r .workspaceId)`, then `paseo run --workspace "$wks" --cwd <folder> --title "<title>" --no-wait "$BRIEF"`. The project is the deepest one in `paseo project ls --json` whose path holds the folder, never the one at `~`; leave `--project` off when there is none. If the run fails, `paseo workspace archive "$wks"`. Why: `paseo run --title` names only the chat; without `--workspace` it makes an untitled row, and an untitled row shows the git branch, so every chat reads `main`. Reusing the folder's existing row instead files the new chat under the first errand's title, and without `--project` Paseo mints a project per launch folder.
 - Without Paseo: print `cd <folder> && claude` and the brief to paste.
 
 *Done when* the person knows where the chat is.
@@ -120,7 +118,7 @@ Unclosed sessions pile up (a phone or Paseo chat goes idle rather than exiting),
 2. **Take one word per line: close, dismiss or leave.** "1-3 close, 4 dismiss, rest leave" is a complete answer.
 3. **close** sends the session back to the person as a Paseo chat that runs its own close, so the close's questions reach them:
    - If a Paseo chat holds it (its record under `${PASEO_HOME:-$HOME/.paseo}/agents/*/*.json` has `persistence.sessionId` equal to the session id), `paseo send <agent> --no-wait "/batterie:close"`.
-   - If not (it ran in a terminal), `paseo import <session id> --provider <lane> --cwd <folder> --json`, then `paseo agent mode <new> bypassPermissions` and `paseo agent update <new> --thinking high` (an import ignores the default profile), then the same send.
+   - If not (it ran in a terminal), `paseo import <session id> --provider <lane> --cwd <folder> --json`, then `paseo agent mode <new> bypassPermissions` and `paseo agent update <new> --thinking high` (an import ignores the default profile), then title its row, which the import left untitled and so reading `main` (`paseo workspace rename <its .workspaceId in paseo ls -g --json> "Close: <what it was>"`), then the same send.
    - Without Paseo, print `cd <folder> && claude --resume <session id>` and ask them to type `/close`.
    Never run a close headless: unattended, its questions have nobody to answer them.
 4. **dismiss** a spent one: `python3 "${CLAUDE_SKILL_DIR}/../../../bon/scripts/crumbs.py" --dismiss <id8> [<id8> …]`. Nothing is written.

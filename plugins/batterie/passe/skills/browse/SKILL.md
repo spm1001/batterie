@@ -111,6 +111,8 @@ passe --device "iPhone 14 Pro" --dpr 1 look https://example.com
 
 Available presets: iPhone 14 Pro, iPhone SE, Pixel 7, iPad Air, iPad Pro 11, Desktop 1080p.
 
+**Chrome's own dialogs are out of reach.** A confirm raised by the browser itself ("Remove extension?", a permission prompt, a native print or file dialog) belongs to the browser window, not the page, so neither CDP nor the Claude in Chrome extension can click it. Hand that click to the human. `chrome://` pages themselves *are* scriptable through passe (extensions are barred from them): `chrome://sync-internals` and `chrome.management` on `chrome://extensions` both answered `eval` on the atelier, 22 Nov 2026. An API that needs a user gesture (`chrome.management.uninstall`) takes one from `click --trusted`.
+
 **Video and audio don't load in passe's background tab.** Chrome defers media in a tab that has never been visible (`readyState` stays 0, `play()` never settles), so a script that watches playback needs `passe run --foreground`, which brings the tab in front of a human watching that Chrome. Measured on the atelier's per-home browser, 22 Nov 2026. Full-page screenshots do work in the background (passe emulates focus for them).
 
 **A screenshot is a claim about one moment.** A UI that recomputes in place can pair your new input with its old answer: Snowsight keeps the previous result on screen while a new query runs, so a mid-run capture shows the new SQL above the old result and reads as one coherent frame. On 2026-09-02 that produced a demo slide evidencing the opposite of its caption. Wait for the busy indicator to appear and clear before capturing, then check the frame against what you expected it to show (dot-claude-pulapu).
@@ -222,6 +224,67 @@ EOF
 **A click that should open a popup, write the clipboard or open a file picker: add `--trusted`.** Plain `click` is a JavaScript `el.click()`, which the page sees as untrusted, so `target=_blank` links, `window.open`, most "Sign in with …" buttons, clipboard writes and fullscreen silently do nothing while the step reports success. `click --trusted "Sign in with Google"` sends real CDP mouse events at the element's centre, with focus emulation on so passe's background tab is hit-tested without stealing the human's foreground tab. It refuses a hidden (zero-size) or off-page target. Real input lands on whatever is topmost at that point: when that isn't the target or something inside it, the step carries `topmost` (a `<label>` over a hidden file input is fine; a cookie overlay means dismiss it first). Popups it opens outlive the run: tidy with `passe tabs close --matching …`. Measured on the atelier, 22 Nov 2026: without `--trusted` a `target=_blank` link opened nothing and `navigator.userActivation.hasBeenActive` stayed false.
 
 **Uploading a file:** `upload "#file-input" ~/report.pdf` (several paths allowed; an `eN` ref works too). It reads one byte back from the browser's side and fails loud if the browser can't open the file, because a path the browser can't see is otherwise accepted and only fails when the form is sent. When the browser runs on another filesystem (the atelier's per-home browser is a container), `PASSE_BROWSER_FILES=<local dir>:<browser dir>` names the shared folder: `upload` copies the file into a fresh `.passe-upload-*` subfolder there and hands over the browser's path; it refuses two files with one name, a symlink inside the shared folder, and more files than a single-file input keeps. The mapping applies only to the `PASSE_CDP` browser, not to a `--cdp` override. On the atelier `atelier-browser install` sets it, and the same folder (`~/.local/share/atelier-browser/files`) is where the browser's downloads land.
+
+### 5b. Rehearse consent as a brand-new visitor
+
+`passe run --fresh` runs the script in a new isolated browser context inside the same Chrome: no cookies, logins or extensions (so a consent clicker in the profile stays out of it), deleted when the run ends. It is the clean visitor a consent test needs, without a second browser. `cookies` lists what the visit set, HttpOnly and other sites' cookies included, with values reduced to a short hash; in the person's own profile it lists only the current page's cookies. `--fresh` refuses `--keep-tab`, `--reuse-tab`, `--tab`, `--frame` and `--flash`, because nothing survives the run.
+
+```bash
+# No answer: what fires before the visitor chooses?
+passe run --fresh -c 'goto https://www.tapi.co.uk/; wait 8; cookies'
+# Customise, marketing off (Cookiebot, in-page)
+passe run --fresh - <<'SCRIPT'
+goto https://www.tapi.co.uk/
+wait 6
+click --trusted "#CybotCookiebotDialogBodyLevelButtonCustomize"
+click --trusted "#CybotCookiebotDialogBodyLevelButtonMarketingInline"
+click --trusted "#CybotCookiebotDialogBodyLevelButtonLevelOptinAllowallSelection"
+wait 6
+cookies
+SCRIPT
+# Banner inside a consent iframe (Sourcepoint): select the frame, click, come back
+passe run --fresh -c 'goto https://www.sky.com/shop/mobile; wait 6; frame privacy-mgmt; click --trusted "Essential cookies only"; frame top; wait 6; cookies'
+```
+
+Scout the banner's buttons first with `ax-find button` (after `frame <pattern>` for an iframe banner). Read the requests from the page with `performance.getEntriesByType("resource")`, or `capture` in the same script. A consent manager can delete a refused category's cookies after the choice, so read both what was sent and what remains: on Tapi, refusing marketing removed the `__adal` cookies, but Adalyser's `lce1` beacon had already gone at page load, and TikTok kept sending. Measured on the atelier, 22–23 Nov 2026: `document.cookie` showed 20 of the 28 cookies Tapi set before consent, and `cookies` showed all 28, X's included.
+
+### 5c. Download a file
+
+`download <target>` clicks the target with a real click, waits for Chrome to say the download began and finished, and returns the file's local path. On the atelier that's the shared files folder, mapped through `PASSE_BROWSER_FILES`. A same-named file is kept, not overwritten: the new one becomes `report (1).pdf`. The step reports where the file came from without its query string, since report links often carry signed tokens. Chrome's download behaviour goes back to default afterwards, so a person's own downloads are untouched. `--timeout N` allows a slow export longer (to start and to finish; default 15 s to start, 120 s to finish). A click that starts no download fails, saying so. Only downloads from this run's own page, or a popup it opened, count: a download the person starts in another tab mid-step is ignored, not returned as yours. Two passe runs downloading in the same Chrome at once can still disturb each other's download settings; run them one after the other.
+
+```bash
+passe run -c 'goto https://the-internet.herokuapp.com/download; download "#content a[href$=\".txt\"]"'
+passe run -c 'goto https://app.example.com/report; download "Export CSV" --timeout 300'
+```
+
+It works in `--fresh` runs too, and for files generated in the page (a JavaScript "Export" button building a blob). Pages opened from `file://` can't download at all; that's Chrome's own rule.
+
+### 5d. Drive a pixel app (a canvas, or a remote desktop in the browser)
+
+Some apps have no elements to name: a canvas whiteboard, or a Windows app streamed into a canvas (TechEdge AxM through Parallels' HTML gateway; Citrix and VNC web clients look the same). Read them by eye and act by coordinate:
+
+```bash
+passe run - <<'SCRIPT'
+goto https://excalidraw.com/
+wait 6
+screenshot --fast --css /tmp/where.jpg
+SCRIPT
+# look at /tmp/where.jpg, then click what you saw, at the coordinates you saw it
+passe run - <<'SCRIPT'
+goto https://excalidraw.com/
+wait 6
+keys t
+click-at 500 400
+keys Hello AxM
+press Escape
+SCRIPT
+```
+
+- **`screenshot --css`** captures at CSS scale, one image pixel per CSS pixel. Without it, a device-pixel-ratio-2 screen gives a picture twice the size, and an image viewer may shrink it again: on the atelier (23 Nov 2026), a 2560×1432 capture was shown at 2000×1119, so a button seen at (812, 59) was really at (520, 38). With `--css` the picture was 1280×716, shown as is, and clicks at the coordinates read off it landed (Excalidraw's Help dialog opened, a tool was selected).
+- **`click-at X Y`** clicks there with real mouse input (focus emulated, like `click --trusted`); `--double` and `--right` as you'd expect. Coordinates are always the whole page's, even with a `frame` selected, matching `screenshot --css`. The step reports `topmost`, the element under the point.
+- **`keys "text"`** types as real key presses, one keydown/keyup per character, with a real Shift press around capitals and shifted symbols (scancode-style remote desktops need it); `\n` is Enter and `\t` is Tab. Characters off a US keyboard (é, £) go as text with no key code, so check them on the target. Quote the text: unquoted runs of spaces collapse. `type` inserts text into a focused field instead, which a canvas or remote desktop never sees. `press <Key>` sends one named key (Escape, Enter, Tab, arrows).
+- Verify through the app's own state where you can (Excalidraw keeps its scene in `localStorage`), or with a fresh `screenshot --css`.
+- A remote desktop's session URL is often single-use: never open a second tab on it, reuse the person's tab with `--reuse-tab --tab <pattern>`, and agree any test on a licensed vendor tool with its owner first.
 
 ### 6. Reverse-engineer an API
 
